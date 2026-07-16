@@ -1,0 +1,2 @@
+-- 범서 ERD 확정되면 여기부터 실제 테이블 DDL 채우기
+-- Flyway 네이밍 규칙: V{n}__{description}.sql

@@ -1,0 +1,29 @@
+# --- Java / Gradle (BE) ---
+BE/build/
+BE/.gradle/
+BE/out/
+!BE/gradle/wrapper/gradle-wrapper.jar
+BE/src/main/resources/application-local.yml
+
+# --- Node / Vite (FE) ---
+FE/node_modules/
+FE/dist/
+FE/.vite/
+FE/*.local
+
+# --- IDE ---
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# --- Env / Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Docker ---
+docker/pgdata/
+
+# --- Logs ---
+*.log

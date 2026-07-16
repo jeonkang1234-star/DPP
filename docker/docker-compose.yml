@@ -1,0 +1,13 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: dpp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dpp
+      POSTGRES_USER: dpp
+      POSTGRES_PASSWORD: dpp
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
