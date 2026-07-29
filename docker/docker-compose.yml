@@ -1,3 +1,4 @@
+# 저장소 경로: docker/docker-compose.yml (기존 파일 덮어쓰기)
 services:
   postgres:
     image: postgres:16
@@ -11,3 +12,44 @@ services:
       - "5432:5432"
     volumes:
       - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dpp -d dpp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ../BE
+      dockerfile: Dockerfile
+    container_name: dpp-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dpp
+      SPRING_DATASOURCE_USERNAME: dpp
+      SPRING_DATASOURCE_PASSWORD: dpp
+      # 실서비스 시크릿은 .env 파일(git 미포함, 서버에 직접 배치)로 주입
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-application-local-yml}
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ../FE
+      dockerfile: Dockerfile
+    container_name: dpp-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+# ─────────────────────────────────────────────
+# 서버에 .env 파일 만들어서 실제 JWT 시크릿 주입 (docker/.env, git에는 안 올라감 - .gitignore에 이미 .env 포함돼있음)
+#   echo 'JWT_SECRET=<임의의 긴 랜덤 문자열>' > /opt/app/docker/.env
+# 없으면 application.yml 기본값(플레이스홀더)이 그대로 쓰이니 데모 단계에서만 방치하고,
+# 실사용 전에는 반드시 설정하세요.
+# ─────────────────────────────────────────────

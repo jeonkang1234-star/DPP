@@ -2,9 +2,9 @@ spring:
   application:
     name: dpp-platform
   datasource:
-    url: jdbc:postgresql://localhost:5432/dpp
-    username: dpp
-    password: dpp
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dpp}
+    username: ${SPRING_DATASOURCE_USERNAME:dpp}
+    password: ${SPRING_DATASOURCE_PASSWORD:dpp}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -17,7 +17,7 @@ spring:
 server:
   port: 8080
 jwt:
-  secret: "change-me-in-application-local-yml"
+  secret: "${JWT_SECRET:change-me-in-application-local-yml}"
   access-token-expiration-ms: 3600000
   refresh-token-expiration-ms: 1209600000
 # 카카오/구글/네이버 개발자 콘솔에서 발급받은 값으로 채우세요.
@@ -40,3 +40,12 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

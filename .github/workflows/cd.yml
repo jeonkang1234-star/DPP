@@ -51,11 +51,12 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: ${{ secrets.EC2_SSH_PORT || 22 }}
           script: |
-            sleep 10
+            sleep 15
             cd /opt/app/docker
-            # TODO: BE/FE가 Dockerfile로 컨테이너화되면 아래를 실제 앱 헬스체크(curl http://localhost:PORT/health)로 교체
-            docker compose ps --status running | grep -q dpp-postgres \
+            curl -f http://localhost:8080/actuator/health \
               || (docker compose logs --tail=100 && exit 1)
+            curl -f http://localhost/ \
+              || (docker compose logs frontend --tail=100 && exit 1)
 
 # ─────────────────────────────────────────────
 # 필요한 GitHub Secrets (Settings > Secrets and variables > Actions)
@@ -73,4 +74,3 @@ jobs:
 #       S3나 Release 자산으로 버전 관리하고, 배포 스크립트에서는 다운로드만 하는 방식 권장)
 #   5. curl health check의 PORT/health는 실제 애플리케이션 헬스체크 엔드포인트로 교체
 # ─────────────────────────────────────────────
-
