@@ -1,0 +1,76 @@
+# .github/workflows/cd.yml
+#
+# 트리거: main으로 PR이 "merge"됐을 때만 배포합니다 (단순 push 아님, close인데 merge 안 된 경우도 제외).
+# 전제: main 브랜치는 PR을 통해서만 반영되고(브랜치 보호 규칙), 기존 CI가 PR의 필수 체크로
+#       걸려있어서 CI를 통과해야만 merge 버튼이 눌린다는 전제입니다.
+# 브랜치 보호 규칙 설정 위치: 저장소 Settings > Branches > Add rule
+#   - Branch name pattern: main
+#   - Require a pull request before merging: 체크
+#   - Require status checks to pass before merging: 체크 (기존 CI 워크플로 선택)
+
+name: CD
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.merged == true }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          script: |
+            set -e
+            cd /opt/app
+            git fetch origin main
+            git reset --hard origin/main
+            cd docker                          # docker-compose.yml이 /opt/app/docker 에 위치
+            docker compose pull || true
+            docker compose build
+            docker compose up -d --remove-orphans
+            docker image prune -f
+
+      - name: Health check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || 22 }}
+          script: |
+            sleep 10
+            cd /opt/app/docker
+            # TODO: BE/FE가 Dockerfile로 컨테이너화되면 아래를 실제 앱 헬스체크(curl http://localhost:PORT/health)로 교체
+            docker compose ps --status running | grep -q dpp-postgres \
+              || (docker compose logs --tail=100 && exit 1)
+
+# ─────────────────────────────────────────────
+# 필요한 GitHub Secrets (Settings > Secrets and variables > Actions)
+#   EC2_HOST             : Elastic IP 또는 도메인
+#   EC2_USER             : deploy (bootstrap 스크립트에서 만든 전용 계정)
+#   EC2_SSH_PRIVATE_KEY  : deploy 계정 authorized_keys에 등록한 키 쌍의 개인키
+#   EC2_SSH_PORT         : 기본 22 (변경했다면 명시)
+#
+# 사전 준비
+#   1. EC2에서: ssh-keygen -t ed25519 -f github-actions-deploy (또는 로컬에서 생성 후 공개키만 서버에 등록)
+#   2. 공개키를 /home/deploy/.ssh/authorized_keys 에 추가
+#   3. 개인키를 위 Secrets에 등록 (절대 리포지토리에 커밋 금지)
+#   4. /opt/app 에 docker-compose.yml, chaincode, ZKP 회로/zkey 아티팩트를 최초 1회 수동 배치
+#      (trusted setup 결과물인 zkey는 매 배포마다 재생성하지 말고 고정 아티팩트로 관리 —
+#       S3나 Release 자산으로 버전 관리하고, 배포 스크립트에서는 다운로드만 하는 방식 권장)
+#   5. curl health check의 PORT/health는 실제 애플리케이션 헬스체크 엔드포인트로 교체
+# ─────────────────────────────────────────────
+
