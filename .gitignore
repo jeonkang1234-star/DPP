@@ -5,11 +5,24 @@ BE/out/
 !BE/gradle/wrapper/gradle-wrapper.jar
 BE/src/main/resources/application-local.yml
 
+# --- Java / Gradle (chaincode) ---
+chaincode/build/
+chaincode/.gradle/
+chaincode/out/
+
 # --- Node / Vite (FE) ---
 FE/node_modules/
 FE/dist/
 FE/.vite/
 FE/*.local
+
+# --- Python (parser) ---
+parser/__pycache__/
+parser/**/__pycache__/
+parser/.pytest_cache/
+parser/*.pyc
+parser/.venv/
+parser/venv/
 
 # --- IDE ---
 .idea/
