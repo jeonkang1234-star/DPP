@@ -1,23 +1,33 @@
 package com.dpp.chaincode.model;
 
+import org.hyperledger.fabric.contract.annotation.DataType;
+import org.hyperledger.fabric.contract.annotation.Property;
+
 /**
  * 문서 파싱 단계에서 계산된 해시를 원장에 기록하기 위한 모델.
  * 원문/추출값은 절대 여기 안 들어가고, 해시와 메타데이터만 들어간다.
  */
+@DataType()
 public class DocumentHashRecord {
 
+    @Property()
     private String docId;        // 문서 인스턴스 고유 ID (파싱 결과의 document_id 또는 mock_id)
+    @Property()
     private String docType;      // registry_code (예: Q1_02) 또는 doc_type_slug
+    @Property()
     private String docHash;      // 파싱 단계에서 계산한 text_sha256
+    @Property()
     private String submitter;    // 제출 조직/계정
+    @Property()
     private String timestamp;    // 제출 시각 (ISO-8601)
+    @Property()
     private String txId;         // 이 레코드를 기록한 트랜잭션 ID (체인코드가 채움)
 
     public DocumentHashRecord() {
     }
 
     public DocumentHashRecord(String docId, String docType, String docHash,
-                               String submitter, String timestamp, String txId) {
+                              String submitter, String timestamp, String txId) {
         this.docId = docId;
         this.docType = docType;
         this.docHash = docHash;
