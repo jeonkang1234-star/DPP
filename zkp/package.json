@@ -1,0 +1,15 @@
+{
+  "name": "dpp-zkp",
+  "version": "0.0.1",
+  "description": "DPP 재생함량 인증서 ZKP (zk-SNARK, Groth16) - recycled content threshold proof",
+  "scripts": {
+    "compile": "bash scripts/02_compile.sh",
+    "setup": "bash scripts/03_setup.sh",
+    "test:pass": "node scripts/04_prove_and_verify.js 28.0 20 RC-STRUCTA-2025-0004",
+    "test:fail": "node scripts/04_prove_and_verify.js 19.5 30 RC-VSS2-2025-0001"
+  },
+  "dependencies": {
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.4"
+  }
+}
