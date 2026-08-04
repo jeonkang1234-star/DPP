@@ -1,0 +1,62 @@
+[
+  {
+    "file": "Q1_02_energy_label_sample.pdf",
+    "registry_code": "Q1_02",
+    "total_pages": 1,
+    "instances_produced": 1,
+    "instances_expected": 10,
+    "split_method": "footer_split(pages_per_doc=1)",
+    "split_warning": "footer 분할 결과 1건 (기대 10건) - 확인 필요",
+    "document_id_found": 1,
+    "mock_id_found": 1,
+    "dpp_annotation_found": 0,
+    "qr_found": 1,
+    "sustainability_metric_found": 1,
+    "numbered_sections_found": 0
+  },
+  {
+    "file": "Q2_01_sds_sample.pdf",
+    "registry_code": "Q2_01",
+    "total_pages": 2,
+    "instances_produced": 1,
+    "instances_expected": 10,
+    "split_method": "footer_split(pages_per_doc=2)",
+    "split_warning": "footer 분할 결과 1건 (기대 10건) - 확인 필요",
+    "document_id_found": 1,
+    "mock_id_found": 1,
+    "dpp_annotation_found": 1,
+    "qr_found": 0,
+    "sustainability_metric_found": 0,
+    "numbered_sections_found": 1
+  },
+  {
+    "file": "Q2_08_샘플_재생함량인증서_10건.pdf",
+    "registry_code": "Q2_08",
+    "total_pages": 10,
+    "instances_produced": 10,
+    "instances_expected": 10,
+    "split_method": "even_split(pages_per_doc=1)",
+    "split_warning": null,
+    "document_id_found": 10,
+    "mock_id_found": 10,
+    "dpp_annotation_found": 0,
+    "qr_found": 0,
+    "sustainability_metric_found": 10,
+    "numbered_sections_found": 0
+  },
+  {
+    "file": "Q3_07_qr_label_sample.pdf",
+    "registry_code": "NO_MATCH",
+    "total_pages": 1,
+    "instances_produced": 1,
+    "instances_expected": 10,
+    "split_method": "footer_split(pages_per_doc=1)",
+    "split_warning": "footer 분할 결과 1건 (기대 10건) - 확인 필요",
+    "document_id_found": 1,
+    "mock_id_found": 1,
+    "dpp_annotation_found": 1,
+    "qr_found": 1,
+    "sustainability_metric_found": 1,
+    "numbered_sections_found": 0
+  }
+]

@@ -1,0 +1,40 @@
+[
+  {
+    "source_file": "Q1_02_energy_label_sample.pdf",
+    "registry_code": "Q1_02",
+    "doc_type_name": "EU 에너지라벨",
+    "doc_type_slug": "energy_label",
+    "quadrant": "Q1",
+    "design_fixed": true,
+    "data_fixed": true,
+    "instance_index": 1,
+    "page_range": [
+      1,
+      1
+    ],
+    "document_id": "100000",
+    "mock_id": "ELBL-FRIDGE-2025-001",
+    "issue_date": null,
+    "biz_reg_no": null,
+    "eori": null,
+    "gtin": "08806091000133",
+    "dpp_annotation": null,
+    "sustainability_metrics": {
+      "recyclability_percent": null,
+      "recycled_content_percent": null,
+      "recycled_content_weighted_avg_percent": null,
+      "repairability_grade": null,
+      "total_carbon_footprint_kg_co2e": null,
+      "overall_recycling_rate_percent": null,
+      "energy_efficiency_grade": "D",
+      "carbon_performance_class": null,
+      "overall_judgement": null
+    },
+    "numbered_sections": {},
+    "qr_payloads": [
+      "https://eprel.ec.europa.eu/qr/100000"
+    ],
+    "raw_text": "E U 에너지라벨 ( 재현)\nEU ENERGY LABEL · Regulation (EU) 2017/1369 · Delegated Reg. Annex III 서식\nENERGY · ΕΝΕΡΓΕΙΑ\nA\nB\nC\nD\nD\nE\nF\nG\n159 kWh/annum\nEPREL DB\nHB-F340\nHanbyeol Electronics C\n2017/1369\n공급자 / 모델\nHanbyeol Electronics Co., Ltd. / HB-F340\n에너지효율 등급\nD (A~G 척도)\nEPREL 등록번호\n100000\nGTIN\n08806091000133\n서식 근거: 위임규정 Annex III — 화살표 색상(7색 A~G), 등급 문자 Calibri Bold, 0.5pt 검정 테두리, 표\n준 라벨 최소 36×72 mm, EPREL QR 필수. 라벨은 EPREL DB가 자동 생성.\nMOCK / DEMONSTRATION DATA · ELBL-FRIDGE-2025-001 · Generated for EU Digital Product Passport system · CONFIDENTIAL\n1 / 1\n",
+    "text_sha256": "87986c2351124b8317b27b80e4b2a89b8c5b725753ed9b9f72b0dd8157fed726"
+  }
+]

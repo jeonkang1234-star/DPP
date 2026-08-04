@@ -1,0 +1,110 @@
+[
+  {
+    "source_file": "Q2_01_sds_sample.pdf",
+    "registry_code": "Q2_01",
+    "doc_type_name": "소재성분표 SDS",
+    "doc_type_slug": "material_composition",
+    "quadrant": "Q2",
+    "design_fixed": false,
+    "data_fixed": true,
+    "instance_index": 1,
+    "page_range": [
+      1,
+      2
+    ],
+    "document_id": "SDS-VSS2-2025-001",
+    "mock_id": "SDS-VSS2-2025-001",
+    "issue_date": "2025-03-01",
+    "biz_reg_no": "124-81-00517",
+    "eori": "KR1248100517",
+    "gtin": "08806094500017",
+    "dpp_annotation": {
+      "raw": "doc_type=material_composition · SHA-256 6ef97e44b8590d465154dd7a… · ZKP 재활용함량/원산지 검증 입력",
+      "notes": [
+        "SHA-256 6ef97e44b8590d465154dd7a…",
+        "ZKP 재활용함량/원산지 검증 입력"
+      ],
+      "doc_type": "material_composition"
+    },
+    "sustainability_metrics": {
+      "recyclability_percent": null,
+      "recycled_content_percent": null,
+      "recycled_content_weighted_avg_percent": null,
+      "repairability_grade": null,
+      "total_carbon_footprint_kg_co2e": null,
+      "overall_recycling_rate_percent": null,
+      "energy_efficiency_grade": null,
+      "carbon_performance_class": null,
+      "overall_judgement": null
+    },
+    "numbered_sections": {
+      "1": {
+        "title": "화학제품과 회사에 관한 정보",
+        "body": "제품명·용도 VECTOR SS2 BATTERY — 권고용도: 리튬이온 배터리 모듈 (산업·소비재). 그 외 용도 제한. 공급자 벡터에너지솔루션㈜ (Vector Energy Solutions Co., Ltd.), 129 Samsung-ro, Yeongtong-gu, Suwon-si, Gyeonggi-do 16677, KR 긴급전화 +82-2-000-1911 (24h) · compliance@vss2.example"
+      },
+      "2": {
+        "title": "유해성·위험성",
+        "body": "물리적 위험(파손·발열) 및 구성물질 유해성 존재. GHS 분류에 따른 예방조치 문구(P210·P273·P501 등) 준수. 신호어: 위험(DANGER)."
+      },
+      "3": {
+        "title": "구성성분의 명칭 및 함유량",
+        "body": "구성성분 CAS 함유량(wt%) 유해성(H-code) 리튬코발트산화물(LiCoO2) 12190-79-3 32.0 H302,H351,H400 흑연(C) 7782-42-5 18.0 - 구리(Cu) 7440-50-8 8.0 H410 알루미늄(Al) 7429-90-5 6.0 H228 전해액(EC/DMC+LiPF6) 혼합물 12.0 H225,H314 니켈도금강 7440-02-0 10.0 H317,H372 기타(BMS·분리막) 혼합물 14.0 - ※ 함유량은 대표값(배치별 ±2%p). 혼합물 성분은 개별 SDS 참조."
+      },
+      "4": {
+        "title": "응급조치 요령",
+        "body": "눈: 다량의 물로 15분 세척 후 진료 / 피부: 세척·오염의복 제거 / 흡입: 신선한 공기·호흡곤란 시 진료 / 섭취: 구토 금지·즉시 진료."
+      },
+      "5": {
+        "title": "폭발·화재 시 대처방법",
+        "body": "소화제: 다량의 물, D형 소화제(금속화재), 마른 모래. 화재 시 유독가스 발생 — SCBA 착용."
+      },
+      "6": {
+        "title": "누출 사고 시 대처방법",
+        "body": "발화원 제거·환기·개인보호구 착용 후 불연성 흡착재로 회수. 하천·토양 유입 방지."
+      },
+      "7": {
+        "title": "취급 및 저장방법",
+        "body": "충격·단락·과열 회피. 서늘하고 건조한 곳에 산화제·가연물과 격리 보관."
+      },
+      "8": {
+        "title": "노출방지 및 개인보호구",
+        "body": "해체·가공 시 방진마스크·내화학장갑·보안경·국소배기. 정상 완제품은 노출 없음."
+      },
+      "9": {
+        "title": "물리화학적 특성",
+        "body": "외관 고체 완제품 순중량 31.6 kg 치수 440×250×175 mm 수용성 불용(일부 성분 반응성)"
+      },
+      "10": {
+        "title": "안정성 및 반응성",
+        "body": "정상 조건에서 안정. 피해야 할 조건: 고온·물리적 손상·강산화제 접촉."
+      },
+      "11": {
+        "title": "독성에 관한 정보",
+        "body": "완제품 상태에서 해당 없음. 개별 성분의 급성·만성 독성값은 성분 SDS 참조."
+      },
+      "12": {
+        "title": "환경에 미치는 영향",
+        "body": "일부 금속·화학물질은 수생생물에 유해할 수 있음. 환경 배출 금지."
+      },
+      "13": {
+        "title": "폐기 시 주의사항",
+        "body": "관련 법규(폐기물관리법, EU EPR)에 따라 인증 재활용·처리업체 인계."
+      },
+      "14": {
+        "title": "운송에 필요한 정보",
+        "body": "UN3480 Class 9 (리튬배터리) — IMDG SP188 적용."
+      },
+      "15": {
+        "title": "법적 규제현황",
+        "body": "산업안전보건법·화관법(KR), REACH·RoHS(EU), 해당 제품군 규정 준수. 아래 우려물질(SoC) 0.1% 초과분은 SCIP DB 신고 대상. 우려물질(SoC) CAS 규제 근거 함유량 판정 코발트 화합물 (Co, LiCoO2 내) 7440-48-4 REACH Annex XIV 후보(SVHC)·발암성 1B 약 19.7 wt% 0.1% 초과 → SCIP 신 고 대상 납 (Pb) 7439-92-1 (EU) 2023/1542 제6조 제한 < 20 ppm 기준(0.01%) 이내 경제운영자 및 식별자 (Economic Operators & Identifiers) 제조자 (Manufacturer) Vector Energy Solutions Co., Ltd. · UOI UOI-KR-248100517 · EORI KR1248100517 수입자 (Importer) DPP Demo GmbH, Am Sandtorkai 48, 20457 Hamburg, Germany · UOI UOI-DE-812345678 EU 역내 대리인 DPP Compliance Europe GmbH, Am Sandtorkai 48, 20457 Hamburg, Germany 생산 시설 (Facility) 벡터에너지솔루션㈜ 셀 제조·조립 공장 (Line A) · UFI UFI-KR-D0C3B2 DPP 레지스트리 등록 ID EU-DPP-REG-2025-000001 (EU DPP Registry) 백업사본 참조 키 bkp:sha256:3a6d9670567b8084 · DPP Service Provider — Nexus DPP Vault (EU)"
+      },
+      "16": {
+        "title": "그 밖의 참고사항",
+        "body": "본 자료는 시연·데모용 목 데이터. 최초작성 2025-03-01."
+      }
+    },
+    "qr_payloads": [],
+    "raw_text": "벡터에너지솔루션㈜\nVector Energy Solutions Co., Ltd. · 129 Samsung-ro, Yeongtong-gu, Suwon-si, Gyeonggi-do 16677, KR\n사업자/법인번호 124-81-00517 · EORI KR1248100517\n문서번호 SDS-VSS2-2025-001\nSafety Data Sheet (16 Sections)\n발행일 2025-03-01\n물질안전보건자료\nSAFETY DATA SHEET · GHS Rev.9 / REACH (EC 1907/2006) Annex II · 16개 항목\n제품명\nVECTOR SS2 BATTERY (리튬이온 배터리\n모듈)\n모델\nVSS2-48V100\n개정 / GTIN\nRev.1.0 / 2025-03-01\nGTIN\n08806094500017\n1. 화학제품과 회사에 관한 정보\n제품명·용도\nVECTOR SS2 BATTERY — 권고용도: 리튬이온 배터리 모듈 (산업·소비재). 그 외 용도 제한.\n공급자\n벡터에너지솔루션㈜ (Vector Energy Solutions Co., Ltd.), 129 Samsung-ro, Yeongtong-gu,\nSuwon-si, Gyeonggi-do 16677, KR\n긴급전화\n+82-2-000-1911 (24h) · compliance@vss2.example\n2. 유해성·위험성\n물리적 위험(파손·발열) 및 구성물질 유해성 존재. GHS 분류에 따른 예방조치 문구(P210·P273·P501 등) 준수. 신호어: 위험(DANGER).\n3. 구성성분의 명칭 및 함유량\n구성성분\nCAS\n함유량(wt%)\n유해성(H-code)\n리튬코발트산화물(LiCoO2)\n12190-79-3\n32.0\nH302,H351,H400\n흑연(C)\n7782-42-5\n18.0\n-\n구리(Cu)\n7440-50-8\n8.0\nH410\n알루미늄(Al)\n7429-90-5\n6.0\nH228\n전해액(EC/DMC+LiPF6)\n혼합물\n12.0\nH225,H314\n니켈도금강\n7440-02-0\n10.0\nH317,H372\n기타(BMS·분리막)\n혼합물\n14.0\n-\n※ 함유량은 대표값(배치별 ±2%p). 혼합물 성분은 개별 SDS 참조.\n4. 응급조치 요령\n눈: 다량의 물로 15분 세척 후 진료 / 피부: 세척·오염의복 제거 / 흡입: 신선한 공기·호흡곤란 시 진료 / 섭취: 구토 금지·즉시 진료.\n5. 폭발·화재 시 대처방법\n소화제: 다량의 물, D형 소화제(금속화재), 마른 모래. 화재 시 유독가스 발생 — SCBA 착용.\n6. 누출 사고 시 대처방법\n발화원 제거·환기·개인보호구 착용 후 불연성 흡착재로 회수. 하천·토양 유입 방지.\n7. 취급 및 저장방법\n충격·단락·과열 회피. 서늘하고 건조한 곳에 산화제·가연물과 격리 보관.\n1 / 2\n\n8. 노출방지 및 개인보호구\n해체·가공 시 방진마스크·내화학장갑·보안경·국소배기. 정상 완제품은 노출 없음.\n9. 물리화학적 특성\n외관\n고체 완제품\n순중량\n31.6 kg\n치수\n440×250×175 mm\n수용성\n불용(일부 성분 반응성)\n10. 안정성 및 반응성\n정상 조건에서 안정. 피해야 할 조건: 고온·물리적 손상·강산화제 접촉.\n11. 독성에 관한 정보\n완제품 상태에서 해당 없음. 개별 성분의 급성·만성 독성값은 성분 SDS 참조.\n12. 환경에 미치는 영향\n일부 금속·화학물질은 수생생물에 유해할 수 있음. 환경 배출 금지.\n13. 폐기 시 주의사항\n관련 법규(폐기물관리법, EU EPR)에 따라 인증 재활용·처리업체 인계.\n14. 운송에 필요한 정보\nUN3480 Class 9 (리튬배터리) — IMDG SP188 적용.\n15. 법적 규제현황\n산업안전보건법·화관법(KR), REACH·RoHS(EU), 해당 제품군 규정 준수. 아래 우려물질(SoC) 0.1% 초과분은 SCIP DB 신고 대상.\n우려물질(SoC)\nCAS\n규제 근거\n함유량\n판정\n코발트 화합물 (Co, LiCoO2 내)\n7440-48-4\nREACH Annex XIV 후보(SVHC)·발암성\n1B\n약 19.7 wt%\n0.1% 초과 → SCIP 신\n고 대상\n납 (Pb)\n7439-92-1\n(EU) 2023/1542 제6조 제한\n< 20 ppm\n기준(0.01%) 이내\n경제운영자 및 식별자 (Economic Operators & Identifiers)\n제조자 (Manufacturer)\nVector Energy Solutions Co., Ltd. · UOI UOI-KR-248100517 · EORI KR1248100517\n수입자 (Importer)\nDPP Demo GmbH, Am Sandtorkai 48, 20457 Hamburg, Germany · UOI UOI-DE-812345678\nEU 역내 대리인\nDPP Compliance Europe GmbH, Am Sandtorkai 48, 20457 Hamburg, Germany\n생산 시설 (Facility)\n벡터에너지솔루션㈜ 셀 제조·조립 공장 (Line A) · UFI UFI-KR-D0C3B2\nDPP 레지스트리 등록 ID\nEU-DPP-REG-2025-000001 (EU DPP Registry)\n백업사본 참조 키\nbkp:sha256:3a6d9670567b8084 · DPP Service Provider — Nexus DPP Vault (EU)\n16. 그 밖의 참고사항\n본 자료는 시연·데모용 목 데이터. 최초작성 2025-03-01.\nDPP: doc_type=material_composition · SHA-256 6ef97e44b8590d465154dd7a… · ZKP 재활용함량/원산지 검증 입력\nMOCK / DEMONSTRATION DATA · SDS-VSS2-2025-001 · Generated for EU Digital Product Passport system · CONFIDENTIAL\n2 / 2\n",
+    "text_sha256": "e03a3f7ee6b2bc07323d9e15c47bc3d013111892ae50c343266d3b4a2f843155"
+  }
+]

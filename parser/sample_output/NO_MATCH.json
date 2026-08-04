@@ -1,0 +1,47 @@
+[
+  {
+    "source_file": "Q3_07_qr_label_sample.pdf",
+    "registry_code": null,
+    "doc_type_name": null,
+    "doc_type_slug": null,
+    "quadrant": null,
+    "design_fixed": null,
+    "data_fixed": null,
+    "instance_index": 1,
+    "page_range": [
+      1,
+      1
+    ],
+    "document_id": "LBL-VSS2-2025-001",
+    "mock_id": "LBL-VSS2-2025-001",
+    "issue_date": "2025-03-01",
+    "biz_reg_no": "124-81-00517",
+    "eori": "KR1248100517",
+    "gtin": null,
+    "dpp_annotation": {
+      "raw": "qr_payload = GS1 Digital Link URL · data_carrier_type=qr_code · Tier 1(공개) 스캔 진입점",
+      "notes": [
+        "Tier 1(공개) 스캔 진입점"
+      ],
+      "qr_payload": "GS1 Digital Link URL",
+      "data_carrier_type": "qr_code"
+    },
+    "sustainability_metrics": {
+      "recyclability_percent": null,
+      "recycled_content_percent": null,
+      "recycled_content_weighted_avg_percent": null,
+      "repairability_grade": "B",
+      "total_carbon_footprint_kg_co2e": "12.4",
+      "overall_recycling_rate_percent": null,
+      "energy_efficiency_grade": null,
+      "carbon_performance_class": null,
+      "overall_judgement": null
+    },
+    "numbered_sections": {},
+    "qr_payloads": [
+      "https://id.dpp.example/01/08806094500017/21/VSS2-48V100-20250001"
+    ],
+    "raw_text": "벡터에너지솔루션㈜\nVector Energy Solutions Co., Ltd. · 129 Samsung-ro, Yeongtong-gu, Suwon-si, Gyeonggi-do 16677, KR\n사업자/법인번호 124-81-00517 · EORI KR1248100517\n문서번호 LBL-VSS2-2025-001\nDPP Product Label / Data Carrier\n발행일 2025-03-01\n제품 라벨 · 데이터 캐리어\nDIGITAL PRODUCT PASSPORT LABEL · GS1 Digital Link · ESPR (EU) 2024/1781\nQR / GS1 Digital Link\n스캔하여 DPP 조회\nVECTOR SS2 BATTERY\n고유제품식별자 (UBI)\nVSS2-48V100-20250001\nGTIN / HS 코드\n08806094500017 / 8507.60\n모델 / 배치\nVSS2-48V100 / LOT-2025-0101-A\n제조자 (UOI)\nVector Energy Solutions Co., Ltd. · UOI-KR-248100517\n수입자 (UOI)\nDPP Demo GmbH · UOI-DE-812345678\n생산시설 (UFI)\n벡터에너지솔루션㈜ 셀 제조·조립 공장 (Line A) · UFI-KR-\nD0C3B2\n원산지\nKR\nDPP 레지스트리 등록\nEU-DPP-REG-2025-000001\n데이터 캐리어(Digital Link URL): https://id.dpp.example/01/08806094500017/21/VSS2-48V100-20250001\n백업사본 참조 키: bkp:sha256:3a6d9670567b8084 · DPP Service Provider — Nexus DPP Vault (EU)\n블록체인 인증\n등록됨 (confirmed)\n수리가능성 등급\nB\n재활용 가능\nO\n총 탄소발자국\n12.4 kg CO2e\nDPP: qr_payload = GS1 Digital Link URL · data_carrier_type=qr_code · Tier 1(공개) 스캔 진입점\nMOCK / DEMONSTRATION DATA · LBL-VSS2-2025-001 · Generated for EU Digital Product Passport system · CONFIDENTIAL\n1 / 1\n",
+    "text_sha256": "3985dd8433ac8354429c480dac72abb1d085bdaeb10155b639b435e60545ed77"
+  }
+]
