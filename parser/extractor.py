@@ -129,6 +129,130 @@ def extract_grs_boxes(text: str) -> dict:
     return result
 
 
+# ---------------------------------------------------------------------------
+# 3단계 확장 (2026-08-05 추가): ZKP 판정 규칙(한계치 정리.xlsx "판정 규칙 v4")이
+# 요구하는 5개 문서유형의 세부 수치. 표 형태라 지금까지 손 안 댔던 부분인데,
+# 실제 mock PDF 10건씩 전부 대조해서 검증된 패턴만 넣었다(README 2단계와 동일 원칙).
+# ---------------------------------------------------------------------------
+
+_STEEL_ELEMENTS = ["C", "Si", "Mn", "P", "S", "N", "Cu", "CEV"]
+_STEEL_MECH = [
+    ("항복강도 ReH", "ReH"),
+    ("인장강도 Rm", "Rm"),
+    ("연신율 A", "A"),
+    ("충격흡수에너지 KV (20℃)", "KV"),
+]
+
+
+def extract_steel_mill_values(text: str) -> dict:
+    """Q2_05(제강성적서) 전용 - 화학성분표 8개 + 기계적성질표 4개 = 12개 값.
+    선형화된 표에서 '항목명 -> 값 -> 규격' 이 항상 연속 3줄로 나오는 걸 이용한
+    위치기반 파싱(정규식 라벨 매칭이 아니라 줄 단위 오프셋). 23종_원문_추출값_대조 결과
+    문서 10건 전부 레이아웃이 동일해서 이 방식으로 12/12 안정적으로 뽑힘."""
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    result = {"chemical_composition_wt_percent": {}, "mechanical_properties": {}}
+    for i, line in enumerate(lines):
+        if line in _STEEL_ELEMENTS and i + 2 < len(lines):
+            val, limit = lines[i + 1], lines[i + 2]
+            if re.match(r"^[\d.]+$", val) and re.match(r"^[≤≥][\d.]+$", limit):
+                result["chemical_composition_wt_percent"][line] = {
+                    "measured": float(val), "limit_text": limit,
+                }
+    for label, key in _STEEL_MECH:
+        for i, line in enumerate(lines):
+            if line == label and i + 3 < len(lines):
+                unit, val, spec = lines[i + 1], lines[i + 2], lines[i + 3]
+                if re.match(r"^[\d.]+$", val):
+                    result["mechanical_properties"][key] = {
+                        "measured": float(val), "unit": unit, "spec_text": spec,
+                    }
+    return result
+
+
+_BATTERY_RATED_CAPACITY_PAT = re.compile(r"([\d.]+)\s*kWh")
+_BATTERY_FUNCTIONAL_UNIT_PCF_PAT = re.compile(r"기능단위당\s*\n?\s*([\d.]+)")
+
+
+def extract_battery_pcf_values(text: str) -> dict:
+    """Q2_07(배터리 탄소발자국) 전용 - 정격용량(kWh), 기능단위당 탄소발자국(kgCO2e/kWh),
+    재생원료 함유율 Co/Li/Ni/Pb 4개. 기존 sustainability_metrics의
+    total_carbon_footprint_kg_co2e는 '총 탄소발자국'(제품 전체)이라 이 규칙이 필요로
+    하는 '기능단위당' 값과 다르므로 별도 필드로 분리."""
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    result = {
+        "rated_capacity_kwh": None,
+        "carbon_footprint_per_functional_unit_kg_co2e_kwh": None,
+        "recycled_content_percent": {},
+    }
+    m = _BATTERY_RATED_CAPACITY_PAT.search(text)
+    if m:
+        result["rated_capacity_kwh"] = float(m.group(1))
+    m = _BATTERY_FUNCTIONAL_UNIT_PCF_PAT.search(text)
+    if m:
+        result["carbon_footprint_per_functional_unit_kg_co2e_kwh"] = float(m.group(1))
+    for i, line in enumerate(lines):
+        if "재생원료 함유율" in line:
+            labels = lines[i + 1:i + 5]
+            values = lines[i + 5:i + 9]
+            if labels == ["Co", "Li", "Ni", "Pb"]:
+                for lab, val in zip(labels, values):
+                    mm = re.match(r"^([\d.]+)\s*%$", val)
+                    if mm:
+                        result["recycled_content_percent"][lab] = float(mm.group(1))
+            break
+    return result
+
+
+def extract_recycling_result_values(text: str) -> dict:
+    """Q4_15(재활용 처리결과보고서) 전용 - 종합재활용율 + 소재별(물질별) 회수 실적표.
+    소재 종류는 제품군마다 달라서(배터리는 Co/Li 화합물, 전자는 PCB 등, 섬유는 원사 등)
+    고정 리스트가 아니라 '소재별 회수 실적' 표 헤더 뒤를 4줄 단위(소재명/투입/회수/회수율)로
+    끝까지 읽는 방식. '합계' 행도 그대로 포함(교차검증용)."""
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    result = {"overall_recycling_rate_percent": None, "material_recovery": {}}
+    m = re.search(r"종합\s*재활용율\s*\n?\s*([\d.]+)\s*%", text)
+    if m:
+        result["overall_recycling_rate_percent"] = float(m.group(1))
+    start = None
+    for i, l in enumerate(lines):
+        if l == "소재별 회수 실적":
+            start = i
+            break
+    if start is not None:
+        j = start + 1
+        if lines[j:j + 4] == ["소재", "투입 (kg)", "회수 (kg)", "회수율"]:
+            j += 4
+        while j + 3 < len(lines):
+            name, inp, rec, rate = lines[j], lines[j + 1], lines[j + 2], lines[j + 3]
+            if re.match(r"^[\d.]+$", inp) and re.match(r"^[\d.]+$", rec) and re.match(r"^[\d.]+%$", rate):
+                result["material_recovery"][name] = {
+                    "input_kg": float(inp),
+                    "recovered_kg": float(rec),
+                    "recovery_rate_percent": float(rate.rstrip("%")),
+                }
+                j += 4
+            else:
+                break
+    return result
+
+
+_OEKOTEX_PH_PAT = re.compile(r"pH\s*\n\s*[\d.]+\s*[–-]\s*[\d.]+\s*\n\s*([\d.]+)")
+_CBAM_IMPORT_QTY_PAT = re.compile(r"수입\s*수량\s*\n?\s*([\d.]+)\s*t\b")
+
+
+def extract_oekotex_values(text: str) -> dict:
+    """Q3_10(OEKO-TEX 라벨) 전용 - pH 실측값. '항목/기준(범위)/결과' 3줄 구조 이용."""
+    m = _OEKOTEX_PH_PAT.search(text)
+    return {"ph": float(m.group(1))} if m else {"ph": None}
+
+
+def extract_cbam_values(text: str) -> dict:
+    """Q2_06(CBAM 탄소보고서) 전용 - de minimis 판정에 쓰는 수입 수량(t).
+    내재배출총계는 기존 sustainability_metrics.total_carbon_footprint_kg_co2e로 이미 잡힘."""
+    m = _CBAM_IMPORT_QTY_PAT.search(text)
+    return {"import_quantity_t": float(m.group(1))} if m else {"import_quantity_t": None}
+
+
 _NUMBERED_SECTION_PAT = re.compile(r"^(\d{1,2})\.\s+(\S.*)$")
 _NUMBERED_SECTION_STOP_PAT = re.compile(r"^(DPP:|MOCK\s*/)")
 _TRAILING_PAGE_MARKER_PAT = re.compile(r"\s*\d{1,3}\s*/\s*\d{1,3}\s*$")
@@ -184,6 +308,11 @@ def extract_numbered_sections(text: str) -> dict:
 TYPE_SPECIFIC_EXTRACTORS = {
     "Q1_03": ("grs_boxes", extract_grs_boxes),
     "Q1_04": ("fiber_composition", extract_fiber_composition),
+    "Q2_05": ("steel_mill_values", extract_steel_mill_values),
+    "Q2_06": ("cbam_values", extract_cbam_values),
+    "Q2_07": ("battery_pcf_values", extract_battery_pcf_values),
+    "Q3_10": ("oekotex_values", extract_oekotex_values),
+    "Q4_15": ("recycling_result_values", extract_recycling_result_values),
 }
 
 
