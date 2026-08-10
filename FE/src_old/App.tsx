@@ -19,13 +19,13 @@ import './App.css';
  * Pure style builders shared across screens (pills, chips, tabs, bars).
  * Each returns a plain React style object — no state, safe to call during render.
  */
-function pill(active) {
+function pill(active: any) {
   return active
     ? { height: 44, border: 0, borderRadius: 10, background: '#0045A9', color: '#fff', fontSize: 14.5, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,69,169,.26)' }
     : { height: 44, border: 0, borderRadius: 10, background: 'transparent', color: '#5A6B85', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' };
 }
 
-function roleCard(active) {
+function roleCard(active: any) {
   return {
     display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-start', textAlign: 'left',
     padding: '14px 14px', borderRadius: 14, cursor: 'pointer',
@@ -35,11 +35,11 @@ function roleCard(active) {
   };
 }
 
-function pillDot(color) {
+function pillDot(color: any) {
   return { width: 8, height: 8, flex: 'none', borderRadius: 999, background: color };
 }
 
-function domainCard(active) {
+function domainCard(active: any) {
   return {
     display: 'grid', placeItems: 'center', height: 92, padding: '0 14px', cursor: 'pointer',
     border: active ? '1.5px solid #0045A9' : '1.5px solid rgba(16,32,64,.12)',
@@ -49,7 +49,7 @@ function domainCard(active) {
   };
 }
 
-function switchBtn(active) {
+function switchBtn(active: any) {
   return {
     height: 30, padding: '0 13px', border: 0, borderRadius: 10, cursor: 'pointer',
     fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', flex: 'none',
@@ -58,37 +58,37 @@ function switchBtn(active) {
   };
 }
 
-function tabStyle(active) {
+function tabStyle(active: any) {
   return active
     ? { height: 40, padding: '0 18px', border: 0, borderRadius: 11, background: '#0045A9', color: '#fff', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,69,169,.26)', whiteSpace: 'nowrap' }
     : { height: 40, padding: '0 18px', border: 0, borderRadius: 11, background: 'transparent', color: '#5A6B85', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' };
 }
 
-function chip(bg, fg) {
+function chip(bg: any, fg: any) {
   return { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 11px', borderRadius: 999, background: bg, color: fg, fontSize: 11.5, fontWeight: 700, width: 'fit-content' };
 }
 
-function domainChipFor(d) {
+function domainChipFor(d: any) {
   if (d === '철강') return chip('rgba(0,69,169,.10)', '#0045A9');
   if (d === '배터리') return chip('rgba(18,161,80,.12)', '#0E7A3D');
   if (d === '섬유·패션') return chip('rgba(227,160,8,.16)', '#96660A');
   return chip('rgba(16,32,64,.07)', '#44546F');
 }
 
-function avatarStyle(hue) {
+function avatarStyle(hue: any) {
   return { width: 30, height: 30, flex: 'none', borderRadius: 999, background: hue, color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700 };
 }
 
-function bar(pct, color) { return { display: 'block', height: '100%', width: pct + '%', borderRadius: 6, background: color }; }
+function bar(pct: any, color: any) { return { display: 'block', height: '100%', width: pct + '%', borderRadius: 6, background: color }; }
 
-function pctStyle(pct) {
+function pctStyle(pct: any) {
   const c = pct === 0 ? '#C22B2B' : pct >= 100 ? '#0E7A3D' : '#96660A';
   return { fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, fontWeight: 700, color: c, textAlign: 'right' };
 }
 
-function segStyle(w, color) { return { display: 'block', width: w + '%', height: '100%', background: color }; }
+function segStyle(w: any, color: any) { return { display: 'block', width: w + '%', height: '100%', background: color }; }
 
-function dot(color) { return { width: 9, height: 9, marginTop: 5, flex: 'none', borderRadius: 5, background: color }; }
+function dot(color: any) { return { width: 9, height: 9, marginTop: 5, flex: 'none', borderRadius: 5, background: color }; }
 
 
 /* ==================================================================
@@ -98,7 +98,7 @@ function dot(color) { return { width: 9, height: 9, marginTop: 5, flex: 'none', 
 /**
  * Demo dataset for the prototype. Replace with API responses on integration.
  */
-function compDataFor(role) {
+function compDataFor(role: any) {
   const r = role;
   const sets = {
     steel: [
@@ -124,7 +124,7 @@ function compDataFor(role) {
       ['DPP-KR-TX-2607-0540', '텐셀 니트 라이트', 0, 0, 100, 'Lyocell 100%']
     ]
   };
-  return sets[r] || sets.steel;
+  return sets[r as keyof typeof sets] || sets.steel;
 }
 
 /** Seeded demo accounts: email -> role. */
@@ -148,9 +148,9 @@ const SEEDED_ACCOUNTS = {
  * Builds the view-model slice consumed by AppView.
  * @param ctx shared context from useAppLogic (state, setState, props, style + helper fns)
  */
-function makerVals(ctx) {
+function makerVals(ctx: any) {
   const { state, setState, props } = ctx;
-  const r = state.role;
+  const r = state.role as 'steel' | 'battery' | 'textile';
   const p = ctx.profile();
   const kpi = { steel: ['1,204', 86, 42, 24, 18, 78], battery: ['842', 61, 31, 17, 14, 74], textile: ['506', 38, 22, 12, 10, 71] }[r] || ['0', 0, 0, 0, 0, 0];
   const queues = {
@@ -688,7 +688,7 @@ function customsVals(ctx) {
  * @param ctx shared context from useAppLogic (state, setState, props, style + helper fns)
  */
 function euVals(ctx) {
-  const { state, setState, props } = ctx;
+  const { state, setState, props } : any = ctx;
   return {
     exportCsv: () => ctx.say('조회 결과 6건을 CSV로 내보냈습니다.'),
     searchRegistry: () => ctx.say('레지스트리에서 6건을 조회했습니다.'),
@@ -956,7 +956,7 @@ function useAppLogic(userProps) {
 
   /** Demo account directory: seeded users plus anyone registered this session. */
   function accounts() {
-    return { ...SEEDED_ACCOUNTS, ...(state.registered || {}) };
+    return { ...SEEDED_ACCOUNTS, ...((state as any).registered || {}) };
   }
 
   function domainHint(v) {
@@ -980,8 +980,8 @@ function useAppLogic(userProps) {
 
   function say(msg) {
     setState({ toast: msg });
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setState({ toast: '' }), 2600);
+    clearTimeout(timer.current as any);
+    timer.current = setTimeout(() => setState({ toast: '' }), 2600) as any;
   }
 
   function go(role) { setState({ view: 'app', role, tab: firstTab(role), notifOpen: false, dppOpen: false, customsSearched: false, customsQuery: '' }); }
@@ -1051,7 +1051,7 @@ function useAppLogic(userProps) {
         ['DPP-KR-TX-2607-0521', '오가닉 코튼 저지 180g', '아라텍스', '2026-07-14 18:47', '정보 갱신됨', '2026-07-31'],
         ['DPP-FR-TX-2607-0204', 'Recycled poly woven', 'Fibrelune SAS', '2026-07-02 11:20', '검증됨', '2026-06-30'],
         ['DPP-KR-TX-2506-0388', '리사이클 나일론 셔츠', '아라텍스', '2026-06-11 20:14', '검증 실패', '2026-05-28']
-      ].filter(r => !state.removedScans.includes(r[0])).map(([id, name, company, at, status, updated], i) => ({
+      ].filter((r: any) => !((state as any).removedScans || []).includes(r[0])).map(([id, name, company, at, status, updated]: any, i: any) => ({
         key: id, id, name, company, at, status, updated,
         remove: () => setState({
           confirm: {
@@ -1099,7 +1099,7 @@ function useAppLogic(userProps) {
       })),
       sendRejects: () => say('4건의 반려사유를 자동 발송했습니다.'),
       anchorBars: anchorSeq.map((h, i) => ({ key: i, style: { display: 'block', width: 6, height: h, borderRadius: 3, background: i > 12 ? 'rgba(134,239,172,.9)' : 'rgba(255,255,255,.24)' } })),
-      inquiries: inqData.map(([label, count, pct]) => ({ key: label, label, count, pct, style: bar(pct * 2.6, '#0045A9') })),
+      inquiries: inqData.map(([label, count, pct]: any) => ({ key: label, label, count, pct, style: bar(pct * 2.6, '#0045A9') })),
       members: memberData.map(([name, biz, joined, country, domain, held, issued, hue, initial]) => ({
         key: name, name, biz, joined, country, domain, held, issued, initial,
         avatar: avatarStyle(hue), domainChip: domainChipFor(domain),
@@ -1133,34 +1133,34 @@ function useAppLogic(userProps) {
       pickMaker: () => setState({ suRole: 'maker' }),
       pickEu: () => setState({ suRole: 'eu' }),
       pickCustoms: () => setState({ suRole: 'customs' }),
-      suEmail: s.suEmail || '',
+      suEmail: (s as any).suEmail || '',
       onSuEmail: e => {
         const v = e.target.value;
         const at = v.indexOf('@');
         const domain = at >= 0 ? v.slice(at + 1).toLowerCase().trim() : '';
         const hint = domainHint(v);
         const map = { customs: 'customs', eu: 'eu', admin: 'admin' };
-        const role = map[hint] || null;
+        const role = (map as any)[hint as any] || null;
         setState({ suEmail: v, suDetected: domain ? (hint === 'unknown' ? 'unknown' : hint) : null, suRole: role || s.suRole });
       },
-      suDetectedShow: !!s.suDetected && s.suDetected !== 'personal' && s.suDetected !== 'unknown',
-      suDetectedPersonal: s.suDetected === 'personal',
-      suDetectedUnknown: s.suDetected === 'unknown',
-      suDetectedLabel: { admin: '관리자', maker: '제조사', customs: '세관', eu: '시장감독기관' }[s.suDetected] || '',
+      suDetectedShow: !!(s as any).suDetected && (s as any).suDetected !== 'personal' && (s as any).suDetected !== 'unknown',
+      suDetectedPersonal: (s as any).suDetected === 'personal',
+      suDetectedUnknown: (s as any).suDetected === 'unknown',
+      suDetectedLabel: { admin: '관리자', maker: '제조사', customs: '세관', eu: '시장감독기관' }[(s as any).suDetected] || '',
       suDetectedNote: {
         admin: '등록된 운영 도메인 · 관리자 계정으로 제안되었습니다',
         customs: '등록된 세관 도메인 · 세관 계정으로 제안되었습니다',
         eu: '등록된 기관 도메인 · 시장감독기관 계정으로 제안되었습니다'
-      }[s.suDetected] || '',
+      }[(s as any).suDetected] || '',
 
       goSignup: () => setState({ view: 'signup' }),
       goLogin: () => setState({ view: 'login' }),
-      loginEmail: s.loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : s.loginEmail,
+      loginEmail: (s as any).loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : (s as any).loginEmail,
       onLoginEmail: e => setState({ loginEmail: e.target.value }),
-      loginRoleShow: !!state.loginRoleLabel,
-      loginRoleLabel: state.loginRoleLabel || '',
+      loginRoleShow: !!(state as any).loginRoleLabel,
+      loginRoleLabel: (state as any).loginRoleLabel || '',
       doLogin: () => {
-        const v = s.loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : s.loginEmail;
+        const v = (s as any).loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : (s as any).loginEmail;
         const r = roleFromEmail(v);
         if (r === 'personal') { say('기업 계정 이메일을 입력해 주세요.'); return; }
         if (!r) { say('등록되지 않은 계정입니다. 가입 승인 후 이용할 수 있습니다.'); return; }
@@ -1171,7 +1171,7 @@ function useAppLogic(userProps) {
       verifyEmail: () => say('인증 메일을 발송했습니다.'),
       refreshCaptcha: () => say('새로운 이미지를 불러왔습니다.'),
       submitSignup: () => {
-        const email = (s.suEmail || '').toLowerCase().trim();
+        const email = ((s as any).suEmail || '').toLowerCase().trim();
         if (domainHint(email) === 'personal') { say('개인 메일 도메인으로는 기업 회원가입을 할 수 없습니다.'); return; }
         const mapped = s.suRole === 'maker' ? 'steel' : s.suRole;
         if (email) setState(st2 => ({ registered: Object.assign({}, st2.registered, { [email]: mapped }) }));
@@ -1187,13 +1187,13 @@ function useAppLogic(userProps) {
       ...dppVals(ctx),
       ...obVals(ctx),
       confirmOpen: !!s.confirm,
-      confirmTitle: s.confirm && s.confirm.title,
-      confirmBody: s.confirm && s.confirm.body,
-      confirmLabel: s.confirm && s.confirm.label,
-      confirmStyle: s.confirm && s.confirm.danger
+      confirmTitle: (s as any).confirm && (s as any).confirm.title,
+      confirmBody: (s as any).confirm && (s as any).confirm.body,
+      confirmLabel: (s as any).confirm && (s as any).confirm.label,
+      confirmStyle: (s as any).confirm && (s as any).confirm.danger
         ? { height: 46, padding: '0 22px', border: 0, borderRadius: 13, background: '#E03B3B', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 18px rgba(224,59,59,.24)' }
         : { height: 46, padding: '0 22px', border: 0, borderRadius: 13, background: '#0045A9', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.22)' },
-      confirmRun: () => s.confirm && s.confirm.run(),
+      confirmRun: () => (s as any).confirm && (s as any).confirm.run(),
       confirmCancel: () => setState({ confirm: null }),
       roleBtns: roles.concat([['customs', '세관']]).map(([k, label]) => ({ key: k, label, style: switchBtn(s.view === 'app' && s.role === k), go: () => go(k) }))
     };
@@ -2170,7 +2170,7 @@ function AppView(v) {
               <span style={{ fontSize: '15px', fontWeight: '600' }}>새 초대 보내기</span>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>메시지</span><textarea rows="3" placeholder="협력사에 전달할 안내 문구를 입력하세요." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical' }}></textarea></label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>메시지</span><textarea rows={3} placeholder="협력사에 전달할 안내 문구를 입력하세요." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical' }}></textarea></label>
               <button onClick={sendInvite} style={{ height: '50px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>초대 발송</button>
             </div>
 
@@ -2900,7 +2900,7 @@ function AppView(v) {
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>근거 법령</span><input placeholder="예) 제품안전기본법 제12조" style={{ height: '46px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} /></label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>조사 명령서 번호</span><input placeholder="예) MSA-INV-2026-0188" style={{ height: '46px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace', background: '#fff' }} /></label>
                 </div>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>조사 목적</span><textarea rows="3" placeholder="열람이 필요한 사유와 조사 범위를 기재하세요. 입력 내용은 감사 로그에 영구 기록됩니다." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical', background: '#fff' }}></textarea></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>조사 목적</span><textarea rows={3} placeholder="열람이 필요한 사유와 조사 범위를 기재하세요. 입력 내용은 감사 로그에 영구 기록됩니다." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical', background: '#fff' }}></textarea></label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'center', padding: '14px 15px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#fff' }}>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13px', fontWeight: '600' }}>조사_명령서_2026-0188.pdf</span><span style={{ fontSize: '11px', color: '#8494AC' }}>PDF · 0.4MB · 기관장 전자서명 포함</span></span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={{ width: '8px', height: '8px', borderRadius: '999px', background: '#12A150' }}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>서명 유효</span></span>
@@ -3109,7 +3109,7 @@ function AppView(v) {
       {showSwitcher ? (<>
       <div style={{ position: 'fixed', left: '50%', bottom: '20px', transform: 'translateX(-50%)', zIndex: '80', display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 9px', borderRadius: '15px', background: 'rgba(11,27,51,.94)', boxShadow: '0 12px 34px rgba(11,27,51,.30)' }}>
         <span style={{ fontSize: '10.5px', letterSpacing: '.1em', fontWeight: '700', color: 'rgba(255,255,255,.45)', padding: '0 6px' }}>PROTOTYPE</span>
-        {(roleBtns || []).map((r, $index) => (<React.Fragment key={$index}><button onClick={r.go} style={r.style}>{r.label}</button></React.Fragment>))}
+        {(roleBtns || []).map((r: any, $index: any) => (<React.Fragment key={$index}><button onClick={r.go} style={r.style}>{r.label}</button></React.Fragment>))}
         <button onClick={goLogin} style={{ height: '30px', padding: '0 12px', border: '0', borderRadius: '10px', background: 'rgba(255,255,255,.10)', color: 'rgba(255,255,255,.72)', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>로그인</button>
       </div>
       </>) : null}
@@ -3125,7 +3125,7 @@ function AppView(v) {
  * 진입 컴포넌트
  * ================================================================== */
 
-export default function App(props) {
+export default function App(props: any) {
   const vals = useAppLogic(props);
   return <AppView {...vals} />;
 }
