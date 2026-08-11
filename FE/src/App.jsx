@@ -42,7 +42,15 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to={DEFAULT_PATH} replace />} />
+        {/*
+          "/"는 그냥 /login으로 무조건 리다이렉트하면 안 된다 — SNS 로그인 콜백이
+          "/?sns_access=...&sns_refresh=..." 형태로 여기로 돌아오는데, <Navigate>는
+          쿼리스트링을 읽지도 않고 즉시 이동시켜버려서 useAppLogic()이 토큰을 소비할
+          기회 자체가 없었다 (DB엔 계정이 생겼는데 화면은 로그인 화면에 머무는 버그의 원인).
+          그래서 "/"도 Screen을 그대로 렌더링해서 useAppLogic이 먼저 콜백을 처리하게 하고,
+          세션이 진짜 없을 때만 그 안에서 /login으로 보내도록 한다.
+        */}
+        <Route path="/" element={<Screen />} />
         {ROUTES.map((r) => (
           <Route key={r.path} path={r.path} element={<Screen />} />
         ))}

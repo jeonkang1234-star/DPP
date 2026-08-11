@@ -21,7 +21,8 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 
 /**
- * 기업(BUSINESS) 계정 가입 확정. 이메일 인증(EmailVerificationService)이 끝난 이메일만 통과시킨다.
+ * 기업(BUSINESS) 계정 가입 확정. 이메일 인증(EmailVerificationService)과
+ * 전화번호 인증(PhoneVerificationService)이 둘 다 끝난 요청만 통과시킨다.
  * 가입 즉시 로그인 토큰을 내려줘서, FE 온보딩 화면(obVals.js)으로 바로 넘어갈 수 있게 한다.
  */
 @Service
@@ -31,15 +32,18 @@ public class BusinessSignupService {
 
     private final UserAccountRepository userAccountRepository;
     private final EmailVerificationService emailVerificationService;
+    private final PhoneVerificationService phoneVerificationService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
     public BusinessSignupService(UserAccountRepository userAccountRepository,
                                   EmailVerificationService emailVerificationService,
+                                  PhoneVerificationService phoneVerificationService,
                                   PasswordEncoder passwordEncoder,
                                   JwtTokenProvider jwtTokenProvider) {
         this.userAccountRepository = userAccountRepository;
         this.emailVerificationService = emailVerificationService;
+        this.phoneVerificationService = phoneVerificationService;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
     }
@@ -51,6 +55,9 @@ public class BusinessSignupService {
         }
         if (!emailVerificationService.isVerified(request.email())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이메일 인증을 먼저 완료해 주세요.");
+        }
+        if (!phoneVerificationService.isVerified(request.phone())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전화번호 인증을 먼저 완료해 주세요.");
         }
 
         // TODO: businessRegNo/country/domain을 저장할 organization 테이블이 없어 지금은 로그만 남긴다.
@@ -64,6 +71,8 @@ public class BusinessSignupService {
         user.setEmail(request.email());
         user.setEmailVerified(true);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setPhone(request.phone().replaceAll("[^0-9]", ""));
+        user.setPhoneVerified(true);
         user.setDisplayName(request.companyName());
         user.setOnboardingStep(OnboardingStep.SIGNED_UP);
         user.setStatus(AccountStatus.ACTIVE);
