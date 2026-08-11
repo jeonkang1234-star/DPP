@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 
@@ -31,13 +32,24 @@ public class SnsAuthController {
         return ResponseEntity.status(302).location(URI.create(url)).build();
     }
 
-    /** SNS 제공자가 인증 후 돌아오는 콜백. state를 oauth_state와 대조해 검증한 뒤 토큰을 발급한다. */
+    /**
+     * SNS 제공자가 인증 후 돌아오는 콜백. state를 oauth_state와 대조해 검증한 뒤 토큰을 발급한다.
+     *
+     * 브라우저가 이 URL로 직접 이동해오는 흐름이라(=AJAX 아님) JSON을 그대로 내려주면
+     * 화면에 텍스트만 뜨고 끝난다. 그래서 토큰을 쿼리 파라미터에 실어 FE로 다시 리다이렉트한다.
+     * FE(useAppLogic.js)가 시작 시 이 파라미터를 읽어서 세션에 저장하고 URL에서 지운다.
+     * 상대경로("/")로 리다이렉트하므로 로컬(vite 프록시)·운영(nginx 동일 출처) 둘 다 그대로 동작한다.
+     */
     @GetMapping("/{provider}/callback")
-    public ResponseEntity<TokenResponse> callback(@PathVariable String provider,
-                                                  @RequestParam String code,
-                                                  @RequestParam String state) {
+    public ResponseEntity<Void> callback(@PathVariable String provider,
+                                          @RequestParam String code,
+                                          @RequestParam String state) {
         TokenResponse token = snsAuthService.loginOrSignup(parseProvider(provider), code, state);
-        return ResponseEntity.ok(token);
+        String redirectUrl = UriComponentsBuilder.fromUriString("/")
+                .queryParam("sns_access", token.accessToken())
+                .queryParam("sns_refresh", token.refreshToken())
+                .build().encode().toUriString();
+        return ResponseEntity.status(302).location(URI.create(redirectUrl)).build();
     }
 
     /** URL은 소문자(kakao/google/naver)로 받고, enum은 대문자라 여기서 변환한다. */

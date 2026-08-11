@@ -28,6 +28,11 @@ spring:
             enable: true
 server:
   port: 8080
+  error:
+    # ResponseStatusException(reason=...)에 담은 한글 메시지를 FE가 그대로 보여줄 수 있게 노출.
+    # (기본값 never라 지금까지는 {"status":400,"error":"Bad Request"}만 내려가고 이유가 잘렸었음)
+    include-message: always
+    include-binding-errors: always
 jwt:
   secret: "${JWT_SECRET:change-me-in-application-local-yml}"
   access-token-expiration-ms: 3600000
@@ -67,3 +72,9 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    # spring.mail.host가 비어있어도 스타터가 클래스패스에 있으면 Actuator가
+    # 자동으로 메일 서버 연결 헬스체크를 만든다. app.mail.enabled=false인 동안은
+    # 이 체크가 항상 실패해서 전체 /actuator/health를 DOWN으로 만들어버리므로 꺼둔다.
+    mail:
+      enabled: false

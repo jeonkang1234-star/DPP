@@ -6,6 +6,10 @@ import {
 } from './uiStyles.js';
 import { fetchAppData } from './api/mockApi.js';
 import { loadSession, saveSession } from './api/session.js';
+import {
+  login, requestBusinessSignupCode, verifyBusinessSignupCode, completeBusinessSignup,
+  goToSnsLogin, consumeSnsCallback,
+} from './api/authApi.js';
 import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
 import { passportVals } from './viewModels/passportVals.js';
@@ -26,6 +30,8 @@ export const DEFAULT_PROPS = {
  * 앱 전체 상태 + 뷰모델 훅.
  *
  * - 데이터: 마운트 시 mockApi.fetchAppData() 로 비동기 로드 (실서버 연동 지점)
+ * - 인증: 로그인/SNS/기업 회원가입은 api/authApi.js 를 통해 실제 백엔드(/auth/*)를 호출합니다.
+ *   화면(제품/대시보드 등) 데이터는 여전히 mockApi.js(mock) - 인증만 먼저 실연동했습니다.
  * - 라우팅: URL(useLocation) ↔ 상태({ view, role, tab }) 양방향 동기화
  */
 export function useAppLogic(userProps) {
@@ -40,7 +46,12 @@ export function useAppLogic(userProps) {
   const [state, setStateRaw] = useState(() => {
     // 최초 진입 URL 이 곧 첫 화면입니다 (딥링크·새로고침 대응).
     const fromUrl = stateFromPath(pathname) || {};
-    const saved = loadSession();
+
+    // SNS 로그인 콜백(BE가 /?sns_access=...로 리다이렉트시킨 것)이 있으면 최우선 처리.
+    const snsResult = consumeSnsCallback();
+    if (snsResult) saveSession({ ...snsResult, role: 'personal', at: Date.now() });
+    const saved = snsResult ? { role: 'personal' } : loadSession();
+
     return {
       view: fromUrl.view || (saved ? 'app' : props.startView || 'login'),
       role: fromUrl.role || saved?.role || props.startRole || 'steel',
@@ -48,6 +59,7 @@ export function useAppLogic(userProps) {
     loginTab: 'company',
       suTab: 'company',
       suRole: 'maker',
+      suCountry: '대한민국',
       obOpen: false, obStep: 1, obDomain: 'steel', obTier: 3,
       notifOpen: false, notifCat: 'all',
       dppOpen: false, dppId: null, pubId: null,
@@ -108,6 +120,7 @@ export function useAppLogic(userProps) {
     return 'unknown';
   }
 
+  /** 로그인 성공 직후 어느 대시보드로 보낼지 정할 때 쓰는 보조 힌트일 뿐, 실제 인증에는 안 씀. */
   function roleFromEmail(v) {
     const key = (v || '').toLowerCase().trim();
     if (domainHint(key) === 'personal') return 'personal';
@@ -127,6 +140,9 @@ export function useAppLogic(userProps) {
     setState({
       view: 'login', role: props.startRole || 'steel', tab: 'dash',
       loginTab: 'company', suTab: 'company', suRole: 'maker',
+      loginEmail: '', loginPassword: '',
+      suEmail: '', suPassword: '', suPasswordConfirm: '', suCompanyName: '', suBizRegNo: '',
+      suCodeSent: false, suVerified: false, suVerifyCode: '',
       obOpen: false, obStep: 1, obSaved: null,
       notifOpen: false, dppOpen: false, dppId: null, pubId: null,
       customsSearched: false, customsQuery: '',
@@ -135,8 +151,9 @@ export function useAppLogic(userProps) {
     });
   }
 
-  function go(role) {
-    saveSession({ role, at: Date.now() });
+  /** extra: 로그인/가입 응답으로 받은 토큰 등을 세션에 같이 저장하고 싶을 때. */
+  function go(role, extra) {
+    saveSession({ role, at: Date.now(), ...extra });
     setState({ view: 'app', role, tab: firstTab(role), notifOpen: false, dppOpen: false, customsSearched: false, customsQuery: '' });
   }
 
@@ -286,7 +303,8 @@ export function useAppLogic(userProps) {
         const hint = domainHint(v);
         const map = { customs: 'customs', eu: 'eu', admin: 'admin' };
         const role = map[hint] || null;
-        setState({ suEmail: v, suDetected: domain ? (hint === 'unknown' ? 'unknown' : hint) : null, suRole: role || s.suRole });
+        // 이메일을 바꾸면 이전 인증 상태는 무효화 (다른 이메일로 인증코드 재요청 필요).
+        setState({ suEmail: v, suDetected: domain ? (hint === 'unknown' ? 'unknown' : hint) : null, suRole: role || s.suRole, suCodeSent: false, suVerified: false, suVerifyCode: '' });
       },
       suDetectedShow: !!s.suDetected && s.suDetected !== 'personal' && s.suDetected !== 'unknown',
       suDetectedPersonal: s.suDetected === 'personal',
@@ -298,32 +316,96 @@ export function useAppLogic(userProps) {
         eu: '등록된 기관 도메인 · 시장감독기관 계정으로 제안되었습니다'
       }[s.suDetected] || '',
 
+      // --- 기업 정보 (BusinessSignupRequest 에 필요한 필드) ---
+      suCompanyName: s.suCompanyName || '',
+      onSuCompanyName: e => setState({ suCompanyName: e.target.value }),
+      suBizRegNo: s.suBizRegNo || '',
+      onSuBizRegNo: e => setState({ suBizRegNo: e.target.value }),
+      suCountry: s.suCountry === undefined ? '대한민국' : s.suCountry,
+      onSuCountry: e => setState({ suCountry: e.target.value }),
+      suPassword: s.suPassword || '',
+      onSuPassword: e => setState({ suPassword: e.target.value }),
+      suPasswordConfirm: s.suPasswordConfirm || '',
+      onSuPasswordConfirm: e => setState({ suPasswordConfirm: e.target.value }),
+
+      // --- 이메일 인증 2단계 (요청 → 검증) ---
+      suCodeSent: !!s.suCodeSent,
+      suVerified: !!s.suVerified,
+      suVerifyCode: s.suVerifyCode || '',
+      onSuVerifyCode: e => setState({ suVerifyCode: e.target.value }),
+      suRequestCode: async () => {
+        const email = (s.suEmail || '').trim();
+        if (!email) { say('이메일을 입력해 주세요.'); return; }
+        if (domainHint(email) === 'personal') { say('개인 메일 도메인으로는 기업 회원가입을 할 수 없습니다.'); return; }
+        try {
+          await requestBusinessSignupCode(email);
+          setState({ suCodeSent: true, suVerified: false, suVerifyCode: '' });
+          say('인증코드를 발송했습니다. (SMTP 미설정 상태라 서버 콘솔 로그에서 확인)');
+        } catch (err) {
+          say(err.message || '인증코드 발송에 실패했습니다.');
+        }
+      },
+      suConfirmCode: async () => {
+        const email = (s.suEmail || '').trim();
+        const code = (s.suVerifyCode || '').trim();
+        if (!code) { say('인증코드를 입력해 주세요.'); return; }
+        try {
+          await verifyBusinessSignupCode(email, code);
+          setState({ suVerified: true });
+          say('이메일 인증이 완료되었습니다.');
+        } catch (err) {
+          say(err.message || '인증코드가 올바르지 않습니다.');
+        }
+      },
+
       goSignup: () => setState({ view: 'signup' }),
       goLogin: () => setState({ view: 'login' }),
       loginEmail: s.loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : s.loginEmail,
       onLoginEmail: e => setState({ loginEmail: e.target.value }),
+      loginPassword: s.loginPassword || '',
+      onLoginPassword: e => setState({ loginPassword: e.target.value }),
       loginRoleShow: !!state.loginRoleLabel,
       loginRoleLabel: state.loginRoleLabel || '',
-      doLogin: () => {
-        const v = s.loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : s.loginEmail;
-        const r = roleFromEmail(v);
-        if (r === 'personal') { say('기업 계정 이메일을 입력해 주세요.'); return; }
-        if (!r) { say('등록되지 않은 계정입니다. 가입 승인 후 이용할 수 있습니다.'); return; }
-        go(r);
+      doLogin: async () => {
+        const email = (s.loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : s.loginEmail).trim();
+        const password = s.loginPassword || '';
+        if (!password) { say('비밀번호를 입력해 주세요.'); return; }
+        try {
+          const res = await login(email, password);
+          // BE는 아직 steel/battery/textile 같은 세부 도메인을 안 내려준다(org 테이블 미구현, TODO).
+          // 기존 mock 계정 매핑으로 최대한 맞추고, 못 찾으면 관리자는 admin, 그 외는 steel으로 기본 착지.
+          const heuristic = roleFromEmail(email);
+          const role = res.accountType === 'ADMIN' ? 'admin' : (heuristic && heuristic !== 'personal' ? heuristic : 'steel');
+          go(role, { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType });
+        } catch (err) {
+          say(err.message || '로그인에 실패했습니다.');
+        }
       },
-      snsLogin: () => go('personal'),
+      /** 카카오/네이버/구글 공통 - provider 인자를 받아 실제 SNS 인증 페이지로 이동시킵니다. */
+      snsLogin: (provider) => goToSnsLogin(provider || 'kakao'),
       sendOtp: () => say('인증번호를 발송했습니다. (유효시간 3분)'),
-      verifyEmail: () => say('인증 메일을 발송했습니다.'),
       refreshCaptcha: () => say('새로운 이미지를 불러왔습니다.'),
-      submitSignup: () => {
+      submitSignup: async () => {
         const email = (s.suEmail || '').toLowerCase().trim();
         if (domainHint(email) === 'personal') { say('개인 메일 도메인으로는 기업 회원가입을 할 수 없습니다.'); return; }
-        const mapped = s.suRole === 'maker' ? 'steel' : s.suRole;
-        if (email) setState(st2 => ({ registered: Object.assign({}, st2.registered, { [email]: mapped }) }));
-        if (s.suRole === 'maker') setState({ view: 'app', role: 'steel', tab: 'dash', obKind: 'maker', obOpen: true, obStep: 1, obSaved: 1 });
-        else if (s.suRole === 'customs') setState({ view: 'app', role: 'customs', tab: 'clearance', obKind: 'customs', obOpen: true, obStep: 1, obSaved: 1 });
-        else if (s.suRole === 'eu') setState({ view: 'app', role: 'eu', tab: 'registry', obKind: 'eu', obOpen: true, obStep: 1, obSaved: 1 });
-        else go('admin');
+        if (!s.suVerified) { say('이메일 인증을 먼저 완료해 주세요.'); return; }
+        if (!s.suCompanyName || !s.suBizRegNo) { say('회사명과 사업자등록번호를 입력해 주세요.'); return; }
+        if (!s.suPassword || s.suPassword.length < 8) { say('비밀번호는 8자 이상이어야 합니다.'); return; }
+        if (s.suPassword !== s.suPasswordConfirm) { say('비밀번호가 일치하지 않습니다.'); return; }
+        const domain = s.suRole === 'maker' ? 'steel' : s.suRole;
+        try {
+          const res = await completeBusinessSignup({
+            email, password: s.suPassword, companyName: s.suCompanyName,
+            businessRegNo: s.suBizRegNo, country: s.suCountry || '대한민국', domain
+          });
+          const sessionExtra = { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType };
+          if (s.suRole === 'maker') { saveSession({ role: 'steel', at: Date.now(), ...sessionExtra }); setState({ view: 'app', role: 'steel', tab: 'dash', obKind: 'maker', obOpen: true, obStep: 1, obSaved: 1 }); }
+          else if (s.suRole === 'customs') { saveSession({ role: 'customs', at: Date.now(), ...sessionExtra }); setState({ view: 'app', role: 'customs', tab: 'clearance', obKind: 'customs', obOpen: true, obStep: 1, obSaved: 1 }); }
+          else if (s.suRole === 'eu') { saveSession({ role: 'eu', at: Date.now(), ...sessionExtra }); setState({ view: 'app', role: 'eu', tab: 'registry', obKind: 'eu', obOpen: true, obStep: 1, obSaved: 1 }); }
+          else go('admin', sessionExtra);
+        } catch (err) {
+          say(err.message || '회원가입에 실패했습니다.');
+        }
       },
 
       ...makerVals(ctx),
