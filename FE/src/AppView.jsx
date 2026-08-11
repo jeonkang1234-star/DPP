@@ -125,6 +125,7 @@ export default function AppView(v) {
     loginEmail,
     loginIsCompany,
     loginIsPersonal,
+    loginPassword,
     loginPersonalTab,
     manualName,
     members,
@@ -195,7 +196,14 @@ export default function AppView(v) {
     onEditPhone,
     onEditUrl,
     onLoginEmail,
+    onLoginPassword,
+    onSuBizRegNo,
+    onSuCompanyName,
+    onSuCountry,
     onSuEmail,
+    onSuPassword,
+    onSuPasswordConfirm,
+    onSuVerifyCode,
     openManual,
     openNotif,
     openProfileEdit,
@@ -265,7 +273,12 @@ export default function AppView(v) {
     showTabs,
     singleBtn,
     snsLogin,
+    suBizRegNo,
+    suCompanyName,
     suCompanyTab,
+    suConfirmCode,
+    suCountry,
+    suCodeSent,
     suDetectedLabel,
     suDetectedNote,
     suDetectedPersonal,
@@ -274,11 +287,16 @@ export default function AppView(v) {
     suEmail,
     suIsCompany,
     suIsPersonal,
+    suPassword,
+    suPasswordConfirm,
     suPersonalTab,
+    suRequestCode,
     suRoleAdmin,
     suRoleCustoms,
     suRoleEu,
     suRoleMaker,
+    suVerified,
+    suVerifyCode,
     submitSignup,
     tabs,
     takebackName,
@@ -300,7 +318,6 @@ export default function AppView(v) {
     userName,
     userRole,
     validations,
-    verifyEmail,
     workspace
   } = v;
 
@@ -343,9 +360,9 @@ export default function AppView(v) {
 
             {loginIsPersonal ? (<>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button onClick={snsLogin} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#FEE500', color: '#1B1B1B', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }} className="hv0"><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><path fill="#1B1B1B" d="M12 3.4c-4.86 0-8.8 3.06-8.8 6.84 0 2.42 1.62 4.54 4.06 5.75l-.9 3.32c-.09.32.26.58.54.4l3.98-2.63c.36.03.73.05 1.12.05 4.86 0 8.8-3.06 8.8-6.89S16.86 3.4 12 3.4Z" /></svg></span>카카오로 로그인</button>
-              <button onClick={snsLogin} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#03C75A', color: '#fff', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }} className="hv1"><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#fff" d="M4 3h5.4l5.1 7.6V3H20v18h-5.4L9.5 13.4V21H4V3Z" /></svg></span>네이버로 로그인</button>
-              <button onClick={snsLogin} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '14px', background: '#fff', color: '#1B1B1B', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }} className="hv2"><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 48 48" width="21" height="21" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l6.9 5.3c4.1-3.8 6.6-9.4 6.6-15.6Z" /><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.3c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8 41.4 15.4 46 24 46Z" /><path fill="#FBBC05" d="M11.5 28.5c-.5-1.4-.7-2.9-.7-4.5s.3-3.1.7-4.5l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 10l7.1-5.5Z" /><path fill="#EA4335" d="M24 10.6c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.4 29.9 2 24 2 15.4 2 8 6.6 4.4 14l7.1 5.5c1.8-5.3 6.7-8.9 12.5-8.9Z" /></svg></span>구글로 로그인</button>
+              <button onClick={() => snsLogin('kakao')} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#FEE500', color: '#1B1B1B', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }} className="hv0"><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><path fill="#1B1B1B" d="M12 3.4c-4.86 0-8.8 3.06-8.8 6.84 0 2.42 1.62 4.54 4.06 5.75l-.9 3.32c-.09.32.26.58.54.4l3.98-2.63c.36.03.73.05 1.12.05 4.86 0 8.8-3.06 8.8-6.89S16.86 3.4 12 3.4Z" /></svg></span>카카오로 로그인</button>
+              <button onClick={() => snsLogin('naver')} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#03C75A', color: '#fff', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }} className="hv1"><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#fff" d="M4 3h5.4l5.1 7.6V3H20v18h-5.4L9.5 13.4V21H4V3Z" /></svg></span>네이버로 로그인</button>
+              <button onClick={() => snsLogin('google')} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '14px', background: '#fff', color: '#1B1B1B', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }} className="hv2"><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 48 48" width="21" height="21" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l6.9 5.3c4.1-3.8 6.6-9.4 6.6-15.6Z" /><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.3c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8 41.4 15.4 46 24 46Z" /><path fill="#FBBC05" d="M11.5 28.5c-.5-1.4-.7-2.9-.7-4.5s.3-3.1.7-4.5l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 10l7.1-5.5Z" /><path fill="#EA4335" d="M24 10.6c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.4 29.9 2 24 2 15.4 2 8 6.6 4.4 14l7.1 5.5c1.8-5.3 6.7-8.9 12.5-8.9Z" /></svg></span>구글로 로그인</button>
               <p style={{ margin: '6px 0 0', fontSize: '12.5px', lineHeight: '1.6', color: '#8494AC' }}>개인 회원은 QR로 스캔한 제품의 DPP 열람 이력을 관리할 수 있습니다.</p>
             </div>
             </>) : null}
@@ -353,19 +370,7 @@ export default function AppView(v) {
             {loginIsCompany ? (<>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>기업 이메일 (ID)</span><input type="email" value={loginEmail} onChange={onLoginEmail} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', background: '#fff', fontSize: '14.5px', color: '#0B1B33' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호</span><input type="password" defaultValue="dppsecure2026!" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', background: '#fff', fontSize: '14.5px' }} /></label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>이메일 인증</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
-                  <input inputMode="numeric" placeholder="6자리 인증번호" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', background: '#fff', fontSize: '14.5px' }} />
-                  <button onClick={verifyEmail} style={{ height: '50px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '12px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }} className="hv3">인증메일 발송</button>
-                </div>
-                <span style={{ fontSize: '11.5px', color: '#8494AC' }}>위 기업 이메일 주소로 인증번호가 발송됩니다.</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
-          
-          
-              </div>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호</span><input type="password" value={loginPassword} onChange={onLoginPassword} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', background: '#fff', fontSize: '14.5px' }} /></label>
             </div>
             </>) : null}
 
@@ -403,9 +408,9 @@ export default function AppView(v) {
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '20px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '32px 34px', display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '460px', width: '100%', margin: '0 auto' }}>
             <h3 style={{ margin: '0', fontSize: '16px', fontWeight: '600' }}>SNS 계정으로 3초 만에 가입</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <button onClick={snsLogin} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#FEE500', color: '#1B1B1B', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><path fill="#1B1B1B" d="M12 3.4c-4.86 0-8.8 3.06-8.8 6.84 0 2.42 1.62 4.54 4.06 5.75l-.9 3.32c-.09.32.26.58.54.4l3.98-2.63c.36.03.73.05 1.12.05 4.86 0 8.8-3.06 8.8-6.89S16.86 3.4 12 3.4Z" /></svg></span>카카오로 가입</button>
-              <button onClick={snsLogin} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#03C75A', color: '#fff', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#fff" d="M4 3h5.4l5.1 7.6V3H20v18h-5.4L9.5 13.4V21H4V3Z" /></svg></span>네이버로 가입</button>
-              <button onClick={snsLogin} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '14px', background: '#fff', color: '#1B1B1B', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 48 48" width="21" height="21" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l6.9 5.3c4.1-3.8 6.6-9.4 6.6-15.6Z" /><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.3c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8 41.4 15.4 46 24 46Z" /><path fill="#FBBC05" d="M11.5 28.5c-.5-1.4-.7-2.9-.7-4.5s.3-3.1.7-4.5l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 10l7.1-5.5Z" /><path fill="#EA4335" d="M24 10.6c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.4 29.9 2 24 2 15.4 2 8 6.6 4.4 14l7.1 5.5c1.8-5.3 6.7-8.9 12.5-8.9Z" /></svg></span>구글로 가입</button>
+              <button onClick={() => snsLogin('kakao')} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#FEE500', color: '#1B1B1B', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true"><path fill="#1B1B1B" d="M12 3.4c-4.86 0-8.8 3.06-8.8 6.84 0 2.42 1.62 4.54 4.06 5.75l-.9 3.32c-.09.32.26.58.54.4l3.98-2.63c.36.03.73.05 1.12.05 4.86 0 8.8-3.06 8.8-6.89S16.86 3.4 12 3.4Z" /></svg></span>카카오로 가입</button>
+              <button onClick={() => snsLogin('naver')} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#03C75A', color: '#fff', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="#fff" d="M4 3h5.4l5.1 7.6V3H20v18h-5.4L9.5 13.4V21H4V3Z" /></svg></span>네이버로 가입</button>
+              <button onClick={() => snsLogin('google')} style={{ display: 'flex', alignItems: 'center', gap: '12px', height: '54px', padding: '0 18px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '14px', background: '#fff', color: '#1B1B1B', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}><span style={{ width: '22px', height: '22px', display: 'grid', placeItems: 'center', flex: 'none' }}><svg viewBox="0 0 48 48" width="21" height="21" aria-hidden="true"><path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l6.9 5.3c4.1-3.8 6.6-9.4 6.6-15.6Z" /><path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.3c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-7.1 5.5C8 41.4 15.4 46 24 46Z" /><path fill="#FBBC05" d="M11.5 28.5c-.5-1.4-.7-2.9-.7-4.5s.3-3.1.7-4.5l-7.1-5.5C2.9 17 2 20.4 2 24s.9 7 2.4 10l7.1-5.5Z" /><path fill="#EA4335" d="M24 10.6c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 4.4 29.9 2 24 2 15.4 2 8 6.6 4.4 14l7.1 5.5c1.8-5.3 6.7-8.9 12.5-8.9Z" /></svg></span>구글로 가입</button>
             </div>
           </div>
           </>) : null}
@@ -429,9 +434,18 @@ export default function AppView(v) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                   <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>사용할 ID (기업 이메일)</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
-                    <input type="email" value={suEmail} onChange={onSuEmail} placeholder="name@company.co.kr" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} />
-                    <button onClick={verifyEmail} style={{ height: '50px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '12px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>이메일 인증</button>
+                    <input type="email" value={suEmail} onChange={onSuEmail} placeholder="name@company.co.kr" disabled={suVerified} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} />
+                    <button onClick={suRequestCode} disabled={suVerified} style={{ height: '50px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '12px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>{suCodeSent ? '재발송' : '이메일 인증'}</button>
                   </div>
+                  {suCodeSent && !suVerified ? (<>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
+                    <input inputMode="numeric" value={suVerifyCode} onChange={onSuVerifyCode} placeholder="6자리 인증번호" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} />
+                    <button onClick={suConfirmCode} style={{ height: '50px', padding: '0 16px', border: '1px solid rgba(18,161,80,.24)', borderRadius: '12px', background: 'rgba(18,161,80,.06)', color: '#0E7A3D', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>확인</button>
+                  </div>
+                  </>) : null}
+                  {suVerified ? (<>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#0E7A3D' }}>이메일 인증이 완료되었습니다.</span>
+                  </>) : null}
                   {suDetectedShow ? (<>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '11px', padding: '13px 15px', borderRadius: '13px', background: 'rgba(0,69,169,.05)', border: '1px solid rgba(0,69,169,.18)' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', height: '28px', padding: '0 12px 0 10px', flex: 'none', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={{ width: '8px', height: '8px', borderRadius: '999px', background: '#0045A9' }}></span><span style={{ fontSize: '12px', fontWeight: '700', color: '#0045A9' }}>{suDetectedLabel}</span></span>
@@ -451,8 +465,13 @@ export default function AppView(v) {
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호</span><input type="password" placeholder="특수문자, 숫자, 영문 포함 12자 이상" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호 확인</span><input type="password" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>회사명</span><input value={suCompanyName} onChange={onSuCompanyName} placeholder="대성제강" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>사업자등록번호</span><input value={suBizRegNo} onChange={onSuBizRegNo} placeholder="123-45-67890" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                </div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>국가</span><input value={suCountry} onChange={onSuCountry} placeholder="대한민국" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호</span><input type="password" value={suPassword} onChange={onSuPassword} placeholder="8자 이상" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호 확인</span><input type="password" value={suPasswordConfirm} onChange={onSuPasswordConfirm} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
             
