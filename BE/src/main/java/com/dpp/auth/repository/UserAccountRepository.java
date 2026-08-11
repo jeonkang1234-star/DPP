@@ -14,4 +14,7 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
     Optional<UserAccount> findByCiValue(String ciValue);
 
     boolean existsByLoginId(String loginId);
+
+    /** 기업 회원가입 시 이메일 중복 체크용 (BusinessSignupService). */
+    boolean existsByEmail(String email);
 }
