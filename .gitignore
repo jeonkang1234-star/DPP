@@ -37,6 +37,7 @@ parser/venv/
 
 # --- Docker ---
 docker/pgdata/
+docker/docker-compose.override.yml
 
 # --- Logs ---
 *.log
