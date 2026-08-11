@@ -14,6 +14,18 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 5
+  # app.mail.enabled=true 로 켤 때만 실제로 쓰인다. 값은 application-local.yml에만 채울 것.
+  mail:
+    host: ""
+    port: 587
+    username: ""
+    password: ""
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 server:
   port: 8080
 jwt:
@@ -35,6 +47,12 @@ oauth:
     client-id: ""
     client-secret: ""
     redirect-uri: http://localhost:8080/auth/sns/naver/callback
+# 회원가입 이메일 인증코드 발송. 기본은 false라 콘솔 로그로만 찍힌다(ConsoleSignupMailSender).
+# 실제 SMTP로 보내려면 true로 바꾸고 위 spring.mail.* 값을 application-local.yml에 채우세요.
+app:
+  mail:
+    enabled: false
+    from: no-reply@ieum.io
 springdoc:
   api-docs:
     path: /v3/api-docs

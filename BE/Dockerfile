@@ -8,7 +8,9 @@ WORKDIR /workspace
 COPY gradlew .
 COPY gradle gradle
 COPY build.gradle settings.gradle ./
-RUN chmod +x gradlew
+# Windows에서 체크아웃하면 gradlew가 CRLF로 바뀌어 있을 수 있어 셔뱅(#!/bin/sh)이 깨짐.
+# .gitattributes로 막아뒀지만, 혹시 모를 경우를 대비해 빌드 단계에서도 방어적으로 정규화.
+RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 
 COPY src src
 RUN ./gradlew build -x test --no-daemon
