@@ -39,16 +39,25 @@ public class SnsAuthController {
      * 화면에 텍스트만 뜨고 끝난다. 그래서 토큰을 쿼리 파라미터에 실어 FE로 다시 리다이렉트한다.
      * FE(useAppLogic.js)가 시작 시 이 파라미터를 읽어서 세션에 저장하고 URL에서 지운다.
      * 상대경로("/")로 리다이렉트하므로 로컬(vite 프록시)·운영(nginx 동일 출처) 둘 다 그대로 동작한다.
+     *
+     * 실패 시에도 500 백엔드 에러 페이지를 그대로 보여주지 않고, sns_error 쿼리파라미터에
+     * 이유를 담아 프론트로 돌려보낸다 (이메일 중복 등 사용자가 이해할 수 있는 상황이 많아서).
      */
     @GetMapping("/{provider}/callback")
     public ResponseEntity<Void> callback(@PathVariable String provider,
                                           @RequestParam String code,
                                           @RequestParam String state) {
-        TokenResponse token = snsAuthService.loginOrSignup(parseProvider(provider), code, state);
-        String redirectUrl = UriComponentsBuilder.fromUriString("/")
-                .queryParam("sns_access", token.accessToken())
-                .queryParam("sns_refresh", token.refreshToken())
-                .build().encode().toUriString();
+        UriComponentsBuilder redirect = UriComponentsBuilder.fromUriString("/");
+        try {
+            TokenResponse token = snsAuthService.loginOrSignup(parseProvider(provider), code, state);
+            redirect.queryParam("sns_access", token.accessToken())
+                    .queryParam("sns_refresh", token.refreshToken());
+        } catch (Exception e) {
+            String message = e.getMessage() == null || e.getMessage().isBlank()
+                    ? "SNS 로그인에 실패했습니다." : e.getMessage();
+            redirect.queryParam("sns_error", message);
+        }
+        String redirectUrl = redirect.build().encode().toUriString();
         return ResponseEntity.status(302).location(URI.create(redirectUrl)).build();
     }
 

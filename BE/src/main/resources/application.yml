@@ -38,26 +38,47 @@ jwt:
   access-token-expiration-ms: 3600000
   refresh-token-expiration-ms: 1209600000
 # 카카오/구글/네이버 개발자 콘솔에서 발급받은 값으로 채우세요.
-# 실제 값은 application-local.yml에만 넣습니다 (이 파일은 git에 커밋됨).
+# 실제 값은 BE/src/main/resources/application-local.yml (git 미포함, SPRING_PROFILES_ACTIVE=local일 때만 읽힘)에 채웁니다.
+#
+# redirect-uri를 8080이 아니라 80(nginx)으로 잡은 이유: 일부 로컬 환경에서 호스트 8080
+# 포트 바인딩이 간헐적으로 끊기는 문제가 있었음. nginx(80)가 /auth/를 컨테이너 내부망으로
+# 프록시해주므로 이 경로가 더 안정적이고, 실제 배포 환경(nginx 동일 출처)과도 일치함.
+# 그래서 각 SNS 개발자 콘솔에도 redirect-uri를 아래 값 그대로(포트 없이) 등록해야 함.
 oauth:
   kakao:
-    client-id: ""
-    client-secret: ""
-    redirect-uri: http://localhost:8080/auth/sns/kakao/callback
+    client-id: "${OAUTH_KAKAO_CLIENT_ID:}"
+    client-secret: "${OAUTH_KAKAO_CLIENT_SECRET:}"
+    redirect-uri: http://localhost/auth/sns/kakao/callback
   google:
-    client-id: ""
-    client-secret: ""
-    redirect-uri: http://localhost:8080/auth/sns/google/callback
+    client-id: "${OAUTH_GOOGLE_CLIENT_ID:}"
+    client-secret: "${OAUTH_GOOGLE_CLIENT_SECRET:}"
+    redirect-uri: http://localhost/auth/sns/google/callback
   naver:
-    client-id: ""
-    client-secret: ""
-    redirect-uri: http://localhost:8080/auth/sns/naver/callback
+    client-id: "${OAUTH_NAVER_CLIENT_ID:}"
+    client-secret: "${OAUTH_NAVER_CLIENT_SECRET:}"
+    redirect-uri: http://localhost/auth/sns/naver/callback
 # 회원가입 이메일 인증코드 발송. 기본은 false라 콘솔 로그로만 찍힌다(ConsoleSignupMailSender).
 # 실제 SMTP로 보내려면 true로 바꾸고 위 spring.mail.* 값을 application-local.yml에 채우세요.
 app:
   mail:
     enabled: false
     from: no-reply@ieum.io
+  # 회원가입 전화번호 인증코드 발송. 기본은 false라 콘솔 로그로만 찍힌다(ConsoleSignupSmsSender).
+  # 실제 SMS로 보내려면 true로 바꾸고 아래 ncp.sens.* 값을 application-local.yml에 채우세요.
+  # (네이버클라우드 콘솔에서 발신번호 사전등록·심사 승인이 끝나야 실제 발송이 됩니다.)
+  sms:
+    enabled: false
+# 네이버클라우드 플랫폼 SENS(SMS) 설정. 콘솔: console.ncloud.com > Simple & Easy Notification Service
+# service-id: SENS 프로젝트 생성 시 발급되는 서비스 ID
+# access-key / secret-key: 마이페이지 > 인증키 관리에서 발급
+# sender-phone: 사전등록·심사 승인된 발신번호 (하이픈 없이, 예: 0212345678)
+# 실제 값은 application-local.yml에만 채우세요.
+ncp:
+  sens:
+    service-id: ""
+    access-key: ""
+    secret-key: ""
+    sender-phone: ""
 springdoc:
   api-docs:
     path: /v3/api-docs

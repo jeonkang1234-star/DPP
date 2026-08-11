@@ -7,7 +7,8 @@ import {
 import { fetchAppData } from './api/mockApi.js';
 import { loadSession, saveSession } from './api/session.js';
 import {
-  login, requestBusinessSignupCode, verifyBusinessSignupCode, completeBusinessSignup,
+  login, requestBusinessSignupCode, verifyBusinessSignupCode,
+  requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
 import { pathFor, stateFromPath } from './routes.js';
@@ -39,6 +40,9 @@ export function useAppLogic(userProps) {
   const timer = useRef(null);
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  // SNS 콜백이 실패(sns_error)로 왔을 때, say()가 정의되기 전인 초기 state 계산 시점엔
+  // 토스트를 띄울 수 없어서 일단 여기 담아두고 마운트 후 useEffect에서 보여준다.
+  const pendingSnsError = useRef(null);
 
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -47,10 +51,12 @@ export function useAppLogic(userProps) {
     // 최초 진입 URL 이 곧 첫 화면입니다 (딥링크·새로고침 대응).
     const fromUrl = stateFromPath(pathname) || {};
 
-    // SNS 로그인 콜백(BE가 /?sns_access=...로 리다이렉트시킨 것)이 있으면 최우선 처리.
+    // SNS 로그인 콜백(BE가 /?sns_access=... 또는 /?sns_error=...로 리다이렉트시킨 것)이 있으면 최우선 처리.
     const snsResult = consumeSnsCallback();
-    if (snsResult) saveSession({ ...snsResult, role: 'personal', at: Date.now() });
-    const saved = snsResult ? { role: 'personal' } : loadSession();
+    const snsLoggedIn = !!(snsResult && snsResult.accessToken);
+    if (snsLoggedIn) saveSession({ ...snsResult, role: 'personal', at: Date.now() });
+    if (snsResult && snsResult.error) pendingSnsError.current = snsResult.error;
+    const saved = snsLoggedIn ? { role: 'personal' } : loadSession();
 
     return {
       view: fromUrl.view || (saved ? 'app' : props.startView || 'login'),
@@ -94,10 +100,23 @@ export function useAppLogic(userProps) {
     });
   }, [pathname]);
 
-  /* 상태 → URL (최초 렌더는 이미 URL 과 맞으므로 건너뜁니다) */
-  const mounted = useRef(false);
+  /* SNS 콜백이 실패로 돌아왔으면 마운트 직후 한 번 토스트로 알려준다. */
   useEffect(() => {
-    if (!mounted.current) { mounted.current = true; return; }
+    if (pendingSnsError.current) {
+      say(pendingSnsError.current);
+      pendingSnsError.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /*
+   * 상태 → URL. 최초 렌더도 건너뛰지 않는다 — "/"(SNS 콜백이 돌아오는 경로)처럼
+   * 어떤 { view, role, tab } 조합의 경로와도 일치하지 않는 곳에서 시작한 경우,
+   * 첫 렌더를 건너뛰면 실제 화면(state.view='app')과 주소창('/')이 영영 안 맞게 된다.
+   * next !== pathname 체크가 이미 있어서 정상적인 딥링크(예: /steel/dashboard로 바로
+   * 진입)에서는 어차피 같은 경로라 재이동이 안 일어나므로, 최초 렌더를 건너뛸 이유가 없다.
+   */
+  useEffect(() => {
     const next = pathFor(state.view, state.role, state.tab);
     if (next && next !== pathname) navigate(next);
   }, [state.view, state.role, state.tab]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -143,6 +162,7 @@ export function useAppLogic(userProps) {
       loginEmail: '', loginPassword: '',
       suEmail: '', suPassword: '', suPasswordConfirm: '', suCompanyName: '', suBizRegNo: '',
       suCodeSent: false, suVerified: false, suVerifyCode: '',
+      suPhone: '', suPhoneCodeSent: false, suPhoneVerified: false, suPhoneVerifyCode: '',
       obOpen: false, obStep: 1, obSaved: null,
       notifOpen: false, dppOpen: false, dppId: null, pubId: null,
       customsSearched: false, customsQuery: '',
@@ -358,6 +378,37 @@ export function useAppLogic(userProps) {
         }
       },
 
+      // --- 전화번호 인증 2단계 (요청 → 검증). 이메일 인증과 완전히 같은 패턴. ---
+      suPhone: s.suPhone || '',
+      onSuPhone: e => setState({ suPhone: e.target.value, suPhoneCodeSent: false, suPhoneVerified: false, suPhoneVerifyCode: '' }),
+      suPhoneCodeSent: !!s.suPhoneCodeSent,
+      suPhoneVerified: !!s.suPhoneVerified,
+      suPhoneVerifyCode: s.suPhoneVerifyCode || '',
+      onSuPhoneVerifyCode: e => setState({ suPhoneVerifyCode: e.target.value }),
+      suRequestPhoneCode: async () => {
+        const phone = (s.suPhone || '').trim();
+        if (!phone) { say('휴대전화번호를 입력해 주세요.'); return; }
+        try {
+          await requestBusinessSignupPhoneCode(phone);
+          setState({ suPhoneCodeSent: true, suPhoneVerified: false, suPhoneVerifyCode: '' });
+          say('인증번호를 발송했습니다. (SMS 미설정 상태라 서버 콘솔 로그에서 확인)');
+        } catch (err) {
+          say(err.message || '인증번호 발송에 실패했습니다.');
+        }
+      },
+      suConfirmPhoneCode: async () => {
+        const phone = (s.suPhone || '').trim();
+        const code = (s.suPhoneVerifyCode || '').trim();
+        if (!code) { say('인증번호를 입력해 주세요.'); return; }
+        try {
+          await verifyBusinessSignupPhoneCode(phone, code);
+          setState({ suPhoneVerified: true });
+          say('전화번호 인증이 완료되었습니다.');
+        } catch (err) {
+          say(err.message || '인증번호가 올바르지 않습니다.');
+        }
+      },
+
       goSignup: () => setState({ view: 'signup' }),
       goLogin: () => setState({ view: 'login' }),
       loginEmail: s.loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : s.loginEmail,
@@ -383,12 +434,12 @@ export function useAppLogic(userProps) {
       },
       /** 카카오/네이버/구글 공통 - provider 인자를 받아 실제 SNS 인증 페이지로 이동시킵니다. */
       snsLogin: (provider) => goToSnsLogin(provider || 'kakao'),
-      sendOtp: () => say('인증번호를 발송했습니다. (유효시간 3분)'),
       refreshCaptcha: () => say('새로운 이미지를 불러왔습니다.'),
       submitSignup: async () => {
         const email = (s.suEmail || '').toLowerCase().trim();
         if (domainHint(email) === 'personal') { say('개인 메일 도메인으로는 기업 회원가입을 할 수 없습니다.'); return; }
         if (!s.suVerified) { say('이메일 인증을 먼저 완료해 주세요.'); return; }
+        if (!s.suPhoneVerified) { say('전화번호 인증을 먼저 완료해 주세요.'); return; }
         if (!s.suCompanyName || !s.suBizRegNo) { say('회사명과 사업자등록번호를 입력해 주세요.'); return; }
         if (!s.suPassword || s.suPassword.length < 8) { say('비밀번호는 8자 이상이어야 합니다.'); return; }
         if (s.suPassword !== s.suPasswordConfirm) { say('비밀번호가 일치하지 않습니다.'); return; }
@@ -396,7 +447,8 @@ export function useAppLogic(userProps) {
         try {
           const res = await completeBusinessSignup({
             email, password: s.suPassword, companyName: s.suCompanyName,
-            businessRegNo: s.suBizRegNo, country: s.suCountry || '대한민국', domain
+            businessRegNo: s.suBizRegNo, country: s.suCountry || '대한민국', domain,
+            phone: (s.suPhone || '').trim()
           });
           const sessionExtra = { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType };
           if (s.suRole === 'maker') { saveSession({ role: 'steel', at: Date.now(), ...sessionExtra }); setState({ view: 'app', role: 'steel', tab: 'dash', obKind: 'maker', obOpen: true, obStep: 1, obSaved: 1 }); }

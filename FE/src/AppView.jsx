@@ -262,7 +262,6 @@ export default function AppView(v) {
     scans,
     searchRegistry,
     sendInvite,
-    sendOtp,
     sendRejects,
     setBatch,
     setCompany,
@@ -290,7 +289,15 @@ export default function AppView(v) {
     suPassword,
     suPasswordConfirm,
     suPersonalTab,
+    suPhone,
+    suPhoneCodeSent,
+    suPhoneVerified,
+    suPhoneVerifyCode,
+    onSuPhone,
+    onSuPhoneVerifyCode,
     suRequestCode,
+    suRequestPhoneCode,
+    suConfirmPhoneCode,
     suRoleAdmin,
     suRoleCustoms,
     suRoleEu,
@@ -483,9 +490,18 @@ export default function AppView(v) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                   <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>전화번호 인증</span>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
-                    <input inputMode="tel" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px', fontFamily: '\'JetBrains Mono\',monospace' }} />
-                    <button onClick={sendOtp} style={{ height: '50px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '12px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>인증번호 발송</button>
+                    <input inputMode="tel" value={suPhone} onChange={onSuPhone} placeholder="01012345678" disabled={suPhoneVerified} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px', fontFamily: '\'JetBrains Mono\',monospace' }} />
+                    <button onClick={suRequestPhoneCode} disabled={suPhoneVerified} style={{ height: '50px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '12px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>{suPhoneCodeSent ? '재발송' : '인증번호 발송'}</button>
                   </div>
+                  {suPhoneCodeSent && !suPhoneVerified ? (<>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
+                    <input inputMode="numeric" value={suPhoneVerifyCode} onChange={onSuPhoneVerifyCode} placeholder="6자리 인증번호" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} />
+                    <button onClick={suConfirmPhoneCode} style={{ height: '50px', padding: '0 16px', border: '1px solid rgba(18,161,80,.24)', borderRadius: '12px', background: 'rgba(18,161,80,.06)', color: '#0E7A3D', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>확인</button>
+                  </div>
+                  </>) : null}
+                  {suPhoneVerified ? (<>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#0E7A3D' }}>전화번호 인증이 완료되었습니다.</span>
+                  </>) : null}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>

@@ -49,9 +49,19 @@ export function verifyBusinessSignupCode(email, code) {
   return postJson('/auth/signup/business/email/verify', { email, code });
 }
 
-/** 기업 회원가입 3단계 - 계정 생성. 이메일 인증이 끝난 상태여야 통과한다. */
-export function completeBusinessSignup({ email, password, companyName, businessRegNo, country, domain }) {
-  return postJson('/auth/signup/business', { email, password, companyName, businessRegNo, country, domain });
+/** 기업 회원가입 - 전화번호로 6자리 인증코드 발급. */
+export function requestBusinessSignupPhoneCode(phone) {
+  return postJson('/auth/signup/business/phone/code', { phone });
+}
+
+/** 기업 회원가입 - 전화번호 인증코드 검증. */
+export function verifyBusinessSignupPhoneCode(phone, code) {
+  return postJson('/auth/signup/business/phone/verify', { phone, code });
+}
+
+/** 기업 회원가입 마지막 단계 - 계정 생성. 이메일·전화번호 인증이 둘 다 끝난 상태여야 통과한다. */
+export function completeBusinessSignup({ email, password, companyName, businessRegNo, country, domain, phone }) {
+  return postJson('/auth/signup/business', { email, password, companyName, businessRegNo, country, domain, phone });
 }
 
 /**
@@ -63,20 +73,24 @@ export function goToSnsLogin(provider) {
 }
 
 /**
- * SNS 콜백(BE가 /?sns_access=...&sns_refresh=...로 리다이렉트시킨 것)을 처리.
- * 있으면 {accessToken, refreshToken}을 반환하고 URL에서 파라미터를 지운다. 없으면 null.
+ * SNS 콜백(BE가 /?sns_access=...&sns_refresh=... 또는 /?sns_error=...로 리다이렉트시킨 것)을 처리.
+ * 성공하면 {accessToken, refreshToken}, 실패하면 {error}를 반환하고 URL에서 파라미터를 지운다.
+ * 둘 다 없으면(SNS 콜백이 아니면) null.
  */
 export function consumeSnsCallback() {
   const params = new URLSearchParams(window.location.search);
   const accessToken = params.get('sns_access');
   const refreshToken = params.get('sns_refresh');
-  if (!accessToken) return null;
+  const error = params.get('sns_error');
+  if (!accessToken && !error) return null;
 
   params.delete('sns_access');
   params.delete('sns_refresh');
+  params.delete('sns_error');
   const cleanQuery = params.toString();
   const cleanUrl = window.location.pathname + (cleanQuery ? `?${cleanQuery}` : '') + window.location.hash;
   window.history.replaceState({}, '', cleanUrl);
 
+  if (error) return { error };
   return { accessToken, refreshToken, tokenType: 'bearer', accountType: 'PERSONAL' };
 }
