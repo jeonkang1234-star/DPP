@@ -29,6 +29,11 @@ dependencies {
     // fabric-gateway가 쓰는 grpc-api 구현체(전송 계층)를 직접 안 넣으면 ServiceLoader가
     // 채널을 못 만든다 - grpc-netty-shaded로 지정.
     implementation 'io.grpc:grpc-netty-shaded:1.68.0'
+    // fabric-protos(0.3.4)가 CVE-2024-7254 회피용으로 protobuf-java를 4.28.2로 강제하는데,
+    // 이 프로젝트의 다른 의존성들이 더 낮은 protobuf-java를 끌어오면서 클래스패스에서
+    // 충돌 - 런타임에 NoClassDefFoundError: RuntimeVersion$RuntimeDomain 로 죽었다.
+    // protobuf-bom을 platform으로 명시해서 전체 그래프의 protobuf-java 버전을 강제 정렬.
+    implementation platform('com.google.protobuf:protobuf-bom:4.28.2')
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
