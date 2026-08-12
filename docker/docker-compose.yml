@@ -18,6 +18,34 @@ services:
       timeout: 5s
       retries: 10
 
+  parser:
+    build:
+      context: ../parser
+      dockerfile: Dockerfile
+    container_name: dpp-parser
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zkp:
+    build:
+      context: ../zkp-o1js
+      dockerfile: Dockerfile
+    container_name: dpp-zkp
+    restart: unless-stopped
+    # SteelMillCheck 컴파일이 기동 시 (환경에 따라) 최대 90초 가까이 걸려서
+    # healthcheck 시작을 넉넉히 늦춘다 (기존 30s/6회는 실제 환경에서 컴파일 도중에
+    # unhealthy로 판정돼버려서 늘림).
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
   backend:
     build:
       context: ../BE
@@ -27,6 +55,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      parser:
+        condition: service_healthy
+      zkp:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dpp
       SPRING_DATASOURCE_USERNAME: dpp
@@ -34,6 +66,11 @@ services:
       # BE/src/main/resources/application-local.yml (git 미포함, 로컬에만 존재)의 값을 읽게 함.
       # JWT_SECRET, OAuth client-id/secret 등 실제 시크릿은 전부 그 파일 안에 있음.
       SPRING_PROFILES_ACTIVE: local
+      DOCUMENT_PARSER_URL: http://parser:8000
+      DOCUMENT_ZKP_URL: http://zkp:4001
+    volumes:
+      # 업로드된 문서 원본. document.file_uri가 이 안의 경로를 가리킨다.
+      - ./document-uploads:/data/document-uploads
     ports:
       - "8080:8080"
 

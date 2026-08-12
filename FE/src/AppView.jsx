@@ -136,8 +136,10 @@ export default function AppView(v) {
     myTierDesc,
     myTierName,
     notifCats,
+    notifEmpty,
     notifOpen,
     notifications,
+    notifUnreadCount,
     obBars,
     obBatteryCard,
     obC2,
@@ -260,6 +262,7 @@ export default function AppView(v) {
     scScans,
     scTier,
     scans,
+    scansEmpty,
     searchRegistry,
     sendInvite,
     sendRejects,
@@ -1058,6 +1061,9 @@ export default function AppView(v) {
             <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
               <span>제품명</span><span>제조사</span><span>열람 일시</span><span>최근 갱신</span><span></span>
             </div>
+            {scansEmpty ? (<>
+            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>아직 조회한 제품이 없습니다. QR을 스캔하면 여기에 기록됩니다.</div>
+            </>) : null}
             {(scans || []).map((p, $index) => (<React.Fragment key={$index}>
             <div style={p.rowStyle}>
               <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600', lineHeight: '1.3' }}>{p.name}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC', lineHeight: '1.3' }}>{p.id}</span></span>
@@ -1403,7 +1409,7 @@ export default function AppView(v) {
         <div style={{ position: 'relative', width: '436px', height: '100%', background: '#fff', boxShadow: '-18px 0 44px rgba(11,27,51,.18)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ padding: '22px 24px 16px', display: 'flex', flexDirection: 'column', gap: '16px', borderBottom: '1px solid rgba(16,32,64,.08)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '17px', fontWeight: '700' }}>알림센터</span><span style={tier2Chip}>읽지 않음 5</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '17px', fontWeight: '700' }}>알림센터</span><span style={tier2Chip}>읽지 않음 {notifUnreadCount || 0}</span></div>
               <button onClick={closeNotif} style={{ width: '34px', height: '34px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '11px', background: '#fff', fontSize: '13px', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -1411,6 +1417,9 @@ export default function AppView(v) {
             </div>
           </div>
           <div style={{ flex: '1', overflow: 'auto', padding: '16px 20px 28px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {notifEmpty ? (<>
+            <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>알림이 없습니다.</div>
+            </>) : null}
             {(notifications || []).map((n, $index) => (<React.Fragment key={$index}>
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE' }}>
               <span style={n.dot}></span>
