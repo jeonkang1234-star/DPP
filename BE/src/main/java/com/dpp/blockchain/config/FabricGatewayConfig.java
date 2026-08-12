@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,7 +34,7 @@ import java.security.cert.X509Certificate;
 public class FabricGatewayConfig {
 
     @Bean(destroyMethod = "shutdown")
-    public ManagedChannel fabricChannel(BlockchainIntegrationProperties props) {
+    public ManagedChannel fabricChannel(BlockchainIntegrationProperties props) throws IOException {
         ChannelCredentials credentials = TlsChannelCredentials.newBuilder()
                 .trustManager(new File(props.getTlsCertPath()))
                 .build();
