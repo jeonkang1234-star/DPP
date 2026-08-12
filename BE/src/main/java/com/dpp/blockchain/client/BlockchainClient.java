@@ -2,11 +2,7 @@ package com.dpp.blockchain.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.hyperledger.fabric.client.CommitException;
 import org.hyperledger.fabric.client.Contract;
-import org.hyperledger.fabric.client.EndorseException;
-import org.hyperledger.fabric.client.GatewayException;
-import org.hyperledger.fabric.client.SubmitException;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -36,16 +32,19 @@ public class BlockchainClient {
         this.objectMapper = objectMapper;
     }
 
+    // Contract.submitTransaction이 던지는 구체 예외 타입(EndorseException/SubmitException/
+    // CommitStatusException 등)을 정확히 나열하는 대신 Exception으로 넓게 잡는다 - 호출부
+    // (DocumentIngestService)가 어차피 모든 실패를 동일하게(FAILED 상태 기록 + 계속 진행)
+    // 처리하므로 타입을 세분화할 실익이 없고, 정확한 클래스명을 잘못 적어 컴파일이
+    // 깨지는 위험을 피하는 게 더 중요하다.
     public ChainResult recordDocumentHash(String docId, String docType, String docHash,
-                                           String submitter, String timestamp)
-            throws EndorseException, SubmitException, CommitException, GatewayException {
+                                           String submitter, String timestamp) throws Exception {
         byte[] result = contract.submitTransaction("recordDocumentHash", docId, docType, docHash, submitter, timestamp);
         return toChainResult(result);
     }
 
     public ChainResult recordZkpVerification(String docId, String proofId, String publicInputsJson,
-                                              boolean verified, String verifier, String timestamp)
-            throws EndorseException, SubmitException, CommitException, GatewayException {
+                                              boolean verified, String verifier, String timestamp) throws Exception {
         byte[] result = contract.submitTransaction("recordZkpVerification",
                 docId, proofId, publicInputsJson, String.valueOf(verified), verifier, timestamp);
         return toChainResult(result);
