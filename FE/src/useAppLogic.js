@@ -11,6 +11,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications } from './api/meApi.js';
 import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
 import { passportVals } from './viewModels/passportVals.js';
@@ -26,6 +27,37 @@ export const DEFAULT_PROPS = {
   startView: 'login',  // 'login' | 'signup' | 'app'
   startRole: 'steel',  // 'admin' | 'steel' | 'battery' | 'textile' | 'eu' | 'customs' | 'personal'
 };
+
+const SCAN_STATUS_LABEL = { VERIFIED: '검증됨', UPDATED: '정보 갱신됨', FAILED: '검증 실패' };
+
+/** BE가 내려주는 ISO(OffsetDateTime) 문자열을 화면용 'YYYY-MM-DD HH:mm'으로. */
+function fmtDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** 알림 created_at(ISO) -> "방금 전"/"N분 전"/"N시간 전"/"N일 전". */
+function fmtRelative(iso) {
+  if (!iso) return '';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return '방금 전';
+  if (min < 60) return `${min}분 전`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour}시간 전`;
+  return `${Math.floor(hour / 24)}일 전`;
+}
 
 /**
  * 앱 전체 상태 + 뷰모델 훅.
@@ -46,6 +78,12 @@ export function useAppLogic(userProps) {
 
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState(null);
+
+  /* 로그인한 사용자 전용(실 API) 데이터. mock인 data와 분리 - 얘내는 인증 필요, 로그인 후에만 채워짐. */
+  const [meData, setMeData] = useState(null);
+  const [scansData, setScansData] = useState([]);
+  const [notifCatsData, setNotifCatsData] = useState([]);
+  const [notifsData, setNotifsData] = useState([]);
 
   const [state, setStateRaw] = useState(() => {
     // 최초 진입 URL 이 곧 첫 화면입니다 (딥링크·새로고침 대응).
@@ -89,6 +127,24 @@ export function useAppLogic(userProps) {
       .catch((err) => { if (alive) setLoadError(err); });
     return () => { alive = false; };
   }, []);
+
+  /**
+   * 로그인한 사용자 전용(실 API) 데이터: /me, /me/scans, /notifications*.
+   * 위 mock 데이터와 별개로, 로그인된 상태(view==='app' + 저장된 accessToken)일 때만 불러온다.
+   * 하나가 실패해도 나머지 화면은 mock으로 계속 정상 동작해야 하므로 각자 따로 catch한다.
+   */
+  useEffect(() => {
+    if (state.view !== 'app') return;
+    const session = loadSession();
+    if (!session?.accessToken) return;
+    let alive = true;
+    fetchMe().then((res) => { if (alive) setMeData(res); }).catch(() => {});
+    fetchScans().then((res) => { if (alive) setScansData(res || []); }).catch(() => {});
+    fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
+    fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.view]);
 
   /* URL → 상태 */
   useEffect(() => {
@@ -177,6 +233,12 @@ export function useAppLogic(userProps) {
     setState({ view: 'app', role, tab: firstTab(role), notifOpen: false, dppOpen: false, customsSearched: false, customsQuery: '' });
   }
 
+  /**
+   * ws(소속명)/dl(도메인 라벨)/ur(역할 타이틀)는 여전히 역할별 자리표시자다 - 실제 값을 내려주려면
+   * organization 테이블 + GET /me류 API가 더 있어야 하는데(BE에 아직 없음, LoginResponse.java의
+   * TODO 참고) 아직 안 만들었다. un(이름)/ini(이니셜)만 GET /me(meData)가 로드되면 실제 값으로 바뀐다 -
+   * 이게 강이 요청한 "로그인한 사용자 실제 이름/이메일" 중 이름 부분.
+   */
   function profile() {
     const m = {
       admin: { ws: 'IEUM 운영 콘솔', dl: '관리자', un: '김도현', ur: '플랫폼 운영자', ini: '김' },
@@ -187,7 +249,9 @@ export function useAppLogic(userProps) {
       customs: { ws: '인천세관 · 수입통관과', dl: '세관', un: '한지원', ur: '통관 심사관', ini: '한' },
       personal: { ws: '개인 회원', dl: '개인', un: '정민수', ur: '개인 계정', ini: '정' }
     };
-    return m[state.role];
+    const base = m[state.role];
+    if (!meData || !meData.displayName) return base;
+    return { ...base, un: meData.displayName, ini: meData.displayName.charAt(0) || base.ini };
   }
 
   function tabList() {
@@ -212,6 +276,9 @@ export function useAppLogic(userProps) {
       domainLabel: p.dl,
       domainChip: domainChipFor(p.dl),
       userName: p.un, userRole: p.ur, userInitial: p.ini,
+      meName: p.un,
+      meEmail: meData?.email || '',
+      meConnectedAccounts: (meData?.connectedAccounts || []).map(a => ({ provider: a.provider, email: a.email, nickname: a.nickname })),
       showTabs: tabList().length > 1,
       tabs: tabList().map(([k, label]) => ({ key: k, label, style: tabStyle(s.tab === k), go: () => setState(k === 'clearance' ? { tab: k, customsSearched: false, customsQuery: '' } : { tab: k }) })),
       openNotif: () => setState({ notifOpen: true }),
@@ -228,34 +295,38 @@ export function useAppLogic(userProps) {
       scScans: s.role === 'personal' && s.tab === 'scans',
       scPersonalMy: s.role === 'personal' && s.tab === 'my',
       scPassport: s.role === 'personal' && s.tab === 'passport',
-      scans: [
-        ['DPP-KR-ST-2607-0142', '열연코일 HR-SPHC 3.2t', '대성제강', '2026-07-28 14:02', '검증됨', '2026-07-24'],
-        ['DPP-KR-BT-2607-0311', 'EV 배터리 모듈 M3-72', '루멘셀', '2026-07-21 09:35', '검증됨', '2026-07-22'],
-        ['DPP-KR-TX-2607-0521', '오가닉 코튼 저지 180g', '아라텍스', '2026-07-14 18:47', '정보 갱신됨', '2026-07-31'],
-        ['DPP-FR-TX-2607-0204', 'Recycled poly woven', 'Fibrelune SAS', '2026-07-02 11:20', '검증됨', '2026-06-30'],
-        ['DPP-KR-TX-2506-0388', '리사이클 나일론 셔츠', '아라텍스', '2026-06-11 20:14', '검증 실패', '2026-05-28']
-      ].filter(r => !state.removedScans.includes(r[0])).map(([id, name, company, at, status, updated], i) => ({
-        key: id, id, name, company, at, status, updated,
-        remove: () => setState({
-          confirm: {
-            title: '조회 기록을 삭제할까요?',
-            body: name + ' 의 열람 기록이 내 계정에서 삭제됩니다. 제품의 여권 자체는 삭제되지 않습니다.',
-            label: '기록 삭제',
-            run: () => {
-              setState(s => ({ removedScans: s.removedScans.concat(id), confirm: null }));
-              say('조회 기록을 삭제했습니다.');
+      scans: (scansData || []).map((sc) => {
+        const label = SCAN_STATUS_LABEL[sc.status] || sc.status;
+        return {
+          key: sc.scanId, id: sc.passportCode, name: sc.productName, company: sc.brandName || '',
+          at: fmtDateTime(sc.scannedAt), status: label, updated: sc.passportUpdatedAt ? fmtDate(sc.passportUpdatedAt) : '—',
+          remove: () => setState({
+            confirm: {
+              title: '조회 기록을 삭제할까요?',
+              body: sc.productName + ' 의 열람 기록이 내 계정에서 삭제됩니다. 제품의 여권 자체는 삭제되지 않습니다.',
+              label: '기록 삭제',
+              run: async () => {
+                try {
+                  await deleteScan(sc.scanId);
+                  setScansData(prev => prev.filter(x => x.scanId !== sc.scanId));
+                  say('조회 기록을 삭제했습니다.');
+                } catch (err) {
+                  say(err.message || '삭제에 실패했습니다.');
+                }
+                setState({ confirm: null });
+              }
             }
-          }
-        }),
-        ok: status === '검증됨',
-        renewed: status === '정보 갱신됨',
-        failed: status === '검증 실패',
-        statusIconStyle: { display: 'grid', placeItems: 'center', flex: 'none', color: status === '검증됨' ? '#12A150' : status === '정보 갱신됨' ? '#0045A9' : '#C22B2B' },
-        rowStyle: { display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: 12, padding: '13px 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' },
-        open: () => setState({ tab: 'passport', pubId: id })
-      })),
+          }),
+          ok: sc.status === 'VERIFIED',
+          renewed: sc.status === 'UPDATED',
+          failed: sc.status === 'FAILED',
+          statusIconStyle: { display: 'grid', placeItems: 'center', flex: 'none', color: sc.status === 'VERIFIED' ? '#12A150' : sc.status === 'UPDATED' ? '#0045A9' : '#C22B2B' },
+          rowStyle: { display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: 12, padding: '13px 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' },
+          open: () => setState({ tab: 'passport', pubId: sc.passportCode })
+        };
+      }),
       scanQr: () => say('QR 스캐너를 실행했습니다.'),
-      scansEmpty: false,
+      scansEmpty: (scansData || []).length === 0,
       ...passportVals(ctx),
       scClearance: s.role === 'customs' && s.tab === 'clearance',
       scClearLog: s.role === 'customs' && s.tab === 'clearlog',
@@ -480,6 +551,7 @@ export function useAppLogic(userProps) {
   const ctx = {
     state, setState, props,
     data,
+    meData, scansData, notifCatsData, notifsData, fmtRelative,
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,

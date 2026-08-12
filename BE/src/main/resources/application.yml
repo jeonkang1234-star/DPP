@@ -14,6 +14,11 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
     baseline-version: 5
+  servlet:
+    multipart:
+      # 성적서 PDF가 기본 1MB 제한에 걸리는 경우가 있어서 넉넉히 올려둠.
+      max-file-size: 20MB
+      max-request-size: 20MB
   # app.mail.enabled=true 로 켤 때만 실제로 쓰인다. 값은 application-local.yml에만 채울 것.
   mail:
     host: ""
@@ -79,6 +84,26 @@ ncp:
     access-key: ""
     secret-key: ""
     sender-phone: ""
+# 문서 파싱(parser, FastAPI)/증명 생성(zkp-o1js) 서비스 연동. docker-compose의
+# DOCUMENT_PARSER_URL/DOCUMENT_ZKP_URL 환경변수로 덮어씀 - 로컬(비-docker) 실행 시엔
+# 기본값(localhost)이 쓰인다.
+document:
+  parser-url: "${DOCUMENT_PARSER_URL:http://localhost:8000}"
+  zkp-url: "${DOCUMENT_ZKP_URL:http://localhost:4001}"
+  upload-dir: "${DOCUMENT_UPLOAD_DIR:/data/document-uploads}"
+# Hyperledger Fabric 체인코드(dpp-ledger-chaincode) 연동. 기본은 꺼져 있음(enabled=false) -
+# 로컬 개발 환경엔 Fabric 네트워크가 없기 때문. EC2(docker-compose.blockchain.yml 오버레이)에서만
+# BLOCKCHAIN_ENABLED=true + 나머지 실제 값을 채운다.
+blockchain:
+  enabled: "${BLOCKCHAIN_ENABLED:false}"
+  peer-endpoint: "${BLOCKCHAIN_PEER_ENDPOINT:localhost:7051}"
+  peer-hostname-override: "${BLOCKCHAIN_PEER_HOSTNAME_OVERRIDE:peer0.org1.example.com}"
+  msp-id: "${BLOCKCHAIN_MSP_ID:Org1MSP}"
+  channel-name: "${BLOCKCHAIN_CHANNEL_NAME:dppchannel}"
+  chaincode-name: "${BLOCKCHAIN_CHAINCODE_NAME:dpp-ledger-chaincode}"
+  tls-cert-path: "${BLOCKCHAIN_TLS_CERT_PATH:/fabric-identity/peer-tls-ca.pem}"
+  cert-path: "${BLOCKCHAIN_CERT_PATH:/fabric-identity/admin-cert.pem}"
+  key-path: "${BLOCKCHAIN_KEY_PATH:/fabric-identity/admin-key.pem}"
 springdoc:
   api-docs:
     path: /v3/api-docs

@@ -18,6 +18,17 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
+    // com.dpp.document의 RestClient(Spring 6.1)가 내부적으로 reactive-streams 타입을
+    // 참조한다 - spring-boot-starter-webflux를 안 써서 이게 클래스패스에 없으면
+    // NoClassDefFoundError: org/reactivestreams/Publisher 로 죽는다.
+    implementation 'io.projectreactor:reactor-core'
+    // com.dpp.blockchain의 Fabric Gateway 클라이언트 - 체인코드(dpp-ledger-chaincode) 호출용.
+    // Gateway 서비스가 peer 쪽에서 엔도스먼트 수집·주문·커밋을 대신 처리해줘서
+    // 옛 fabric-sdk-java보다 훨씬 간단하다 (Fabric 2.4+ peer 필요, 우리 test-network는 2.5.16).
+    implementation 'org.hyperledger.fabric:fabric-gateway:1.7.0'
+    // fabric-gateway가 쓰는 grpc-api 구현체(전송 계층)를 직접 안 넣으면 ServiceLoader가
+    // 채널을 못 만든다 - grpc-netty-shaded로 지정.
+    implementation 'io.grpc:grpc-netty-shaded:1.68.0'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
