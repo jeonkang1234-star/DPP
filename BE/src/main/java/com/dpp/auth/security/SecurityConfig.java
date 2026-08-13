@@ -41,7 +41,10 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
+                    // setContentType만으로는 charset이 안 붙어서(서블릿 기본 인코딩은 ISO-8859-1)
+                    // 한글 메시지가 깨져 나간다 - setCharacterEncoding을 명시해야 한다.
                     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+                    response.setCharacterEncoding("UTF-8");
                     response.setStatus(401);
                     response.getWriter().write("{\"message\":\"인증이 필요합니다.\"}");
                 }))

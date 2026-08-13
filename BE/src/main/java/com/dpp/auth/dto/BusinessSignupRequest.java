@@ -10,9 +10,9 @@ import jakarta.validation.constraints.Size;
  * /auth/signup/business/phone/verify 로 전화번호 인증을 먼저 끝낸 상태여야 한다
  * (BusinessSignupService.signup 참고).
  *
- * TODO: businessRegNo/country/domain은 저장할 organization 테이블이 아직 없다
- * (rbac/mypage 패키지 미구현). 지금은 UserAccount.displayName에 companyName만
- * 넣고 나머지는 받기만 하고 버린다 - org 테이블 생기면 여기부터 이어서 구현할 것.
+ * businessRegNo/country/domain은 com.dpp.mypage.OrganizationService.findOrCreateForSignup로
+ * organization 테이블에 저장된다(동일 country+businessRegNo 조직이 있으면 합류, 없으면 신규
+ * 생성). org_type/주소/담당자 정보는 가입 시점엔 비워두고 PUT /me/organization에서 채운다.
  */
 public record BusinessSignupRequest(
         @NotBlank @Email String email,

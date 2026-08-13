@@ -9,6 +9,8 @@ import com.dpp.auth.entity.OnboardingStep;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.auth.security.JwtTokenProvider;
+import com.dpp.mypage.entity.Organization;
+import com.dpp.mypage.service.OrganizationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -35,17 +37,20 @@ public class BusinessSignupService {
     private final PhoneVerificationService phoneVerificationService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final OrganizationService organizationService;
 
     public BusinessSignupService(UserAccountRepository userAccountRepository,
                                   EmailVerificationService emailVerificationService,
                                   PhoneVerificationService phoneVerificationService,
                                   PasswordEncoder passwordEncoder,
-                                  JwtTokenProvider jwtTokenProvider) {
+                                  JwtTokenProvider jwtTokenProvider,
+                                  OrganizationService organizationService) {
         this.userAccountRepository = userAccountRepository;
         this.emailVerificationService = emailVerificationService;
         this.phoneVerificationService = phoneVerificationService;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.organizationService = organizationService;
     }
 
     @Transactional
@@ -60,9 +65,9 @@ public class BusinessSignupService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전화번호 인증을 먼저 완료해 주세요.");
         }
 
-        // TODO: businessRegNo/country/domain을 저장할 organization 테이블이 없어 지금은 로그만 남긴다.
-        // rbac/mypage 패키지에서 organization이 생기면 여기서 org를 만들고 user_account.org_id를 채울 것.
-        log.info("[가입 접수 - org 테이블 미구현] company={}, businessRegNo={}, country={}, domain={}",
+        // com.dpp.mypage.OrganizationService가 (country, bizRegNo) 기준으로 기존 조직이 있으면
+        // 합류시키고, 없으면 새로 만든다(org_type은 비워둠 - 마이페이지 PUT /me/organization에서 확정).
+        Organization org = organizationService.findOrCreateForSignup(
                 request.companyName(), request.businessRegNo(), request.country(), request.domain());
 
         UserAccount user = new UserAccount();
@@ -77,6 +82,7 @@ public class BusinessSignupService {
         user.setOnboardingStep(OnboardingStep.SIGNED_UP);
         user.setStatus(AccountStatus.ACTIVE);
         user.setLastLoginAt(OffsetDateTime.now());
+        user.setOrgId(org.getOrgId());
         userAccountRepository.save(user);
 
         String access = jwtTokenProvider.createAccessToken(
