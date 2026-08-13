@@ -12,8 +12,11 @@
 #        - admin-key.pem    (Org1 Admin의 개인키)
 #        - peer-tls-ca.pem  (peer0.org1의 TLS root CA)
 #
-# 현재 .github/workflows/cd.yml은 이 오버레이를 자동으로 포함하지 않는다 - 매 배포마다
-# 수동으로 -f 옵션을 추가해서 띄워야 한다. 안정화되면 cd.yml에 추가할 것.
+# .github/workflows/cd.yml이 배포할 때마다 /opt/app/fabric-identity/admin-cert.pem 존재
+# 여부를 확인해서 있으면 이 오버레이를 자동으로 포함한다(2026-08-13~). 그 파일이 없으면
+# 오버레이 없이 BLOCKCHAIN_ENABLED=false로 배포하고 CD 자체는 실패시키지 않는다 - Fabric
+# 네트워크가 아직 없는 새 EC2 인스턴스에서도 CD가 안전하게 돌아가게 하기 위함.
+# 수동 적용이 필요할 땐 여전히 아래 명령을 그대로 쓰면 된다:
 services:
   backend:
     environment:

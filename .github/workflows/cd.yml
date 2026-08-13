@@ -38,9 +38,22 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             cd docker                          # docker-compose.yml이 /opt/app/docker 에 위치
-            docker compose pull || true
-            docker compose build
-            docker compose up -d --remove-orphans
+
+            # /opt/app/fabric-identity에 Fabric 인증서(admin-cert.pem 등)가 준비돼 있으면
+            # blockchain 오버레이를 자동으로 포함한다. 없으면(예: Fabric 네트워크를 아직 안 띄운
+            # 새 EC2 인스턴스) 오버레이 없이 배포해 BLOCKCHAIN_ENABLED=false로 계속 진행 - CD
+            # 자체가 Fabric 상태 때문에 실패하지 않도록 하기 위함.
+            COMPOSE_FILES="-f docker-compose.yml"
+            if [ -f /opt/app/fabric-identity/admin-cert.pem ]; then
+              COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.blockchain.yml"
+              echo "Fabric identity 확인됨 - blockchain 오버레이 적용"
+            else
+              echo "WARNING: /opt/app/fabric-identity/admin-cert.pem 없음 - blockchain 오버레이 생략 (BLOCKCHAIN_ENABLED=false로 배포)"
+            fi
+
+            docker compose $COMPOSE_FILES pull || true
+            docker compose $COMPOSE_FILES build
+            docker compose $COMPOSE_FILES up -d --remove-orphans
             docker image prune -f
 
       - name: Health check
@@ -53,10 +66,14 @@ jobs:
           script: |
             sleep 15
             cd /opt/app/docker
+            COMPOSE_FILES="-f docker-compose.yml"
+            if [ -f /opt/app/fabric-identity/admin-cert.pem ]; then
+              COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.blockchain.yml"
+            fi
             curl -f http://localhost:8080/actuator/health \
-              || (docker compose logs --tail=100 && exit 1)
+              || (docker compose $COMPOSE_FILES logs --tail=100 && exit 1)
             curl -f http://localhost/ \
-              || (docker compose logs frontend --tail=100 && exit 1)
+              || (docker compose $COMPOSE_FILES logs frontend --tail=100 && exit 1)
 
 # ─────────────────────────────────────────────
 # 필요한 GitHub Secrets (Settings > Secrets and variables > Actions)
