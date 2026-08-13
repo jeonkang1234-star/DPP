@@ -12,9 +12,10 @@ import lombok.Setter;
 import java.time.OffsetDateTime;
 
 /**
- * product_model 테이블 매핑. 대시보드 실데이터 조회(DashboardService) 전용 읽기 매핑이라
- * 필요한 컬럼만 담는다 - 여기서 생성/수정하지 않는다(제품 등록 API는 아직 없음, com.dpp.dpp
- * 패키지는 이 대시보드 조회 기능이 사실상 최초).
+ * product_model 테이블 매핑. 원래 대시보드 조회(DashboardService) 전용 읽기 매핑으로
+ * 시작했지만, FieldFormService(강재 기본 정보 입력)가 첫 임시저장 시점에 이 엔티티로
+ * product_model 행을 실제로 생성한다 - "제품 선택/등록" 화면이 따로 없어서 임시로
+ * 자동 생성하는 것(FieldFormService.createDraftDpp 주석 참고).
  */
 @Entity
 @Table(name = "product_model")
