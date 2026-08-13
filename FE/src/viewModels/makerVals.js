@@ -11,27 +11,51 @@ export function makerVals(ctx) {
   const p = ctx.profile();
   const kpi = data.makerKpi[r] || ['0', 0, 0, 0, 0, 0];
   const queues = data.makerQueues[r] || [];
+  // ctx.dashboardData(GET /me/dashboard)가 로드됐으면 실데이터, 아니면 기존 목데이터로 폴백.
+  // org_id 없는 계정이나 DPP를 아직 하나도 등록 안 한 조직은 dash가 와도 전부 0/빈 배열 -
+  // 그 경우도 실데이터 분기를 그대로 타서 "0건/빈 목록"으로 정직하게 보여준다(가짜 숫자로
+  // 안 채움). 목데이터로 폴백하는 건 dashboardData 자체가 아직 도착 전(null)이거나
+  // 요청이 실패했을 때뿐.
+  const dash = ctx.dashboardData;
+  const queueRows = dash
+    ? dash.missingFields.map(f => [f.section, f.labelKo, f.dppLabel, f.dppId + '-' + f.fieldCode])
+    : queues.map(([due, task, target]) => [due, task, target, task]);
+  const completenessRows = dash
+    ? dash.dpps.map(d => {
+        const done = Math.round(d.completeness);
+        return [d.dppId, d.internalSku || ('DPP-' + d.dppId), d.modelName || '(이름 없음)', done, 0, 100 - done];
+      })
+    : ctx.compData().map(([id, name, done, prog, none]) => [id, id, name, done, prog, none]);
   const inputMeta = data.makerInputMeta[r] || {};
   const fieldSets = data.makerFieldSets[r] || [];
   const isBatch = state.issueMode === 'batch';
   return {
-    kpiTotal: kpi[0], kpiNew: kpi[1], kpiIncomplete: kpi[2], kpiMissing: kpi[3], kpiWaiting: kpi[4], kpiAvg: kpi[5],
-    kpiAvgBar: ctx.bar(kpi[5], '#0045A9'),
+    kpiTotal: dash ? String(dash.totalCount) : kpi[0],
+    // "이번 달 신규"/"서류 대기"는 실데이터 쪽에 대응하는 집계가 없다(생성일 기준 집계도,
+    // 서류별 대기 상태 집계도 아직 안 만듦) - 가짜 숫자 대신 0으로 정직하게.
+    kpiNew: dash ? 0 : kpi[1],
+    kpiIncomplete: dash ? dash.incompleteCount : kpi[2],
+    kpiMissing: dash ? dash.missingFields.length : kpi[3],
+    kpiWaiting: dash ? 0 : kpi[4],
+    kpiAvg: dash ? Math.round(dash.averageCompleteness) : kpi[5],
+    kpiAvgBar: ctx.bar(dash ? Math.round(dash.averageCompleteness) : kpi[5], '#0045A9'),
+    // zkp_proof.status='REQUESTED'를 만드는 코드 경로가 아직 없어서 zkpPendingCount는
+    // 실데이터에서도 항상 0 - 마찬가지로 가짜 숫자를 넣지 않는다. zkpRejectedCount는 진짜
+    // 반려 건수(문서 업로드 -> ZKP 검증 실패 시 REJECTED로 저장된 실제 행).
+    zkpPendingCount: dash ? dash.zkpPendingCount : 2,
+    zkpRejectedCount: dash ? dash.zkpRejectedCount : 1,
     goInput: () => setState({ tab: 'input' }),
-    queue: queues.map(([due, task, target]) => ({
-      key: task, due, task, target,
+    queue: queueRows.map(([due, task, target, key]) => ({
+      key, due, task, target,
       dueDot: ctx.pillDot(due === 'D-1' ? '#E03B3B' : due === 'D-2' ? '#E3A008' : '#9AA8BE'),
-      act: () => ctx.say('작업을 처리 화면으로 이동했습니다 · ' + task)
+      act: () => ctx.say((dash ? '미충족 필드로 이동했습니다 · ' : '작업을 처리 화면으로 이동했습니다 · ') + task)
     })),
-    completeness: ctx.compData().map((row, i) => {
-      const [id, name, done, prog, none] = row;
-      return {
-        key: id, id, name, pct: done,
-        pctStyle: ctx.pctStyle(done),
-        segs: [{ key: 'a', style: ctx.segStyle(done, '#12A150') }, { key: 'b', style: ctx.segStyle(prog, '#E3A008') }, { key: 'c', style: ctx.segStyle(none, '#E03B3B') }],
-        open: () => setState({ dppOpen: true, dppId: id })
-      };
-    }),
+    completeness: completenessRows.map(([openId, displayId, name, done, prog, none]) => ({
+      key: openId, id: displayId, name, pct: done,
+      pctStyle: ctx.pctStyle(done),
+      segs: [{ key: 'a', style: ctx.segStyle(done, '#12A150') }, { key: 'b', style: ctx.segStyle(prog, '#E3A008') }, { key: 'c', style: ctx.segStyle(none, '#E03B3B') }],
+      open: () => setState({ dppOpen: true, dppId: openId })
+    })),
     inputTitle: inputMeta.title, uploadTitle: inputMeta.upload, uploadHint: inputMeta.hint,
     uploadedName: inputMeta.file, ocrCount: inputMeta.ocr, formTitle: inputMeta.form, fieldCount: inputMeta.count,
     isBatch,
