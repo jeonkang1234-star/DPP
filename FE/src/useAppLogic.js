@@ -11,7 +11,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization } from './api/meApi.js';
 import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
 import { passportVals } from './viewModels/passportVals.js';
@@ -81,6 +81,7 @@ export function useAppLogic(userProps) {
 
   /* 로그인한 사용자 전용(실 API) 데이터. mock인 data와 분리 - 얘내는 인증 필요, 로그인 후에만 채워짐. */
   const [meData, setMeData] = useState(null);
+  const [orgData, setOrgData] = useState(null);
   const [scansData, setScansData] = useState([]);
   const [notifCatsData, setNotifCatsData] = useState([]);
   const [notifsData, setNotifsData] = useState([]);
@@ -139,6 +140,9 @@ export function useAppLogic(userProps) {
     if (!session?.accessToken) return;
     let alive = true;
     fetchMe().then((res) => { if (alive) setMeData(res); }).catch(() => {});
+    // org_id 없는 계정(개인/미가입)은 400이 정상 - orgData는 그냥 null로 남고 profile()이
+    // 기존 역할별 자리표시자로 폴백한다.
+    fetchOrganization().then((res) => { if (alive) setOrgData(res); }).catch(() => {});
     fetchScans().then((res) => { if (alive) setScansData(res || []); }).catch(() => {});
     fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
@@ -234,10 +238,9 @@ export function useAppLogic(userProps) {
   }
 
   /**
-   * ws(소속명)/dl(도메인 라벨)/ur(역할 타이틀)는 여전히 역할별 자리표시자다 - 실제 값을 내려주려면
-   * organization 테이블 + GET /me류 API가 더 있어야 하는데(BE에 아직 없음, LoginResponse.java의
-   * TODO 참고) 아직 안 만들었다. un(이름)/ini(이니셜)만 GET /me(meData)가 로드되면 실제 값으로 바뀐다 -
-   * 이게 강이 요청한 "로그인한 사용자 실제 이름/이메일" 중 이름 부분.
+   * dl(도메인 라벨)/ur(역할 타이틀)은 여전히 역할별 자리표시자다. un(이름)/ini(이니셜)는
+   * GET /me(meData), ws(소속명)는 GET /me/organization(orgData)가 로드되면 실제 값으로
+   * 바뀐다 - org_id 없는 계정(개인 등)은 orgData가 null로 남아서 자리표시자를 그대로 쓴다.
    */
   function profile() {
     const m = {
@@ -250,8 +253,9 @@ export function useAppLogic(userProps) {
       personal: { ws: '개인 회원', dl: '개인', un: '정민수', ur: '개인 계정', ini: '정' }
     };
     const base = m[state.role];
-    if (!meData || !meData.displayName) return base;
-    return { ...base, un: meData.displayName, ini: meData.displayName.charAt(0) || base.ini };
+    const withOrg = orgData?.orgName ? { ...base, ws: orgData.orgName } : base;
+    if (!meData || !meData.displayName) return withOrg;
+    return { ...withOrg, un: meData.displayName, ini: meData.displayName.charAt(0) || base.ini };
   }
 
   function tabList() {
@@ -551,7 +555,7 @@ export function useAppLogic(userProps) {
   const ctx = {
     state, setState, props,
     data,
-    meData, scansData, notifCatsData, notifsData, fmtRelative,
+    meData, orgData, setOrgData, scansData, notifCatsData, notifsData, fmtRelative,
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,

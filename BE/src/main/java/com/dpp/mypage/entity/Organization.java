@@ -54,6 +54,9 @@ public class Organization {
     @Column(name = "biz_reg_no", length = 30)
     private String bizRegNo;
 
+    @Column(name = "website_url", length = 300)
+    private String websiteUrl;
+
     @Column(name = "lei_code", length = 20)
     private String leiCode;
 

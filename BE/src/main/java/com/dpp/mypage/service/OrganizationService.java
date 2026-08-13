@@ -103,6 +103,9 @@ public class OrganizationService {
         // 필드씩 여러 번 나눠서 채우는 흐름이라, 요청에 없는(JSON에서 아예 빠진, null) 필드는
         // 건드리지 않고 그대로 둔다. 필드를 명시적으로 지우고 싶으면 빈 문자열("")을 보내면
         // blankToNull이 null로 바꿔 저장한다 - "요청에서 생략"과 "빈 값으로 지움"을 구분.
+        if (request.websiteUrl() != null) {
+            org.setWebsiteUrl(blankToNull(request.websiteUrl()));
+        }
         if (request.leiCode() != null) {
             org.setLeiCode(blankToNull(request.leiCode()));
         }

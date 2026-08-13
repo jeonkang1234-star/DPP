@@ -1,5 +1,5 @@
 /**
- * 로그인한 사용자 전용(인증 필요) API. /me, /me/scans, /notifications*.
+ * 로그인한 사용자 전용(인증 필요) API. /me, /me/scans, /me/organization, /notifications*.
  *
  * mockApi.js(BASE_URL=/api, 화면용 mock 데이터)나 authApi.js(/auth/*, 토큰 없이 호출)와
  * 분리한 이유: 여긴 매 요청에 session.js에 저장된 accessToken을 Authorization 헤더로
@@ -56,6 +56,24 @@ export function fetchScans() {
 /** 스캔 이력 하나 삭제(소프트 삭제 - 제품 여권 자체는 안 지워짐). */
 export function deleteScan(scanId) {
   return authedFetch(`/me/scans/${scanId}`, { method: 'DELETE' });
+}
+
+/**
+ * 로그인한 사용자 소속 조직(회사) 프로필. 계정에 연결된 조직이 없으면(org_id NULL)
+ * BE가 400을 던진다 - 호출부에서 그 경우를 감안해서 처리할 것.
+ */
+export function fetchOrganization() {
+  return authedFetch('/me/organization');
+}
+
+/**
+ * 조직 프로필 부분 수정(PUT이지만 PATCH 의미 - 요청에 없는 필드는 그대로 유지됨).
+ * orgName/orgType/websiteUrl/leiCode/eoriCode/uoi/postalCode/addressLine1/addressLine2/
+ * city/contactName/contactDept/contactPhone/contactEmail만 받는다.
+ * countryCode/bizRegNo/domain은 가입 시 확정되고 여기서 못 바꾼다(백엔드가 아예 안 받음).
+ */
+export function updateOrganization(payload) {
+  return authedFetch('/me/organization', { method: 'PUT', body: JSON.stringify(payload) });
 }
 
 /** 알림 카테고리 목록: [{key, label}] */
