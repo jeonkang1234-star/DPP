@@ -7,7 +7,12 @@
  * 백엔드로 프록시하도록 이미 맞춰져 있어서, 여기서도 그냥 상대경로로 호출한다.
  */
 
-import { loadSession } from './session.js';
+import { loadSession, clearSession } from './session.js';
+
+// 여러 /me/* 요청이 한꺼번에 401을 맞아도(페이지 로드 시 병렬 fetch) 리다이렉트를 한
+// 번만 하기 위한 플래그 - 안 하면 clearSession()이 여러 번 불려도 무해하지만
+// window.location.href 대입이 반복돼서 콘솔에 불필요한 네비게이션 로그가 남는다.
+let redirectingToLogin = false;
 
 async function authedFetch(path, options = {}) {
   const session = loadSession();
@@ -21,6 +26,16 @@ async function authedFetch(path, options = {}) {
       ...(options.headers || {}),
     },
   });
+
+  if (res.status === 401 && !redirectingToLogin) {
+    // 토큰 만료/무효 - 아직 refresh token으로 재발급하는 로직이 없어서(TODO), 세션을
+    // 지우고 로그인 화면으로 보낸다. 이전엔 이 401을 호출부에서 조용히 삼켜서(catch(()=>{}))
+    // 화면이 마치 예전 목데이터로 "되돌아간 것"처럼 보이는 혼란을 줬다 - 이제 명확하게
+    // 로그인 화면으로 쫓아낸다.
+    redirectingToLogin = true;
+    clearSession();
+    window.location.href = '/';
+  }
 
   if (!res.ok) {
     let message = '요청을 처리하지 못했습니다.';
@@ -111,14 +126,19 @@ export function fetchInvitations() {
   return authedFetch('/me/invitations');
 }
 
-/** 협력사 초대 발송. */
-export function sendInvitation(orgName, email) {
-  return authedFetch('/me/invitations', { method: 'POST', body: JSON.stringify({ orgName, email }) });
+/** 협력사 초대 발송 - dppId 필수(V11__invitation_dpp_link.sql 이후 초대는 항상 특정 DPP에 대한 것). */
+export function sendInvitation(orgName, email, dppId) {
+  return authedFetch('/me/invitations', { method: 'POST', body: JSON.stringify({ orgName, email, dppId }) });
 }
 
 /** 초대 재발송 - 이미 수락(ACCEPTED)된 초대는 백엔드가 400으로 거부한다. */
 export function resendInvitation(invitationId) {
   return authedFetch(`/me/invitations/${invitationId}/resend`, { method: 'POST' });
+}
+
+/** 파트너(협력사) 계정이 참여 요청받은 DPP 목록. */
+export function fetchParticipations() {
+  return authedFetch('/me/participations');
 }
 
 /** 알림 카테고리 목록: [{key, label}] */

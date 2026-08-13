@@ -37,6 +37,11 @@ public class Invitation {
     @Column(name = "invitee_org_name", length = 200)
     private String inviteeOrgName;
 
+    // V11__invitation_dpp_link.sql - 어떤 DPP에 대한 초대인지. 과거(DPP 미지정) 행과의
+    // 호환을 위해 nullable - 새로 보내는 초대는 항상 채운다(InvitationService 참고).
+    @Column(name = "dpp_id")
+    private Long dppId;
+
     @Column(name = "role_code", nullable = false, length = 30)
     private String roleCode;
 

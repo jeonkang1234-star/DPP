@@ -11,9 +11,10 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations } from './api/meApi.js';
 import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
+import { partnerVals } from './viewModels/partnerVals.js';
 import { passportVals } from './viewModels/passportVals.js';
 import { tierVals } from './viewModels/tierVals.js';
 import { approvalVals } from './viewModels/approvalVals.js';
@@ -90,6 +91,7 @@ export function useAppLogic(userProps) {
   const [fieldFormInputs, setFieldFormInputs] = useState({});
   const [scansData, setScansData] = useState([]);
   const [invitesData, setInvitesData] = useState([]);
+  const [participationsData, setParticipationsData] = useState([]);
   const [notifCatsData, setNotifCatsData] = useState([]);
   const [notifsData, setNotifsData] = useState([]);
 
@@ -153,6 +155,7 @@ export function useAppLogic(userProps) {
     fetchDashboard().then((res) => { if (alive) setDashboardData(res); }).catch(() => {});
     fetchScans().then((res) => { if (alive) setScansData(res || []); }).catch(() => {});
     fetchInvitations().then((res) => { if (alive) setInvitesData(res || []); }).catch(() => {});
+    fetchParticipations().then((res) => { if (alive) setParticipationsData(res || []); }).catch(() => {});
     fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
     return () => { alive = false; };
@@ -160,26 +163,33 @@ export function useAppLogic(userProps) {
   }, [state.view]);
 
   /**
-   * "강재 기본 정보" 입력 폼 - 철강 역할이 입력 탭에 들어갈 때마다(재입장 포함) 최신값을
-   * 다시 불러온다. dppId는 한 번 만들어지면 state에 남아서(fieldFormDppId) 이후 임시저장은
-   * 계속 같은 DPP를 갱신한다 - 저장할 때마다 새 DPP가 생기지 않도록.
+   * "강재 기본 정보" 입력 폼 - 두 가지 진입점이 같은 폼을 공유한다: (1) 철강 소유 조직이
+   * "철강 데이터 입력" 탭에 들어갈 때(dppId는 state.fieldFormDppId에 남아서 이후 임시저장은
+   * 계속 같은 DPP를 갱신), (2) 참여 협력사가 "참여 DPP" 탭에서 특정 DPP를 선택했을 때
+   * (dppId는 state.partnerAssignedDppId). 백엔드(FieldFormService)가 소유 조직인지 참여
+   * 협력사인지에 따라 알아서 필드 범위를 다르게 내려주므로 FE는 어느 dppId로 불렀는지만
+   * 분기하면 된다.
    */
   useEffect(() => {
-    if (state.view !== 'app' || state.role !== 'steel' || state.tab !== 'input') return;
+    if (state.view !== 'app') return;
+    const isSteelInput = state.role === 'steel' && state.tab === 'input';
+    const isPartnerAssigned = state.role === 'partner' && state.tab === 'assigned' && !!state.partnerAssignedDppId;
+    if (!isSteelInput && !isPartnerAssigned) return;
     const session = loadSession();
     if (!session?.accessToken) return;
+    const dppId = isSteelInput ? state.fieldFormDppId : state.partnerAssignedDppId;
     let alive = true;
-    fetchFieldForm(state.fieldFormDppId || undefined)
+    fetchFieldForm(dppId || undefined)
       .then((res) => {
         if (!alive) return;
         setFieldFormData(res);
         setFieldFormInputs(Object.fromEntries((res.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        if (res.dppId && res.dppId !== state.fieldFormDppId) setState({ fieldFormDppId: res.dppId });
+        if (isSteelInput && res.dppId && res.dppId !== state.fieldFormDppId) setState({ fieldFormDppId: res.dppId });
       })
       .catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.view, state.role, state.tab]);
+  }, [state.view, state.role, state.tab, state.partnerAssignedDppId]);
 
   /* URL → 상태 */
   useEffect(() => {
@@ -237,7 +247,7 @@ export function useAppLogic(userProps) {
     return accounts()[key] || null;
   }
 
-  function firstTab(r) { return r === 'eu' ? 'registry' : r === 'personal' ? 'scans' : r === 'customs' ? 'clearance' : 'dash'; }
+  function firstTab(r) { return r === 'eu' ? 'registry' : r === 'personal' ? 'scans' : r === 'customs' ? 'clearance' : r === 'partner' ? 'assigned' : 'dash'; }
 
   function say(msg) {
     setState({ toast: msg });
@@ -283,7 +293,8 @@ export function useAppLogic(userProps) {
       textile: { ws: '아라텍스', dl: '섬유·패션', un: '최유진', ur: 'DPP 담당자 · Tier 2', ini: '최' },
       eu: { ws: '국가기술표준원 · 제품안전조사과', dl: '시장감독기관', un: '윤가람', ur: 'DPP 감독관', ini: '윤' },
       customs: { ws: '인천세관 · 수입통관과', dl: '세관', un: '한지원', ur: '통관 심사관', ini: '한' },
-      personal: { ws: '개인 회원', dl: '개인', un: '정민수', ur: '개인 계정', ini: '정' }
+      personal: { ws: '개인 회원', dl: '개인', un: '정민수', ur: '개인 계정', ini: '정' },
+      partner: { ws: '협력사', dl: '협력사', un: '담당자', ur: '원자재공급 · 참여 협력사', ini: '협' }
     };
     const base = m[state.role];
     const withOrg = orgData?.orgName ? { ...base, ws: orgData.orgName } : base;
@@ -297,6 +308,7 @@ export function useAppLogic(userProps) {
     if (r === 'eu') return [['registry', 'DPP 레지스트리'], ['audit', '감사 로그']];
     if (r === 'personal') return [['scans', '제품 조회 기록'], ['my', '마이페이지']];
     if (r === 'customs') return [['clearance', '통관 검증']];
+    if (r === 'partner') return [['assigned', '참여 DPP'], ['my', '마이페이지']];
     const inputLabel = r === 'steel' ? '철강 데이터 입력' : r === 'battery' ? '배터리 데이터 입력' : '섬유 데이터 입력';
     return [['dash', '대시보드'], ['input', inputLabel], ['partners', '협력사 초대'], ['products', '제품 조회'], ['my', '마이페이지']];
   }
@@ -329,6 +341,8 @@ export function useAppLogic(userProps) {
       scPartners: isMaker && s.tab === 'partners',
       scProducts: isMaker && s.tab === 'products',
       scMy: isMaker && s.tab === 'my',
+      scPartnerAssigned: s.role === 'partner' && s.tab === 'assigned',
+      scPartnerMy: s.role === 'partner' && s.tab === 'my',
       scScans: s.role === 'personal' && s.tab === 'scans',
       scPersonalMy: s.role === 'personal' && s.tab === 'my',
       scPassport: s.role === 'personal' && s.tab === 'passport',
@@ -417,10 +431,12 @@ export function useAppLogic(userProps) {
       setSuCompany: () => setState({ suTab: 'company' }),
       suRoleAdmin: roleCard(s.suRole === 'admin'),
       suRoleMaker: roleCard(s.suRole === 'maker'),
+      suRolePartner: roleCard(s.suRole === 'partner'),
       suRoleEu: roleCard(s.suRole === 'eu'),
       suRoleCustoms: roleCard(s.suRole === 'customs'),
       pickAdmin: () => setState({ suRole: 'admin' }),
       pickMaker: () => setState({ suRole: 'maker' }),
+      pickPartner: () => setState({ suRole: 'partner' }),
       pickEu: () => setState({ suRole: 'eu' }),
       pickCustoms: () => setState({ suRole: 'customs' }),
       suEmail: s.suEmail || '',
@@ -551,7 +567,11 @@ export function useAppLogic(userProps) {
         if (!s.suCompanyName || !s.suBizRegNo) { say('회사명과 사업자등록번호를 입력해 주세요.'); return; }
         if (!s.suPassword || s.suPassword.length < 8) { say('비밀번호는 8자 이상이어야 합니다.'); return; }
         if (s.suPassword !== s.suPasswordConfirm) { say('비밀번호가 일치하지 않습니다.'); return; }
-        const domain = s.suRole === 'maker' ? 'steel' : s.suRole;
+        // partner(협력사)도 domain='steel'로 가입시킨다 - requirement_field가 아직 STEEL만
+        // 시딩돼 있어서(V4__seed_requirement_steel.sql) RAW_SUPPLIER 등 협력사 역할이 실제로
+        // 뭘 제출할 수 있는 케이스가 철강뿐이다. 배터리/섬유 협력사가 필요해지면 그때
+        // 시딩부터 늘리고 이 분기도 확장할 것.
+        const domain = (s.suRole === 'maker' || s.suRole === 'partner') ? 'steel' : s.suRole;
         try {
           const res = await completeBusinessSignup({
             email, password: s.suPassword, companyName: s.suCompanyName,
@@ -562,6 +582,10 @@ export function useAppLogic(userProps) {
           if (s.suRole === 'maker') { saveSession({ role: 'steel', at: Date.now(), ...sessionExtra }); setState({ view: 'app', role: 'steel', tab: 'dash', obKind: 'maker', obOpen: true, obStep: 1, obSaved: 1 }); }
           else if (s.suRole === 'customs') { saveSession({ role: 'customs', at: Date.now(), ...sessionExtra }); setState({ view: 'app', role: 'customs', tab: 'clearance', obKind: 'customs', obOpen: true, obStep: 1, obSaved: 1 }); }
           else if (s.suRole === 'eu') { saveSession({ role: 'eu', at: Date.now(), ...sessionExtra }); setState({ view: 'app', role: 'eu', tab: 'registry', obKind: 'eu', obOpen: true, obStep: 1, obSaved: 1 }); }
+          // partner는 온보딩 마법사가 아직 없어서(obVals.js에 partner용 단계가 없음) 바로
+          // 대시보드로 보낸다 - 협력사 초대를 받아서 가입한 경우라 대개 자기가 담당한
+          // DPP가 이미 연결돼 있을 것(BusinessSignupService.linkPendingCollaborations).
+          else if (s.suRole === 'partner') { go('partner', sessionExtra); }
           else go('admin', sessionExtra);
         } catch (err) {
           say(err.message || '회원가입에 실패했습니다.');
@@ -569,6 +593,7 @@ export function useAppLogic(userProps) {
       },
 
       ...makerVals(ctx),
+      ...partnerVals(ctx),
       ...euVals(ctx),
       ...notifVals(ctx),
       ...dppVals(ctx),
@@ -592,10 +617,11 @@ export function useAppLogic(userProps) {
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft, issueFieldFormDpp,
     invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate,
+    participationsData,
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,
-    makerVals, passportVals, tierVals, approvalVals, customsVals, euVals, notifVals, dppVals, obVals,
+    makerVals, partnerVals, passportVals, tierVals, approvalVals, customsVals, euVals, notifVals, dppVals, obVals,
   };
 
   if (loadError) return { loading: false, loadError };

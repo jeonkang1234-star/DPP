@@ -159,10 +159,34 @@ export function makerVals(ctx) {
       },
       open: () => { if (clickable) setState({ fieldCheckOpen: true }); }
     })),
-    // GET /me/invitations 실데이터 - 예전엔 6건이 통째로 하드코딩되어 있었다. status는
+    // "협력사 초대"는 이제 회사 대 회사 일반 연결이 아니라 특정 DPP에 대한 초대 - 화면에
+    // 먼저 이 조직의 DPP 목록을 보여주고, 하나를 고르면 그 DPP에 여러 협력사를 한 번에
+    // 초대할 수 있다(DppParticipant가 그 DPP의 "누가 뭘 채우는지" 실제 연결이 됨).
+    partnerDpps: (dash ? dash.dpps : []).map(d => {
+      const selected = state.partnersDppId === d.dppId;
+      return {
+        key: d.dppId, id: d.internalSku || ('DPP-' + d.dppId), name: d.modelName || ('DPP #' + d.dppId),
+        pct: Math.round(d.completeness), selected,
+        cardStyle: {
+          display: 'flex', flexDirection: 'column', gap: 4, minWidth: 168, padding: '12px 14px',
+          border: selected ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.10)', borderRadius: 13,
+          background: selected ? '#0045A9' : '#fff', color: selected ? '#fff' : '#0B1B33',
+          cursor: 'pointer', textAlign: 'left', flex: 'none'
+        },
+        select: () => setState({ partnersDppId: d.dppId, inviteRows: [{ orgName: '', email: '' }] })
+      };
+    }),
+    partnerDppsEmpty: !dash || dash.dpps.length === 0,
+    partnersHasSelection: !!state.partnersDppId,
+    partnersSelectedDppName: (() => {
+      const found = dash && dash.dpps.find(d => d.dppId === state.partnersDppId);
+      return found ? (found.modelName || ('DPP #' + found.dppId)) : '';
+    })(),
+    // GET /me/invitations?dppId= 실데이터 - 예전엔 6건이 통째로 하드코딩되어 있었다. status는
     // BE가 SENT/ACCEPTED/EXPIRED/REVOKED/REJECTED 원문으로 내려주고, 여기서 한글 라벨/색을
-    // 입힌다(scan_history 상태 매핑과 같은 패턴).
-    invites: (ctx.invitesData || []).map((i) => {
+    // 입힌다(scan_history 상태 매핑과 같은 패턴). invitesData는 전체를 한 번에 불러오고
+    // 여기서 선택된 DPP로만 걸러서 보여준다.
+    invites: (ctx.invitesData || []).filter(i => i.dppId === state.partnersDppId).map((i) => {
       const label = { SENT: '대기', ACCEPTED: '수락', REJECTED: '거절', EXPIRED: '만료', REVOKED: '취소' }[i.status] || i.status;
       const color = i.status === 'ACCEPTED' ? '#12A150' : i.status === 'SENT' ? '#E3A008' : '#E03B3B';
       return {
@@ -184,24 +208,44 @@ export function makerVals(ctx) {
         }
       };
     }),
-    inviteTotal: (ctx.invitesData || []).length,
-    invitePending: (ctx.invitesData || []).filter(i => i.status === 'SENT').length,
-    inviteRejected: (ctx.invitesData || []).filter(i => i.status === 'REJECTED').length,
-    inviteOrgName: state.inviteOrgName || '',
-    onInviteOrgName: e => setState({ inviteOrgName: e.target.value }),
-    inviteEmail: state.inviteEmail || '',
-    onInviteEmail: e => setState({ inviteEmail: e.target.value }),
+    invitesEmpty: !!state.partnersDppId && (ctx.invitesData || []).filter(i => i.dppId === state.partnersDppId).length === 0,
+    inviteTotal: (ctx.invitesData || []).filter(i => i.dppId === state.partnersDppId).length,
+    invitePending: (ctx.invitesData || []).filter(i => i.dppId === state.partnersDppId && i.status === 'SENT').length,
+    inviteRejected: (ctx.invitesData || []).filter(i => i.dppId === state.partnersDppId && i.status === 'REJECTED').length,
+    // 다중 발송 폼 - 협력사명/이메일 행을 여러 개 만들어 한 번에 보낼 수 있게. 백엔드
+    // API 자체는 여전히 1건씩만 받아서(SendInviteRequest 참고), sendInvite가 행 수만큼
+    // 반복 호출한다.
+    inviteRows: (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '' }]).map((row, idx, arr) => ({
+      key: idx, orgName: row.orgName, email: row.email, canRemove: arr.length > 1,
+      onOrgName: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '' }]).map((r, i) => i === idx ? { ...r, orgName: e.target.value } : r) })),
+      onEmail: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '' }]).map((r, i) => i === idx ? { ...r, email: e.target.value } : r) })),
+      remove: () => setState(s => ({ inviteRows: (s.inviteRows || []).filter((_, i) => i !== idx) }))
+    })),
+    addInviteRow: () => setState(s => ({ inviteRows: (s.inviteRows && s.inviteRows.length ? s.inviteRows : [{ orgName: '', email: '' }]).concat([{ orgName: '', email: '' }]) })),
+    inviteSendLabel: (state.inviteRows || []).length > 1 ? `초대 발송 (${state.inviteRows.length}건)` : '초대 발송',
     sendInvite: async () => {
-      const orgName = (state.inviteOrgName || '').trim();
-      const email = (state.inviteEmail || '').trim();
-      if (!orgName || !email) { ctx.say('협력사명과 이메일을 입력해 주세요.'); return; }
-      try {
-        const created = await ctx.sendInvitation(orgName, email);
-        ctx.setInvitesData(prev => [created, ...prev]);
-        setState({ inviteOrgName: '', inviteEmail: '' });
-        ctx.say('초대 메일을 발송했습니다. (유효기간 7일)');
-      } catch (e) {
-        ctx.say(e.message || '초대 발송에 실패했습니다.');
+      const dppId = state.partnersDppId;
+      if (!dppId) { ctx.say('먼저 DPP를 선택해 주세요.'); return; }
+      const rows = (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '' }])
+        .map(r => ({ orgName: (r.orgName || '').trim(), email: (r.email || '').trim() }))
+        .filter(r => r.orgName && r.email);
+      if (rows.length === 0) { ctx.say('협력사명과 이메일을 입력해 주세요.'); return; }
+      let successCount = 0;
+      const created = [];
+      for (const row of rows) {
+        try {
+          created.push(await ctx.sendInvitation(row.orgName, row.email, dppId));
+          successCount++;
+        } catch (e) {
+          ctx.say((row.orgName) + ' 초대 실패: ' + (e.message || '알 수 없는 오류'));
+        }
+      }
+      if (created.length) {
+        ctx.setInvitesData(prev => [...created, ...prev]);
+        setState({ inviteRows: [{ orgName: '', email: '' }] });
+      }
+      if (successCount > 0) {
+        ctx.say(successCount + '건의 초대 메일을 발송했습니다. (유효기간 7일)');
       }
     },
     // dash(GET /me/dashboard)가 있으면 실 DPP 목록(dash.dpps)에서, 없으면 기존 목데이터에서
