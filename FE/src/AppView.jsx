@@ -232,6 +232,8 @@ export default function AppView(v) {
     profileEditOpen,
     profileName,
     profilePhone,
+    zkpPendingCount,
+    zkpRejectedCount,
     profileUrl,
     queue,
     refreshCaptcha,
@@ -837,8 +839,8 @@ export default function AppView(v) {
             <div style={{ background: '#0B1B33', borderRadius: '18px', padding: '20px 22px', color: '#fff', display: 'flex', flexDirection: 'column', gap: '13px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '8px', height: '8px', borderRadius: '5px', background: '#4ADE80', boxShadow: '0 0 0 4px rgba(74,222,128,.20)' }}></span><span style={{ fontSize: '14px', fontWeight: '600' }}>ZKP 증명 상태</span></div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '20px', fontWeight: '700' }}>2</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>제출 요구 대기</span></div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '20px', fontWeight: '700', color: '#FCA5A5' }}>1</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>조건 미달 반려</span></div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '20px', fontWeight: '700' }}>{zkpPendingCount}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>제출 요구 대기</span></div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '20px', fontWeight: '700', color: '#FCA5A5' }}>{zkpRejectedCount}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>조건 미달 반려</span></div>
               </div>
               <button onClick={openNotif} style={{ height: '34px', border: '0', borderRadius: '10px', background: 'rgba(255,255,255,.14)', color: '#fff', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }}>알림센터에서 확인</button>
             </div>

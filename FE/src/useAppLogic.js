@@ -11,7 +11,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard } from './api/meApi.js';
 import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
 import { passportVals } from './viewModels/passportVals.js';
@@ -82,6 +82,7 @@ export function useAppLogic(userProps) {
   /* 로그인한 사용자 전용(실 API) 데이터. mock인 data와 분리 - 얘내는 인증 필요, 로그인 후에만 채워짐. */
   const [meData, setMeData] = useState(null);
   const [orgData, setOrgData] = useState(null);
+  const [dashboardData, setDashboardData] = useState(null);
   const [scansData, setScansData] = useState([]);
   const [notifCatsData, setNotifCatsData] = useState([]);
   const [notifsData, setNotifsData] = useState([]);
@@ -143,6 +144,7 @@ export function useAppLogic(userProps) {
     // org_id 없는 계정(개인/미가입)은 400이 정상 - orgData는 그냥 null로 남고 profile()이
     // 기존 역할별 자리표시자로 폴백한다.
     fetchOrganization().then((res) => { if (alive) setOrgData(res); }).catch(() => {});
+    fetchDashboard().then((res) => { if (alive) setDashboardData(res); }).catch(() => {});
     fetchScans().then((res) => { if (alive) setScansData(res || []); }).catch(() => {});
     fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
@@ -555,7 +557,7 @@ export function useAppLogic(userProps) {
   const ctx = {
     state, setState, props,
     data,
-    meData, orgData, setOrgData, scansData, notifCatsData, notifsData, fmtRelative,
+    meData, orgData, setOrgData, dashboardData, scansData, notifCatsData, notifsData, fmtRelative,
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,

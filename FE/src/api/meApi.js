@@ -76,6 +76,15 @@ export function updateOrganization(payload) {
   return authedFetch('/me/organization', { method: 'PUT', body: JSON.stringify(payload) });
 }
 
+/**
+ * 로그인한 사용자 소속 조직의 DPP 현황 대시보드 실데이터. DPP가 하나도 없으면(제품 등록
+ * 전) totalCount=0 등 전부 0/빈 배열로 온다 - 목데이터처럼 채워진 숫자가 아니다.
+ * shape: { totalCount, incompleteCount, averageCompleteness, dpps:[...], missingFields:[...], zkpPendingCount, zkpRejectedCount }
+ */
+export function fetchDashboard() {
+  return authedFetch('/me/dashboard');
+}
+
 /** 알림 카테고리 목록: [{key, label}] */
 export function fetchNotificationCategories() {
   return authedFetch('/notifications/categories');
