@@ -7,6 +7,7 @@ public record InvitationDto(
         String email,
         String status,
         String sentAt,
-        boolean canResend
+        boolean canResend,
+        Long dppId
 ) {
 }

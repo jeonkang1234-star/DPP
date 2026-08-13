@@ -9,6 +9,10 @@ import com.dpp.auth.entity.OnboardingStep;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.auth.security.JwtTokenProvider;
+import com.dpp.collab.entity.Invitation;
+import com.dpp.collab.repository.InvitationRepository;
+import com.dpp.dpp.entity.DppParticipant;
+import com.dpp.dpp.repository.DppParticipantRepository;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.service.OrganizationService;
 import org.slf4j.Logger;
@@ -20,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -38,19 +43,25 @@ public class BusinessSignupService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final OrganizationService organizationService;
+    private final DppParticipantRepository dppParticipantRepository;
+    private final InvitationRepository invitationRepository;
 
     public BusinessSignupService(UserAccountRepository userAccountRepository,
                                   EmailVerificationService emailVerificationService,
                                   PhoneVerificationService phoneVerificationService,
                                   PasswordEncoder passwordEncoder,
                                   JwtTokenProvider jwtTokenProvider,
-                                  OrganizationService organizationService) {
+                                  OrganizationService organizationService,
+                                  DppParticipantRepository dppParticipantRepository,
+                                  InvitationRepository invitationRepository) {
         this.userAccountRepository = userAccountRepository;
         this.emailVerificationService = emailVerificationService;
         this.phoneVerificationService = phoneVerificationService;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.organizationService = organizationService;
+        this.dppParticipantRepository = dppParticipantRepository;
+        this.invitationRepository = invitationRepository;
     }
 
     @Transactional
@@ -85,10 +96,42 @@ public class BusinessSignupService {
         user.setOrgId(org.getOrgId());
         userAccountRepository.save(user);
 
+        linkPendingCollaborations(request.email(), org.getOrgId());
+
         String access = jwtTokenProvider.createAccessToken(
                 user.getUserId().toString(), Map.of("accountType", user.getAccountType().name()));
         String refresh = jwtTokenProvider.createRefreshToken(user.getUserId().toString());
 
         return LoginResponse.of(access, refresh, user.getAccountType().name(), user.getEmail(), user.getDisplayName());
+    }
+
+    /**
+     * 이 이메일로 대기 중이던 협력사 초대(DppParticipant.guestEmail, Invitation.inviteeEmail)를
+     * 방금 만든 조직에 연결한다. "협력사 초대 -> 정식 가입 후 로그인해서 제출" 흐름의 핵심
+     * 연결부 - 이게 없으면 초대받은 사람이 가입해도 자기가 담당한 DPP를 영영 못 찾는다.
+     *
+     * 초대 이메일과 가입 이메일이 정확히 같아야 매칭된다(대소문자까지 - 둘 다 저장 시
+     * lower-case 정규화하는 곳이 없어서 그대로 비교). 다르게 가입하면 수동 연결 수단이
+     * 아직 없다 - 나중에 이슈가 되면 관리자 도구나 "초대 링크로 가입" 플로우를 추가할 것.
+     */
+    private void linkPendingCollaborations(String email, Long orgId) {
+        List<DppParticipant> participants = dppParticipantRepository.findByGuestEmailAndOrgIdIsNull(email);
+        for (DppParticipant participant : participants) {
+            participant.setOrgId(orgId);
+            dppParticipantRepository.save(participant);
+        }
+
+        List<Invitation> invitations = invitationRepository.findByInviteeEmailAndStatus(email, "SENT");
+        for (Invitation invitation : invitations) {
+            invitation.setStatus("ACCEPTED");
+            invitation.setAcceptedOrgId(orgId);
+            invitation.setAcceptedAt(OffsetDateTime.now());
+            invitationRepository.save(invitation);
+        }
+
+        if (!participants.isEmpty() || !invitations.isEmpty()) {
+            log.info("가입 이메일 {} 로 대기 중이던 협력사 초대 {}건, 참여 요청 {}건을 조직 {}에 연결했습니다.",
+                    email, invitations.size(), participants.size(), orgId);
+        }
     }
 }

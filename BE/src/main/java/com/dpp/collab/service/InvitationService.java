@@ -6,6 +6,10 @@ import com.dpp.collab.dto.InvitationDto;
 import com.dpp.collab.dto.SendInviteRequest;
 import com.dpp.collab.entity.Invitation;
 import com.dpp.collab.repository.InvitationRepository;
+import com.dpp.dpp.entity.Dpp;
+import com.dpp.dpp.entity.DppParticipant;
+import com.dpp.dpp.repository.DppParticipantRepository;
+import com.dpp.dpp.repository.DppQueryRepository;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
 import org.springframework.http.HttpStatus;
@@ -25,6 +29,11 @@ import java.util.UUID;
  * role_code는 invitation 테이블에 NOT NULL FK인데, 이 화면에는 역할 선택 UI가 없다(회사명·
  * 이메일·메시지만 입력) - 그래서 서버가 RAW_SUPPLIER(원자재 공급사)로 고정한다. 나중에
  * 역할 선택 UI가 생기면 SendInviteRequest에 roleCode 필드를 추가하고 이 상수는 없앨 것.
+ *
+ * V11__invitation_dpp_link.sql 이후로 초대는 항상 특정 DPP에 대한 것 - 보낼 때마다
+ * dpp_participant 행도 같이 만든다(guest_email만 채운 INVITED 상태). 이게
+ * v_dpp_missing_field(V2__functions.sql)가 "미충족 필드의 책임 주체"를 실제로 채워주는
+ * 유일한 소스라, 이 연결이 없으면 대시보드 미충족 필드에 담당자가 영원히 안 뜬다.
  */
 @Service
 public class InvitationService {
@@ -35,24 +44,31 @@ public class InvitationService {
     private final UserAccountRepository userAccountRepository;
     private final OrganizationRepository organizationRepository;
     private final InvitationRepository invitationRepository;
+    private final DppQueryRepository dppRepository;
+    private final DppParticipantRepository participantRepository;
     private final InviteMailSender mailSender;
 
     public InvitationService(UserAccountRepository userAccountRepository,
                               OrganizationRepository organizationRepository,
                               InvitationRepository invitationRepository,
+                              DppQueryRepository dppRepository,
+                              DppParticipantRepository participantRepository,
                               InviteMailSender mailSender) {
         this.userAccountRepository = userAccountRepository;
         this.organizationRepository = organizationRepository;
         this.invitationRepository = invitationRepository;
+        this.dppRepository = dppRepository;
+        this.participantRepository = participantRepository;
         this.mailSender = mailSender;
     }
 
     @Transactional(readOnly = true)
-    public List<InvitationDto> list(Long userId) {
+    public List<InvitationDto> list(Long userId, Long dppId) {
         Long orgId = resolveOrgId(userId);
-        return invitationRepository.findByInviterOrgIdOrderByCreatedAtDesc(orgId).stream()
-                .map(this::toDto)
-                .toList();
+        List<Invitation> invitations = dppId != null
+                ? invitationRepository.findByInviterOrgIdAndDppIdOrderByCreatedAtDesc(orgId, dppId)
+                : invitationRepository.findByInviterOrgIdOrderByCreatedAtDesc(orgId);
+        return invitations.stream().map(this::toDto).toList();
     }
 
     @Transactional
@@ -63,11 +79,20 @@ public class InvitationService {
         if (orgName.isEmpty() || email.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "협력사명과 이메일을 입력해 주세요.");
         }
+        if (request.dppId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "초대할 DPP를 선택해 주세요.");
+        }
+        Dpp dpp = dppRepository.findById(request.dppId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DPP를 찾을 수 없습니다."));
+        if (!orgId.equals(dpp.getOwnerOrgId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP에 접근할 권한이 없습니다.");
+        }
 
         Invitation invitation = new Invitation();
         invitation.setInviterOrgId(orgId);
         invitation.setInviteeOrgName(orgName);
         invitation.setInviteeEmail(email);
+        invitation.setDppId(dpp.getDppId());
         invitation.setRoleCode(DEFAULT_ROLE_CODE);
         invitation.setToken(UUID.randomUUID().toString());
         invitation.setStatus("SENT");
@@ -75,8 +100,26 @@ public class InvitationService {
         invitation.setCreatedBy(userId);
         invitation = invitationRepository.save(invitation);
 
+        upsertParticipant(dpp.getDppId(), email);
         sendMail(invitation, orgId);
         return toDto(invitation);
+    }
+
+    // 같은 협력사에 재발송(resend)해도 참여 행이 중복 생기지 않도록 (dpp_id, guest_email,
+    // role_code)로 먼저 찾아보고 없을 때만 새로 만든다.
+    private void upsertParticipant(Long dppId, String guestEmail) {
+        boolean exists = participantRepository
+                .findByDppIdAndGuestEmailAndRoleCode(dppId, guestEmail, DEFAULT_ROLE_CODE)
+                .isPresent();
+        if (exists) {
+            return;
+        }
+        DppParticipant participant = new DppParticipant();
+        participant.setDppId(dppId);
+        participant.setGuestEmail(guestEmail);
+        participant.setRoleCode(DEFAULT_ROLE_CODE);
+        participant.setSubmitStatus("INVITED");
+        participantRepository.save(participant);
     }
 
     @Transactional
@@ -124,7 +167,8 @@ public class InvitationService {
                 invitation.getInviteeEmail(),
                 invitation.getStatus(),
                 invitation.getCreatedAt().toLocalDate().toString(),
-                canResend
+                canResend,
+                invitation.getDppId()
         );
     }
 }

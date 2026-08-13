@@ -107,14 +107,28 @@ export default function AppView(v) {
     hazardSafe,
     inputTitle,
     inquiries,
-    inviteEmail,
-    inviteOrgName,
+    addInviteRow,
+    inviteRows,
+    inviteSendLabel,
     invitePending,
+    invitesEmpty,
     inviteRejected,
     inviteTotal,
     invites,
-    onInviteEmail,
-    onInviteOrgName,
+    partnerDpps,
+    partnerDppsEmpty,
+    partnersHasSelection,
+    partnersSelectedDppName,
+    participations,
+    participationsEmpty,
+    partnerAssignedHasSelection,
+    partnerAssignedBack,
+    partnerAssignedSelectedLabel,
+    partnerFields,
+    partnerFieldFilledCount,
+    partnerFieldTotalCount,
+    partnerSaveDraft,
+    scPartnerAssigned,
     isApp,
     isBatch,
     isLogin,
@@ -234,6 +248,7 @@ export default function AppView(v) {
     pickCustoms,
     pickEu,
     pickMaker,
+    pickPartner,
     products,
     profileBiz,
     profileEditOpen,
@@ -315,6 +330,7 @@ export default function AppView(v) {
     suRoleCustoms,
     suRoleEu,
     suRoleMaker,
+    suRolePartner,
     suVerified,
     suVerifyCode,
     submitSignup,
@@ -440,9 +456,10 @@ export default function AppView(v) {
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '20px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '30px 32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
                 <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#0B1B33' }}>계정 유형 <span style={{ fontWeight: '500', color: '#8494AC' }}>· 등록된 도메인이면 자동 선택, 아니면 직접 선택</span></span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '10px' }}>
                   <button onClick={pickAdmin} style={suRoleAdmin}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>관리자</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>플랫폼 운영·심사</span></button>
                   <button onClick={pickMaker} style={suRoleMaker}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>제조사</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>DPP 등록·발급</span></button>
+                  <button onClick={pickPartner} style={suRolePartner}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>협력사</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>원자재공급 등 제출</span></button>
                   <button onClick={pickCustoms} style={suRoleCustoms}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>세관</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>통관 적법성 검증</span></button>
                   <button onClick={pickEu} style={suRoleEu}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>시장감독기관</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>감사·레지스트리</span></button>
                 </div>
@@ -989,18 +1006,45 @@ export default function AppView(v) {
             <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>Tier 3 권한 · 하위 협력사 연동</span>
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>협력사 초대</h1>
           </div>
+
+          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <span style={{ fontSize: '15px', fontWeight: '600' }}>초대할 DPP 선택</span>
+            {partnerDppsEmpty ? (<>
+            <div style={{ padding: '18px 4px', fontSize: '13px', color: '#8494AC' }}>아직 발급한 DPP가 없습니다. 철강 데이터 입력에서 DPP를 먼저 임시저장해 주세요.</div>
+            </>) : null}
+            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '2px' }}>
+              {(partnerDpps || []).map((d, $index) => (<React.Fragment key={$index}>
+              <button onClick={d.select} style={d.cardStyle}>
+                <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: d.selected ? 'rgba(255,255,255,.8)' : '#8494AC' }}>{d.id}</span>
+                <span style={{ fontSize: '13.5px', fontWeight: '600' }}>{d.name}</span>
+                <span style={{ fontSize: '11.5px', color: d.selected ? 'rgba(255,255,255,.7)' : '#8494AC' }}>완성도 {d.pct}%</span>
+              </button>
+              </React.Fragment>))}
+            </div>
+          </div>
+
+          {partnersHasSelection ? (<>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '16px', alignItems: 'start' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <span style={{ fontSize: '15px', fontWeight: '600' }}>새 초대 보내기</span>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" value={inviteOrgName} onChange={onInviteOrgName} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" value={inviteEmail} onChange={onInviteEmail} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
+              <span style={{ fontSize: '15px', fontWeight: '600' }}>새 초대 보내기 · {partnersSelectedDppName}</span>
+              {(inviteRows || []).map((row, $index) => (<React.Fragment key={$index}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px', border: '1px solid rgba(16,32,64,.08)', borderRadius: '13px', background: '#FBFCFE' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#8494AC' }}>협력사 {$index + 1}</span>
+                  {row.canRemove ? (<button onClick={row.remove} style={{ border: '0', background: 'transparent', color: '#8494AC', fontSize: '12px', cursor: 'pointer' }}>삭제</button>) : null}
+                </div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" value={row.orgName} onChange={row.onOrgName} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" value={row.email} onChange={row.onEmail} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
+              </div>
+              </React.Fragment>))}
+              <button onClick={addInviteRow} style={{ height: '40px', border: '1px dashed rgba(0,69,169,.34)', borderRadius: '11px', background: 'rgba(0,69,169,.035)', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>+ 협력사 추가</button>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>메시지</span><textarea rows="3" placeholder="협력사에 전달할 안내 문구를 입력하세요." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical' }}></textarea></label>
-              <button onClick={sendInvite} style={{ height: '50px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>초대 발송</button>
+              <button onClick={sendInvite} style={{ height: '50px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>{inviteSendLabel}</button>
             </div>
 
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '15px', fontWeight: '600' }}>초대 이력</span>
+                <span style={{ fontSize: '15px', fontWeight: '600' }}>초대 이력 · {partnersSelectedDppName}</span>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#0B1B33', color: '#fff', fontSize: '12px', fontWeight: '600' }}>전체 {inviteTotal}</span>
                   <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>대기 {invitePending}</span>
@@ -1010,6 +1054,9 @@ export default function AppView(v) {
               <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr 70px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
                 <span>협력사 / 이메일</span><span>발송일</span><span>상태</span><span></span>
               </div>
+              {invitesEmpty ? (<>
+              <div style={{ padding: '30px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>이 DPP에 보낸 초대가 없습니다.</div>
+              </>) : null}
               {(invites || []).map((i, $index) => (<React.Fragment key={$index}>
               <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr 70px', gap: '12px', padding: '0 14px', height: '58px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
                 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{i.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{i.email}</span></span>
@@ -1020,6 +1067,7 @@ export default function AppView(v) {
               </React.Fragment>))}
             </div>
           </div>
+          </>) : null}
         </div>
         </>) : null}
 
@@ -1055,6 +1103,52 @@ export default function AppView(v) {
             </div>
             </React.Fragment>))}
           </div>
+        </div>
+        </>) : null}
+
+        {scPartnerAssigned ? (<>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+            <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>협력사 계정</span>
+            <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>참여 DPP</h1>
+          </div>
+
+          {partnerAssignedHasSelection ? (<>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <button onClick={partnerAssignedBack} style={{ alignSelf: 'flex-start', border: '0', background: 'transparent', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>← 목록으로</button>
+            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <span style={{ fontSize: '15px', fontWeight: '600' }}>{partnerAssignedSelectedLabel} · 담당 항목 입력</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                {(partnerFields || []).map((f, $index) => (<React.Fragment key={$index}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>{f.label}</span>
+                  <input placeholder={f.ph} value={f.value} onChange={f.onChange} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} />
+                  <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.hint}</span>
+                </label>
+                </React.Fragment>))}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '16px', borderTop: '1px solid rgba(16,32,64,.07)' }}>
+                <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{partnerFieldFilledCount} / {partnerFieldTotalCount}개 입력 완료</span>
+                <button onClick={partnerSaveDraft} style={{ height: '48px', padding: '0 24px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>제출</button>
+              </div>
+            </div>
+          </div>
+          </>) : (<>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {participationsEmpty ? (<>
+            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px' }}>아직 참여 요청받은 DPP가 없습니다. 초대 메일을 받은 이메일로 가입했는지 확인해 주세요.</div>
+            </>) : null}
+            {(participations || []).map((p, $index) => (<React.Fragment key={$index}>
+            <button onClick={p.open} style={p.cardStyle}>
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '15px', fontWeight: '600' }}>{p.label}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={p.statusDot}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>{p.statusLabel}</span></span>
+              </span>
+              <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{p.owner} · {p.roleLabel} 담당 · {p.filled}/{p.total}개 입력 · {p.pct}%</span>
+            </button>
+            </React.Fragment>))}
+          </div>
+          </>)}
         </div>
         </>) : null}
 

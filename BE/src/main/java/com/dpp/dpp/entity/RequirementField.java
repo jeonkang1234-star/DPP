@@ -58,6 +58,12 @@ public class RequirementField {
     @Column(name = "help_text", length = 500)
     private String helpText;
 
+    // 협력사(dpp_participant) 제출 권한 분기에 쓴다 - FieldFormService가 요청자가 DPP
+    // 소유 조직이 아니라 참여 협력사면 이 값이 자기 role_code와 같은 필드만 보여준다/
+    // 저장을 허용한다.
+    @Column(name = "responsible_role", length = 30)
+    private String responsibleRole;
+
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
