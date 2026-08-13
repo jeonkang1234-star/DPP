@@ -1,0 +1,6 @@
+# Windows에서 체크아웃해도 쉘 스크립트가 CRLF로 안 바뀌게 강제.
+# gradlew 셔뱅(#!/bin/sh)이 CRLF 때문에 깨져서 Docker 빌드가
+# "/bin/sh: 1: ./gradlew: not found"로 실패하는 문제 방지.
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+*.sh text eol=lf

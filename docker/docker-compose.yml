@@ -1,0 +1,93 @@
+# 저장소 경로: docker/docker-compose.yml (기존 파일 덮어쓰기)
+services:
+  postgres:
+    image: postgres:16
+    container_name: dpp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dpp
+      POSTGRES_USER: dpp
+      POSTGRES_PASSWORD: dpp
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dpp -d dpp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  parser:
+    build:
+      context: ../parser
+      dockerfile: Dockerfile
+    container_name: dpp-parser
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zkp:
+    build:
+      context: ../zkp-o1js
+      dockerfile: Dockerfile
+    container_name: dpp-zkp
+    restart: unless-stopped
+    # SteelMillCheck 컴파일이 기동 시 (환경에 따라) 최대 90초 가까이 걸려서
+    # healthcheck 시작을 넉넉히 늦춘다 (기존 30s/6회는 실제 환경에서 컴파일 도중에
+    # unhealthy로 판정돼버려서 늘림).
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  backend:
+    build:
+      context: ../BE
+      dockerfile: Dockerfile
+    container_name: dpp-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      parser:
+        condition: service_healthy
+      zkp:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dpp
+      SPRING_DATASOURCE_USERNAME: dpp
+      SPRING_DATASOURCE_PASSWORD: dpp
+      # BE/src/main/resources/application-local.yml (git 미포함, 로컬에만 존재)의 값을 읽게 함.
+      # JWT_SECRET, OAuth client-id/secret 등 실제 시크릿은 전부 그 파일 안에 있음.
+      SPRING_PROFILES_ACTIVE: local
+      DOCUMENT_PARSER_URL: http://parser:8000
+      DOCUMENT_ZKP_URL: http://zkp:4001
+    volumes:
+      # 업로드된 문서 원본. document.file_uri가 이 안의 경로를 가리킨다.
+      - ./document-uploads:/data/document-uploads
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ../FE
+      dockerfile: Dockerfile
+    container_name: dpp-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+# ─────────────────────────────────────────────
+# 시크릿은 docker-compose.yml에 직접 넣지 않고 BE/src/main/resources/application-local.yml
+# (git 미포함, .gitignore에 이미 제외돼있음)에 둔다. 이 파일은 Docker 빌드 컨텍스트에는
+# 포함되므로(로컬 디스크 기준 COPY) 이미지에는 반영되지만, git에는 절대 커밋되지 않는다.
+# 서버 배포 시에도 EC2에 이 파일을 직접 배치해야 SNS 로그인/JWT가 정상 동작한다.
+# ─────────────────────────────────────────────

@@ -1,0 +1,19 @@
+{
+  "name": "zkp_prototype",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test_all.mjs",
+    "check:logic": "node logic_only_check.mjs",
+    "check:analyze": "node analyze_check.mjs",
+    "start": "node server.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "o1js": "^2.15.0"
+  }
+}

@@ -1,0 +1,958 @@
+openapi: 3.0.3
+info:
+  title: DPP Platform API
+  version: 0.2.0
+  description: |
+    BE-FE API 계약. 도메인별 REQ 단위로 paths를 추가해 나갑니다.
+
+    이 초안은 FE(`FE/src/api/mockApi.js`)가 이미 소비하고 있는 데이터 형태를
+    `FE/src/mocks/data.json` 실제 값 기준으로 그대로 옮긴 것입니다. mock에서는
+    화면 코드가 `[a, b, c]` 같은 위치 기반 배열을 구조분해해서 쓰는 곳이 많은데,
+    이 스펙에서는 전부 이름 있는 필드(named object)로 바꿨습니다. 배열 순서가
+    바뀌면 화면이 조용히 깨지는 문제를 피하기 위함이며, 구현 시 FE 쪽
+    `mockApi.js` 함수 본문(및 그 값을 구조분해하는 viewModel 몇 곳)만
+    이 응답 형태에 맞게 살짝 고치면 됩니다. 화면(JSX) 자체는 손댈 필요 없습니다.
+
+    `accounts`(이메일→role) 는 mock 전용 로그인 흉내용 헬퍼라 실제 API에는
+    포함하지 않았습니다.
+
+    로그인은 두 갈래로 나뉩니다 (`UserAccount.credentialType` / V5 마이그레이션 기준).
+    PERSONAL 계정은 SNS 전용이라 비밀번호 로그인이 막혀 있고(`/auth/sns/*`, 기존 구현),
+    BUSINESS/ADMIN 계정은 이메일+비밀번호로 `/auth/login`을 씁니다. 두 로그인의 응답
+    스키마가 다른 이유도 이 구분 때문입니다 (`TokenResponse` vs `LoginResponse`).
+    steel/battery/textile/eu/customs 같은 세부 role은 조직(org) 테이블이 아직 없어
+    로그인 응답에 못 넣습니다 - rbac/mypage 패키지 구현 후 추가 예정입니다.
+servers:
+  - url: http://localhost:8080
+    description: local
+tags:
+  - name: Auth
+    description: 로그인/회원가입 (이메일 로그인 + 기존 SNS OAuth)
+  - name: Admin
+    description: IEUM 운영자 대시보드 (회원사/문의/앵커링/가입승인/Tier심사)
+  - name: Maker
+    description: 제조사(철강/배터리/섬유) 공통 - KPI, 작업큐, 제품, 입력폼
+  - name: DPP
+    description: 개별 DPP 상세 (라이프사이클, 미제출 항목)
+  - name: MarketSurveillance
+    description: 시장감시기관 - DPP 레지스트리 조회, 감사로그
+  - name: Customs
+    description: 세관 통관 검증
+  - name: Personal
+    description: 일반 소비자 - 제품여권(스캔) 조회
+  - name: Notifications
+    description: 알림
+
+paths:
+  # ────────────────────────────── Auth ──────────────────────────────
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: 이메일 + 비밀번호 로그인 (BUSINESS/ADMIN 계정 전용, PERSONAL은 400으로 거부)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: dh.kim@daesungsteel.co.kr
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: 로그인 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: PERSONAL 계정 또는 SNS 전용 계정으로 시도함
+        '401':
+          description: 이메일 또는 비밀번호 불일치
+        '403':
+          description: 정지/탈퇴 계정
+        '423':
+          description: 로그인 실패 횟수 초과로 잠긴 계정
+
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: 기업 회원가입 신청 (개인 회원은 /auth/sns/{provider}/login 으로 가입)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '201':
+          description: |
+            가입 신청 접수됨. 국세청 API 등으로 자동승인되면 approvalMode=auto,
+            바로 로그인 가능한 토큰을 내려주고, 아니면 manual 로 관리자 승인 대기 상태가 됨.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accountId: { type: string }
+                  approvalMode: { type: string, enum: [auto, manual] }
+                  auth:
+                    $ref: '#/components/schemas/LoginResponse'
+                    description: approvalMode=auto 일 때만 포함
+
+  /auth/sns/{provider}/login:
+    get:
+      tags: [Auth]
+      summary: SNS(카카오/구글/네이버) 인증 페이지로 리다이렉트 (PERSONAL 계정 전용)
+      description: 이미 구현됨 (BE/src/main/java/com/dpp/auth/controller/SnsAuthController.java). 문서화만 추가.
+      parameters:
+        - $ref: '#/components/parameters/SnsProvider'
+      responses:
+        '302':
+          description: 제공자 인증 페이지로 302 리다이렉트
+
+  /auth/sns/{provider}/callback:
+    get:
+      tags: [Auth]
+      summary: SNS 인증 콜백 - state 검증 후 토큰 발급 (최초 로그인 시 PERSONAL 계정 자동 생성)
+      description: 이미 구현됨.
+      parameters:
+        - $ref: '#/components/parameters/SnsProvider'
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+        - name: state
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 로그인 또는 최초가입 처리 후 토큰 반환
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  # ────────────────────────────── Admin ──────────────────────────────
+  /admin/members:
+    get:
+      tags: [Admin]
+      summary: 회원 기업 목록
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MemberCompany'
+
+  /admin/inquiries:
+    get:
+      tags: [Admin]
+      summary: 문의 유형별 처리 현황 (대시보드 차트)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InquiryCategory'
+
+  /admin/anchors:
+    get:
+      tags: [Admin]
+      summary: 일별 블록체인 앵커링 건수 (대시보드 스파크라인)
+      parameters:
+        - name: days
+          in: query
+          description: 조회할 최근 일수 (기본 16)
+          schema: { type: integer, default: 16 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AnchorPoint'
+
+  /admin/signup-approvals:
+    get:
+      tags: [Admin]
+      summary: 가입 승인 대기·완료 목록
+      parameters:
+        - name: mode
+          in: query
+          description: auto(자동승인 완료) / manual(수동승인 필요) 필터
+          schema: { type: string, enum: [all, auto, manual], default: all }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SignupApproval'
+
+  /admin/signup-approvals/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: 가입 신청 승인
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200': { description: 승인 처리됨 }
+
+  /admin/signup-approvals/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: 가입 신청 반려
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: 반려 처리 및 사유 발송됨 }
+
+  /admin/tier-reviews:
+    get:
+      tags: [Admin]
+      summary: Tier 심사 (자동심사 실패/완료) 목록
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [fail, pass], default: fail }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TierReview'
+
+  /admin/tier-reviews/{id}/approve:
+    post:
+      tags: [Admin]
+      summary: Tier 상향 승인
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200': { description: 승인됨 }
+
+  /admin/tier-reviews/{id}/hold:
+    post:
+      tags: [Admin]
+      summary: 자동심사 실패 사유 발송 + 보류 처리
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200': { description: 보류 처리됨 }
+
+  /admin/tier-reviews/{id}/reject:
+    post:
+      tags: [Admin]
+      summary: Tier 신청 반려
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200': { description: 반려됨 }
+
+  # ────────────────────────────── Maker ──────────────────────────────
+  /maker/{domain}/kpi:
+    get:
+      tags: [Maker]
+      summary: 도메인별 KPI 카드
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MakerKpi'
+
+  /maker/{domain}/queue:
+    get:
+      tags: [Maker]
+      summary: 처리 대기 작업 큐
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueueItem'
+
+  /maker/{domain}/products:
+    get:
+      tags: [Maker]
+      summary: 등록 제품(DPP) 목록
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+    post:
+      tags: [Maker]
+      summary: DPP 발급 (단건 또는 배치)
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                issueMode: { type: string, enum: [single, batch] }
+                fields:
+                  type: array
+                  description: field-sets 입력값 (label→value)
+                  items:
+                    type: object
+                    properties:
+                      label: { type: string }
+                      value: { type: string }
+      responses:
+        '201':
+          description: 발급 접수됨 (블록체인 앵커링 트리거)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Product'
+
+  /maker/{domain}/products/{id}:
+    delete:
+      tags: [Maker]
+      summary: 작성 중인 DPP 삭제 (발급 완료 건은 대신 폐기 신청으로 처리)
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '204': { description: 삭제됨 }
+        '409': { description: 이미 발급 완료된 DPP는 삭제 불가 - 폐기 신청 API 사용 }
+
+  /maker/{domain}/products/{id}/revoke:
+    post:
+      tags: [Maker]
+      summary: 발급 완료된 DPP 폐기(무효화) 신청
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '202': { description: "폐기 신청 접수, 관리자 승인 후 무효 처리" }
+
+  /maker/{domain}/input-meta:
+    get:
+      tags: [Maker]
+      summary: 데이터 입력 화면 메타 (문서 업로드 안내 문구 등)
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InputMeta'
+
+  /maker/{domain}/field-sets:
+    get:
+      tags: [Maker]
+      summary: 도메인별 입력 필드 정의 + 현재 값
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FieldItem'
+    put:
+      tags: [Maker]
+      summary: 입력 필드 값 저장 (임시저장)
+      parameters:
+        - $ref: '#/components/parameters/MakerDomain'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldItem'
+      responses:
+        '200': { description: 저장됨 }
+
+  # ────────────────────────────── DPP ──────────────────────────────
+  /dpp/{id}:
+    get:
+      tags: [DPP]
+      summary: 개별 DPP 상세 (라이프사이클 단계 + 미제출 항목)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DppDetail'
+        '404': { description: 해당 ID의 DPP 없음 }
+
+  # ────────────────────── MarketSurveillance ──────────────────────
+  /market-surveillance/registry:
+    get:
+      tags: [MarketSurveillance]
+      summary: DPP 레지스트리 조회
+      parameters:
+        - name: q
+          in: query
+          description: DPP ID / 제품코드 / 기업명 등 검색어
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RegistryEntry'
+
+  /market-surveillance/registry/export:
+    get:
+      tags: [MarketSurveillance]
+      summary: 조회 결과 CSV 내보내기
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: CSV 파일
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+
+  /market-surveillance/audit-log:
+    get:
+      tags: [MarketSurveillance]
+      summary: 전체 감사 로그 (발급/승인/열람/앵커링 등 전 행위 이력)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditLogEntry'
+
+  # ────────────────────────────── Customs ──────────────────────────────
+  /customs/items:
+    get:
+      tags: [Customs]
+      summary: 통관 검증 대상 목록
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CustomsItemSummary'
+
+  /customs/items/search:
+    get:
+      tags: [Customs]
+      summary: DPP ID / 신고번호 / EORI / 품명 / 수입업체명으로 단건 검색
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: 매칭된 통관 항목 상세
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomsItemDetail'
+        '404': { description: 검색 결과 없음 }
+
+  /customs/items/{id}:
+    get:
+      tags: [Customs]
+      summary: 통관 항목 상세 (적합성 체크리스트 포함)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomsItemDetail'
+
+  /customs/items/{id}/approve:
+    post:
+      tags: [Customs]
+      summary: 통관 승인 처리
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200': { description: 승인됨 }
+
+  /customs/items/{id}/hold:
+    post:
+      tags: [Customs]
+      summary: 통관 보류 + 수입업체 통보
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200': { description: 보류 처리 및 통보됨 }
+
+  /customs/clearance-log:
+    get:
+      tags: [Customs]
+      summary: 최근 통관 처리 이력
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClearanceLogEntry'
+
+  # ────────────────────────────── Personal ──────────────────────────────
+  /me/scans:
+    get:
+      tags: [Personal]
+      summary: 스캔(조회) 이력 - 제품 목록
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PassportSummary'
+
+  /me/passports/{id}:
+    get:
+      tags: [Personal]
+      summary: 제품 여권 상세 (공개 조회용)
+      parameters:
+        - $ref: '#/components/parameters/PathId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PassportDetail'
+        '404': { description: 존재하지 않거나 아직 발급되지 않은 DPP }
+
+  # ────────────────────────────── Notifications ──────────────────────────────
+  /notifications/categories:
+    get:
+      tags: [Notifications]
+      summary: 알림 카테고리 목록
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationCategory'
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: 알림 목록
+      parameters:
+        - name: category
+          in: query
+          description: notifications/categories 의 key 값. 생략 시 all
+          schema: { type: string, default: all }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+
+components:
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    SnsProvider:
+      name: provider
+      in: path
+      required: true
+      schema: { type: string, enum: [kakao, google, naver] }
+    MakerDomain:
+      name: domain
+      in: path
+      required: true
+      description: 제조 도메인
+      schema: { type: string, enum: [steel, battery, textile] }
+
+  schemas:
+    AccountType:
+      type: string
+      enum: [PERSONAL, BUSINESS, ADMIN]
+      description: |
+        UserAccount.accountType 그대로. steel/battery/textile/eu/customs 같은
+        세부 role은 아직 별도 컬럼/테이블이 없어 여기 포함하지 않음 (TODO: org 붙으면 추가).
+
+    TokenResponse:
+      type: object
+      description: SNS 로그인(/auth/sns/{provider}/callback) 응답. 기존 구현 그대로.
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        tokenType: { type: string, example: bearer }
+
+    LoginResponse:
+      type: object
+      description: 이메일+비밀번호 로그인(/auth/login) 응답.
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        tokenType: { type: string, example: bearer }
+        accountType:
+          $ref: '#/components/schemas/AccountType'
+        email: { type: string, format: email }
+        displayName: { type: string, nullable: true }
+
+    SignupRequest:
+      type: object
+      required: [accountType, email, password]
+      properties:
+        accountType: { type: string, enum: [company, personal], description: personal 은 사용하지 않음 - SNS로만 가입 }
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        companyName: { type: string, example: 태강특수강 }
+        businessRegNo: { type: string, example: "218-81-99012" }
+        country: { type: string, example: 대한민국 }
+        domain: { type: string, enum: [steel, battery, textile], description: accountType=company 일 때 }
+
+    MemberCompany:
+      type: object
+      description: mock members 예시-> ["대성제강","218-81-04471","2025-11-04","대한민국","철강","1,204","982","#0045A9","대"]
+      properties:
+        name: { type: string, example: 대성제강 }
+        businessRegNo: { type: string, example: "218-81-04471" }
+        joinedAt: { type: string, format: date, example: "2025-11-04" }
+        country: { type: string, example: 대한민국 }
+        industry: { type: string, example: 철강 }
+        dppHeldCount: { type: integer, example: 1204 }
+        dppIssuedCount: { type: integer, example: 982 }
+        colorHex: { type: string, example: "#0045A9" }
+        tier: { type: string, enum: [대, 중, 소] }
+
+    InquiryCategory:
+      type: object
+      description: 'mock 예시 -> ["계정·인증", 140, 34]'
+      properties:
+        category: { type: string, example: 계정·인증 }
+        resolvedCount: { type: integer, example: 140 }
+        pendingCount: { type: integer, example: 34 }
+
+    AnchorPoint:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        count: { type: integer, example: 42 }
+
+    SignupApproval:
+      type: object
+      description: 'mock 예시 -> ["태강특수강","대한민국","KR","218-81-99012","2026-07-30 08:12","auto","국세청 API","사업자등록증 외 2건"]'
+      properties:
+        id: { type: string }
+        companyName: { type: string, example: 태강특수강 }
+        country: { type: string, example: 대한민국 }
+        countryCode: { type: string, example: KR }
+        businessRegNo: { type: string, example: "218-81-99012" }
+        requestedAt: { type: string, format: date-time, example: "2026-07-30T08:12:00+09:00" }
+        approvalMode: { type: string, enum: [auto, manual] }
+        verificationRoute: { type: string, example: 국세청 API }
+        documentSummary: { type: string, example: 사업자등록증 외 2건 }
+
+    TierReview:
+      type: object
+      description: 'mock 예시 -> ["우진메탈","철강","Tier 3","fail","공급망 하위 업체 연동 동의서 3건 중 1건 미확인","2026-07-30 09:02","심사서류 5건"]'
+      properties:
+        id: { type: string }
+        companyName: { type: string, example: 우진메탈 }
+        domain: { type: string, example: 철강 }
+        requestedTier: { type: string, example: Tier 3 }
+        status: { type: string, enum: [fail, pass] }
+        reason: { type: string }
+        requestedAt: { type: string, format: date-time }
+        documentSummary: { type: string, example: 심사서류 5건 }
+
+    MakerKpi:
+      type: object
+      description: 'mock 예시 -> ["1,204", 86, 42, 24, 18, 78]'
+      properties:
+        totalIssued: { type: integer, example: 1204 }
+        newCount: { type: integer, example: 86 }
+        incompleteCount: { type: integer, example: 42 }
+        missingCount: { type: integer, example: 24 }
+        waitingCount: { type: integer, example: 18 }
+        avgCompletenessPct: { type: integer, example: 78 }
+
+    QueueItem:
+      type: object
+      description: 'mock 예시 -> ["D-1","ISO 14001 인증서 갱신본 첨부","DPP-KR-ST-2607-0138"]'
+      properties:
+        due: { type: string, example: D-1 }
+        task: { type: string }
+        target: { type: string }
+
+    Product:
+      type: object
+      description: 'mock 예시 -> ["DPP-KR-ST-2607-0142","열연코일 HR-SPHC 3.2t",100,0,0,"Heat H26-0817 · 12.4t"]'
+      properties:
+        id: { type: string, example: DPP-KR-ST-2607-0142 }
+        name: { type: string }
+        completePct: { type: integer, example: 100 }
+        inProgressPct: { type: integer, example: 0 }
+        missingPct: { type: integer, example: 0 }
+        spec: { type: string, example: "Heat H26-0817 · 12.4t" }
+
+    InputMeta:
+      type: object
+      properties:
+        title: { type: string }
+        uploadTitle: { type: string }
+        uploadHint: { type: string }
+        uploadedFileName: { type: string }
+        ocrFieldCount: { type: integer }
+        formTitle: { type: string }
+        fieldCount: { type: integer }
+
+    FieldItem:
+      type: object
+      description: 'mock 예시 -> ["강종","필수","SPHC","SPHC","KS D 3501 기준 강종 코드"]'
+      properties:
+        label: { type: string, example: 강종 }
+        required: { type: string, enum: [필수, 선택] }
+        placeholder: { type: string }
+        value: { type: string }
+        hint: { type: string }
+
+    LifecycleStage:
+      type: object
+      properties:
+        stage: { type: string, example: 원자재 조달 }
+        status: { type: string, enum: [완료, 진행중, 대기] }
+        detail: { type: string }
+
+    MissingField:
+      type: object
+      description: 'mock 예시 -> ["재생원료 비율 증명","우진메탈","데이터 입력자","#E03B3B"]'
+      properties:
+        field: { type: string }
+        owner: { type: string, description: 데이터 제출 책임 기업/부서 }
+        role: { type: string }
+        severityColorHex: { type: string }
+
+    DppDetail:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        completePct: { type: integer }
+        spec: { type: string }
+        lifecycle:
+          type: array
+          items: { $ref: '#/components/schemas/LifecycleStage' }
+        missingFields:
+          type: array
+          items: { $ref: '#/components/schemas/MissingField' }
+
+    RegistryEntry:
+      type: object
+      description: 'mock 예시 -> ["DPP-KR-ST-2607-0142","KRST-HRC-032","2026-07-24","11:04:22","열연코일 HR-SPHC 3.2t","대성제강","7208.39"]'
+      properties:
+        dppId: { type: string }
+        productCode: { type: string }
+        date: { type: string, format: date }
+        time: { type: string, example: "11:04:22" }
+        productName: { type: string }
+        company: { type: string }
+        hsCode: { type: string }
+
+    AuditLogEntry:
+      type: object
+      description: 'mock 예시 -> ["2026-07-30 07:41:12","대성제강 · 박지우","DPP 발급","DPP-KR-ST-2607-0142","성공","0x8a41…c92d"]'
+      properties:
+        at: { type: string, format: date-time }
+        actor: { type: string, example: "대성제강 · 박지우" }
+        action: { type: string, example: DPP 발급 }
+        target: { type: string }
+        result: { type: string, enum: [성공, 반려, 검증 실패] }
+        txHash: { type: string, example: "0x8a41...c92d" }
+
+    ComplianceCheck:
+      type: object
+      description: 'mock 예시 -> ["DPP 서명 검증", true, "블록체인 앵커 해시 일치"]'
+      properties:
+        label: { type: string }
+        ok: { type: boolean }
+        detail: { type: string }
+
+    CustomsItemSummary:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        importer: { type: string }
+        hs: { type: string }
+        declared: { type: string, description: 수입신고번호 }
+        pass: { type: boolean, description: 통관 요건 충족 여부 }
+
+    CustomsItemDetail:
+      allOf:
+        - $ref: '#/components/schemas/CustomsItemSummary'
+        - type: object
+          properties:
+            eori: { type: string }
+            importerAddr: { type: string }
+            exporter: { type: string }
+            hsName: { type: string }
+            qty: { type: string, example: "12.4 t" }
+            ce: { type: boolean }
+            ceNote: { type: string }
+            doc: { type: string, description: 적합성 선언서 파일명 }
+            tech: { type: string }
+            issued: { type: string, format: date }
+            updated: { type: string, format: date }
+            status: { type: string, enum: [유효, 정지, 만료] }
+            checks:
+              type: array
+              items: { $ref: '#/components/schemas/ComplianceCheck' }
+
+    ClearanceLogEntry:
+      type: object
+      description: 'mock 예시 -> ["2026-08-07 09:12","DPP-KR-ST-2607-0142","Nordwerk GmbH","7208.39","통관 가능","승인"]'
+      properties:
+        at: { type: string, format: date-time }
+        dppId: { type: string }
+        importer: { type: string }
+        hs: { type: string }
+        verdict: { type: string, enum: [통관 가능, 통관 보류] }
+        action: { type: string, enum: [승인, 보류] }
+
+    NameDetailPair:
+      type: object
+      description: care/parts/disposal 공통 형태. mock 예시 -> ["재가공 시 유의","절단 후 절단면 방청 처리를 권장합니다."]
+      properties:
+        title: { type: string }
+        detail: { type: string }
+
+    PassportSummary:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        brand: { type: string }
+        unverified: { type: boolean, description: true면 만료/미인증 표시 }
+
+    PassportDetail:
+      allOf:
+        - $ref: '#/components/schemas/PassportSummary'
+        - type: object
+          properties:
+            model: { type: string }
+            gtin: { type: string }
+            batch: { type: string }
+            origin: { type: string }
+            made: { type: string }
+            carbon: { type: string, example: "1,842" }
+            carbonUnit: { type: string, example: "kgCO₂e / t" }
+            recycledPct: { type: integer, example: 32 }
+            water: { type: string, example: "1.4" }
+            waterUnit: { type: string, example: "m³ / t" }
+            repairScore: { type: number, format: float, example: 8.5 }
+            care:
+              type: array
+              items: { $ref: '#/components/schemas/NameDetailPair' }
+            parts:
+              type: array
+              items: { $ref: '#/components/schemas/NameDetailPair' }
+            manual: { type: string, description: 수리 매뉴얼 파일명 }
+            hazard: { type: boolean }
+            hazardNote: { type: string }
+            disposal:
+              type: array
+              items: { $ref: '#/components/schemas/NameDetailPair' }
+            takeback: { type: string, description: 제조사 회수 프로그램명 }
+
+    NotificationCategory:
+      type: object
+      description: 'mock 예시 -> ["zkp","ZKP"]'
+      properties:
+        key: { type: string }
+        label: { type: string }
+
+    Notification:
+      type: object
+      description: 'mock notifications + notificationColors 를 합친 형태 (실API에서는 색상을 프론트가 key로 다시 찾지 않고 서버가 바로 내려줌)'
+      properties:
+        key: { type: string, example: zkp }
+        category: { type: string, example: ZKP }
+        title: { type: string }
+        body: { type: string }
+        at: { type: string, example: 2분 전 }
+        actionLabel: { type: string, nullable: true }
+        colorHex: { type: string, example: "#0045A9" }

@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: dpp-platform
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/dpp}
+    username: ${SPRING_DATASOURCE_USERNAME:dpp}
+    password: ${SPRING_DATASOURCE_PASSWORD:dpp}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 5
+  servlet:
+    multipart:
+      # 성적서 PDF가 기본 1MB 제한에 걸리는 경우가 있어서 넉넉히 올려둠.
+      max-file-size: 20MB
+      max-request-size: 20MB
+  # app.mail.enabled=true 로 켤 때만 실제로 쓰인다. 값은 application-local.yml에만 채울 것.
+  mail:
+    host: ""
+    port: 587
+    username: ""
+    password: ""
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+server:
+  port: 8080
+  error:
+    # ResponseStatusException(reason=...)에 담은 한글 메시지를 FE가 그대로 보여줄 수 있게 노출.
+    # (기본값 never라 지금까지는 {"status":400,"error":"Bad Request"}만 내려가고 이유가 잘렸었음)
+    include-message: always
+    include-binding-errors: always
+jwt:
+  secret: "${JWT_SECRET:change-me-in-application-local-yml}"
+  access-token-expiration-ms: 3600000
+  refresh-token-expiration-ms: 1209600000
+# 카카오/구글/네이버 개발자 콘솔에서 발급받은 값으로 채우세요.
+# 실제 값은 BE/src/main/resources/application-local.yml (git 미포함, SPRING_PROFILES_ACTIVE=local일 때만 읽힘)에 채웁니다.
+#
+# redirect-uri를 8080이 아니라 80(nginx)으로 잡은 이유: 일부 로컬 환경에서 호스트 8080
+# 포트 바인딩이 간헐적으로 끊기는 문제가 있었음. nginx(80)가 /auth/를 컨테이너 내부망으로
+# 프록시해주므로 이 경로가 더 안정적이고, 실제 배포 환경(nginx 동일 출처)과도 일치함.
+# 그래서 각 SNS 개발자 콘솔에도 redirect-uri를 아래 값 그대로(포트 없이) 등록해야 함.
+oauth:
+  kakao:
+    client-id: "${OAUTH_KAKAO_CLIENT_ID:}"
+    client-secret: "${OAUTH_KAKAO_CLIENT_SECRET:}"
+    redirect-uri: http://localhost/auth/sns/kakao/callback
+  google:
+    client-id: "${OAUTH_GOOGLE_CLIENT_ID:}"
+    client-secret: "${OAUTH_GOOGLE_CLIENT_SECRET:}"
+    redirect-uri: http://localhost/auth/sns/google/callback
+  naver:
+    client-id: "${OAUTH_NAVER_CLIENT_ID:}"
+    client-secret: "${OAUTH_NAVER_CLIENT_SECRET:}"
+    redirect-uri: http://localhost/auth/sns/naver/callback
+# 회원가입 이메일 인증코드 발송. 기본은 false라 콘솔 로그로만 찍힌다(ConsoleSignupMailSender).
+# 실제 SMTP로 보내려면 true로 바꾸고 위 spring.mail.* 값을 application-local.yml에 채우세요.
+app:
+  mail:
+    enabled: false
+    from: no-reply@ieum.io
+  # 회원가입 전화번호 인증코드 발송. 기본은 false라 콘솔 로그로만 찍힌다(ConsoleSignupSmsSender).
+  # 실제 SMS로 보내려면 true로 바꾸고 아래 ncp.sens.* 값을 application-local.yml에 채우세요.
+  # (네이버클라우드 콘솔에서 발신번호 사전등록·심사 승인이 끝나야 실제 발송이 됩니다.)
+  sms:
+    enabled: false
+# 네이버클라우드 플랫폼 SENS(SMS) 설정. 콘솔: console.ncloud.com > Simple & Easy Notification Service
+# service-id: SENS 프로젝트 생성 시 발급되는 서비스 ID
+# access-key / secret-key: 마이페이지 > 인증키 관리에서 발급
+# sender-phone: 사전등록·심사 승인된 발신번호 (하이픈 없이, 예: 0212345678)
+# 실제 값은 application-local.yml에만 채우세요.
+ncp:
+  sens:
+    service-id: ""
+    access-key: ""
+    secret-key: ""
+    sender-phone: ""
+# 문서 파싱(parser, FastAPI)/증명 생성(zkp-o1js) 서비스 연동. docker-compose의
+# DOCUMENT_PARSER_URL/DOCUMENT_ZKP_URL 환경변수로 덮어씀 - 로컬(비-docker) 실행 시엔
+# 기본값(localhost)이 쓰인다.
+document:
+  parser-url: "${DOCUMENT_PARSER_URL:http://localhost:8000}"
+  zkp-url: "${DOCUMENT_ZKP_URL:http://localhost:4001}"
+  upload-dir: "${DOCUMENT_UPLOAD_DIR:/data/document-uploads}"
+# Hyperledger Fabric 체인코드(dpp-ledger-chaincode) 연동. 기본은 꺼져 있음(enabled=false) -
+# 로컬 개발 환경엔 Fabric 네트워크가 없기 때문. EC2(docker-compose.blockchain.yml 오버레이)에서만
+# BLOCKCHAIN_ENABLED=true + 나머지 실제 값을 채운다.
+blockchain:
+  enabled: "${BLOCKCHAIN_ENABLED:false}"
+  peer-endpoint: "${BLOCKCHAIN_PEER_ENDPOINT:localhost:7051}"
+  peer-hostname-override: "${BLOCKCHAIN_PEER_HOSTNAME_OVERRIDE:peer0.org1.example.com}"
+  msp-id: "${BLOCKCHAIN_MSP_ID:Org1MSP}"
+  channel-name: "${BLOCKCHAIN_CHANNEL_NAME:dppchannel}"
+  chaincode-name: "${BLOCKCHAIN_CHAINCODE_NAME:dpp-ledger-chaincode}"
+  tls-cert-path: "${BLOCKCHAIN_TLS_CERT_PATH:/fabric-identity/peer-tls-ca.pem}"
+  cert-path: "${BLOCKCHAIN_CERT_PATH:/fabric-identity/admin-cert.pem}"
+  key-path: "${BLOCKCHAIN_KEY_PATH:/fabric-identity/admin-key.pem}"
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+  health:
+    # spring.mail.host가 비어있어도 스타터가 클래스패스에 있으면 Actuator가
+    # 자동으로 메일 서버 연결 헬스체크를 만든다. app.mail.enabled=false인 동안은
+    # 이 체크가 항상 실패해서 전체 /actuator/health를 DOWN으로 만들어버리므로 꺼둔다.
+    mail:
+      enabled: false

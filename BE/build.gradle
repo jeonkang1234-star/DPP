@@ -1,0 +1,51 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.3.0'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+group = 'com.dpp'
+version = '0.0.1-SNAPSHOT'
+java {
+    sourceCompatibility = '17'
+}
+repositories {
+    mavenCentral()
+}
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    // com.dpp.document의 RestClient(Spring 6.1)가 내부적으로 reactive-streams 타입을
+    // 참조한다 - spring-boot-starter-webflux를 안 써서 이게 클래스패스에 없으면
+    // NoClassDefFoundError: org/reactivestreams/Publisher 로 죽는다.
+    implementation 'io.projectreactor:reactor-core'
+    // com.dpp.blockchain의 Fabric Gateway 클라이언트 - 체인코드(dpp-ledger-chaincode) 호출용.
+    // Gateway 서비스가 peer 쪽에서 엔도스먼트 수집·주문·커밋을 대신 처리해줘서
+    // 옛 fabric-sdk-java보다 훨씬 간단하다 (Fabric 2.4+ peer 필요, 우리 test-network는 2.5.16).
+    implementation 'org.hyperledger.fabric:fabric-gateway:1.7.0'
+    // fabric-gateway가 쓰는 grpc-api 구현체(전송 계층)를 직접 안 넣으면 ServiceLoader가
+    // 채널을 못 만든다 - grpc-netty-shaded로 지정.
+    implementation 'io.grpc:grpc-netty-shaded:1.68.0'
+    // fabric-protos(0.3.4)가 CVE-2024-7254 회피용으로 protobuf-java를 4.28.2로 강제하는데,
+    // 이 프로젝트의 다른 의존성들이 더 낮은 protobuf-java를 끌어오면서 클래스패스에서
+    // 충돌 - 런타임에 NoClassDefFoundError: RuntimeVersion$RuntimeDomain 로 죽었다.
+    // protobuf-bom을 platform으로 명시해서 전체 그래프의 protobuf-java 버전을 강제 정렬.
+    implementation platform('com.google.protobuf:protobuf-bom:4.28.2')
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    runtimeOnly 'org.postgresql:postgresql'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+}
+tasks.named('test') {
+    useJUnitPlatform()
+}
