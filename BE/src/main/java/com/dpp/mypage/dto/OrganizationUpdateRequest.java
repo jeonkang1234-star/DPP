@@ -18,6 +18,7 @@ import jakarta.validation.constraints.Size;
 public record OrganizationUpdateRequest(
         @Size(max = 200) String orgName,
         String orgType,
+        @Size(max = 300) String websiteUrl,
         @Size(max = 20) String leiCode,
         @Size(max = 20) String eoriCode,
         @Size(max = 50) String uoi,

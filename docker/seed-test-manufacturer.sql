@@ -1,5 +1,18 @@
 -- 수동 실행용 테스트 시드 - Flyway 마이그레이션 아님, db/migration에 넣지 말 것.
--- 실행: docker exec -i dpp-postgres psql -U dpp -d dpp < docker/seed-test-manufacturer.sql
+--
+-- *** 실행은 반드시 아래 방법으로만 (docker/ 디렉터리에서) ***
+--   docker cp seed-test-manufacturer.sql dpp-postgres:/tmp/seed-test-manufacturer.sql
+--   docker exec -i dpp-postgres psql -U dpp -d dpp -f /tmp/seed-test-manufacturer.sql
+--
+-- *** 절대 이렇게 실행하지 말 것 (Windows PowerShell에서 한글이 깨져서 DB에 들어감): ***
+--   Get-Content seed-test-manufacturer.sql | docker exec -i dpp-postgres psql -U dpp -d dpp
+--   docker exec -i dpp-postgres psql -U dpp -d dpp < seed-test-manufacturer.sql   (PowerShell엔 < 리다이렉션 자체가 없음)
+-- 이유: PowerShell이 파이프로 외부 프로세스(docker)에 텍스트를 넘길 때 콘솔 코드페이지
+-- (한국어 Windows 기본 cp949)로 재인코딩한다 - UTF-8 한글이 이 과정에서 깨져서 DB에
+-- "?????" 같은 문자로 그대로 저장돼버린다(2026-08-13, org_name/display_name/model_name
+-- 전부 이렇게 깨진 걸 확인 - 매번 UPDATE로 땜질하지 말고 애초에 이 방법으로 넣을 것).
+-- `docker cp` + `psql -f`는 컨테이너 내부 파일시스템에서 직접 읽기 때문에 PowerShell
+-- 콘솔 인코딩을 아예 거치지 않아 안전하다.
 --
 -- 로그인: POST /auth/login  { "email": "steel-test@daesungsteel.test", "password": "Steel1234!" }
 --

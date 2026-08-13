@@ -84,6 +84,7 @@ export default function AppView(v) {
     ecoWater,
     ecoWaterUnit,
     editBiz,
+    editBizReadOnly,
     editName,
     editPhone,
     editUrl,
@@ -1743,7 +1744,7 @@ export default function AppView(v) {
           </div>
           <div style={{ padding: '24px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>회사명</span><input value={editName} onChange={onEditName} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>사업자등록번호</span><input value={editBiz} onChange={onEditBiz} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>사업자등록번호</span><input value={editBiz} onChange={onEditBiz} disabled={editBizReadOnly} title={editBizReadOnly ? '사업자등록번호는 가입 시 확정되며 여기서 변경할 수 없습니다.' : undefined} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace', background: editBizReadOnly ? '#F7F9FD' : '#fff', color: editBizReadOnly ? '#8494AC' : 'inherit' }} /></label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>대표번호</span><input value={editPhone} onChange={onEditPhone} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>홈페이지 URL <span style={{ fontWeight: '500', color: '#9AA8BE' }}>(선택)</span></span><input value={editUrl} onChange={onEditUrl} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
           </div>

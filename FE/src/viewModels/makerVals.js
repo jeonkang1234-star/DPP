@@ -1,4 +1,5 @@
 import React from 'react';
+import { updateOrganization } from '../api/meApi.js';
 
 /**
  * Builds the view-model slice consumed by AppView.
@@ -136,7 +137,8 @@ export function makerVals(ctx) {
     }),
     myBiz: { steel: '218-81-04471', battery: '124-86-77203', textile: '312-81-55910' }[r] || '',
     myUrl: { steel: 'https://daesungsteel.co.kr', battery: 'https://lumencell.co.kr', textile: 'https://aratex.co.kr' }[r] || '',
-    myTier: r === 'steel' ? 'Tier 3' : 'Tier 2',
+    // ctx.orgData(GET /me/organization)가 로드됐으면 실제 tier_level, 아니면 기존 역할별 자리표시자.
+    myTier: ctx.orgData ? ('Tier ' + ctx.orgData.tierLevel) : (r === 'steel' ? 'Tier 3' : 'Tier 2'),
     myTierName: r === 'steel' ? '엔터프라이즈 / Full DPP' : '표준 / 검증 등록',
     myTierDesc: r === 'steel' ? '공급망 하위 업체를 초대해 전체 추적망을 연동할 수 있습니다.' : '제3자 인증서 기반 검증 등록이 가능합니다. Tier 3 신청 시 하위 협력사 연동이 열립니다.',
     requestTier: () => ctx.say('상위 Tier 신청서를 제출했습니다. 자동심사 진행 중입니다.'),
@@ -155,19 +157,33 @@ export function makerVals(ctx) {
       dot: ctx.pillDot(status === '승인' ? '#12A150' : '#E3A008'),
       view: () => setState({ docPreview: { name, meta, status } })
     })),
-    profileName: state.profile ? state.profile.name : p.ws,
-    profileBiz: state.profile ? state.profile.biz : ({ steel: '218-81-04471', battery: '124-86-77203', textile: '312-81-55910' }[r] || ''),
-    profilePhone: state.profile ? state.profile.phone : '02-3480-1200',
-    profileUrl: state.profile ? state.profile.url : ({ steel: 'https://daesungsteel.co.kr', battery: 'https://lumencell.co.kr', textile: 'https://aratex.co.kr' }[r] || ''),
+    // ctx.orgData(GET /me/organization 실 데이터)가 있으면 그걸 우선 쓰고, 없으면(org_id
+    // 없는 계정 등) 기존 역할별 목데이터로 폴백한다. state.profile은 로그아웃 전까지 남는
+    // 로컬 수정 이력(orgData 없을 때만 의미 있음) - orgData가 생긴 뒤로는 안 쓴다.
+    profileName: ctx.orgData ? ctx.orgData.orgName : (state.profile ? state.profile.name : p.ws),
+    profileBiz: ctx.orgData ? ctx.orgData.bizRegNo : (state.profile ? state.profile.biz : ({ steel: '218-81-04471', battery: '124-86-77203', textile: '312-81-55910' }[r] || '')),
+    profilePhone: ctx.orgData ? (ctx.orgData.contactPhone || '미입력') : (state.profile ? state.profile.phone : '02-3480-1200'),
+    profileUrl: ctx.orgData ? (ctx.orgData.websiteUrl || '') : (state.profile ? state.profile.url : ({ steel: 'https://daesungsteel.co.kr', battery: 'https://lumencell.co.kr', textile: 'https://aratex.co.kr' }[r] || '')),
     openProfileEdit: () => setState({
-      profileEdit: state.profile || {
-        name: p.ws,
-        biz: { steel: '218-81-04471', battery: '124-86-77203', textile: '312-81-55910' }[r] || '',
-        phone: '02-3480-1200',
-        url: { steel: 'https://daesungsteel.co.kr', battery: 'https://lumencell.co.kr', textile: 'https://aratex.co.kr' }[r] || ''
-      }
+      profileEdit: ctx.orgData
+        ? {
+            name: ctx.orgData.orgName,
+            biz: ctx.orgData.bizRegNo || '',
+            phone: ctx.orgData.contactPhone || '',
+            url: ctx.orgData.websiteUrl || ''
+          }
+        : (state.profile || {
+            name: p.ws,
+            biz: { steel: '218-81-04471', battery: '124-86-77203', textile: '312-81-55910' }[r] || '',
+            phone: '02-3480-1200',
+            url: { steel: 'https://daesungsteel.co.kr', battery: 'https://lumencell.co.kr', textile: 'https://aratex.co.kr' }[r] || ''
+          })
     }),
     profileEditOpen: !!state.profileEdit,
+    // 사업자등록번호는 편집 UI에는 보이되(참고용) 입력 자체를 막는다 - 백엔드도 이 값을
+    // PUT /me/organization으로 안 받는다(가입 시 확정, 국세청 연동 재심사 필요 - 화면에
+    // 이미 있는 안내문구와 일치).
+    editBizReadOnly: !!ctx.orgData,
     editName: state.profileEdit && state.profileEdit.name,
     editBiz: state.profileEdit && state.profileEdit.biz,
     editPhone: state.profileEdit && state.profileEdit.phone,
@@ -177,9 +193,26 @@ export function makerVals(ctx) {
     onEditPhone: e => setState(s => ({ profileEdit: { ...s.profileEdit, phone: e.target.value } })),
     onEditUrl: e => setState(s => ({ profileEdit: { ...s.profileEdit, url: e.target.value } })),
     cancelProfileEdit: () => setState({ profileEdit: null }),
-    commitProfileEdit: () => {
-      setState(s => ({ profile: s.profileEdit, profileEdit: null }));
-      ctx.say('기업 기본정보를 저장했습니다.');
+    commitProfileEdit: async () => {
+      const edit = state.profileEdit;
+      if (!ctx.orgData) {
+        // 소속 조직이 없는 계정(org_id NULL) - 저장할 백엔드 리소스가 없어 로컬에만 남긴다.
+        setState({ profile: edit, profileEdit: null });
+        ctx.say('기업 기본정보를 저장했습니다.');
+        return;
+      }
+      try {
+        const updated = await updateOrganization({
+          orgName: edit.name,
+          contactPhone: edit.phone,
+          websiteUrl: edit.url
+        });
+        ctx.setOrgData(updated);
+        setState({ profileEdit: null });
+        ctx.say('기업 기본정보를 저장했습니다.');
+      } catch (e) {
+        ctx.say(e.message || '기업 정보를 저장하지 못했습니다.');
+      }
     }
   };
 }
