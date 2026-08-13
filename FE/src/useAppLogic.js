@@ -11,7 +11,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation } from './api/meApi.js';
 import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
 import { passportVals } from './viewModels/passportVals.js';
@@ -83,7 +83,13 @@ export function useAppLogic(userProps) {
   const [meData, setMeData] = useState(null);
   const [orgData, setOrgData] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
+  // "강재 기본 정보" 입력 폼(GET/POST /me/field-form*). requirement_field 시딩이 STEEL
+  // 도메인만 있어서(V4__seed_requirement_steel.sql - battery/textile 시딩 없음) 철강
+  // 역할에서만 실데이터로 불러온다 - 그 외 역할은 기존 목데이터 폼 그대로 유지.
+  const [fieldFormData, setFieldFormData] = useState(null);
+  const [fieldFormInputs, setFieldFormInputs] = useState({});
   const [scansData, setScansData] = useState([]);
+  const [invitesData, setInvitesData] = useState([]);
   const [notifCatsData, setNotifCatsData] = useState([]);
   const [notifsData, setNotifsData] = useState([]);
 
@@ -146,11 +152,34 @@ export function useAppLogic(userProps) {
     fetchOrganization().then((res) => { if (alive) setOrgData(res); }).catch(() => {});
     fetchDashboard().then((res) => { if (alive) setDashboardData(res); }).catch(() => {});
     fetchScans().then((res) => { if (alive) setScansData(res || []); }).catch(() => {});
+    fetchInvitations().then((res) => { if (alive) setInvitesData(res || []); }).catch(() => {});
     fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
+
+  /**
+   * "강재 기본 정보" 입력 폼 - 철강 역할이 입력 탭에 들어갈 때마다(재입장 포함) 최신값을
+   * 다시 불러온다. dppId는 한 번 만들어지면 state에 남아서(fieldFormDppId) 이후 임시저장은
+   * 계속 같은 DPP를 갱신한다 - 저장할 때마다 새 DPP가 생기지 않도록.
+   */
+  useEffect(() => {
+    if (state.view !== 'app' || state.role !== 'steel' || state.tab !== 'input') return;
+    const session = loadSession();
+    if (!session?.accessToken) return;
+    let alive = true;
+    fetchFieldForm(state.fieldFormDppId || undefined)
+      .then((res) => {
+        if (!alive) return;
+        setFieldFormData(res);
+        setFieldFormInputs(Object.fromEntries((res.fields || []).map(f => [f.fieldCode, f.value || ''])));
+        if (res.dppId && res.dppId !== state.fieldFormDppId) setState({ fieldFormDppId: res.dppId });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.view, state.role, state.tab]);
 
   /* URL → 상태 */
   useEffect(() => {
@@ -218,6 +247,8 @@ export function useAppLogic(userProps) {
 
   /** 로그아웃 시 앱 내부 상태를 초기값으로 되돌립니다 (URL 이동은 MyPage 가 담당). */
   function resetSession() {
+    setFieldFormData(null);
+    setFieldFormInputs({});
     setState({
       view: 'login', role: props.startRole || 'steel', tab: 'dash',
       loginTab: 'company', suTab: 'company', suRole: 'maker',
@@ -229,7 +260,7 @@ export function useAppLogic(userProps) {
       notifOpen: false, dppOpen: false, dppId: null, pubId: null,
       customsSearched: false, customsQuery: '',
       removedScans: [], removedProducts: [],
-      registered: {}, confirm: null, toast: ''
+      registered: {}, confirm: null, toast: '', fieldFormDppId: null
     });
   }
 
@@ -558,6 +589,9 @@ export function useAppLogic(userProps) {
     state, setState, props,
     data,
     meData, orgData, setOrgData, dashboardData, scansData, notifCatsData, notifsData, fmtRelative,
+    fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
+    saveFieldFormDraft, issueFieldFormDpp,
+    invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate,
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,

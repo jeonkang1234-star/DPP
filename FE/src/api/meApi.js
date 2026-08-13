@@ -85,6 +85,42 @@ export function fetchDashboard() {
   return authedFetch('/me/dashboard');
 }
 
+/**
+ * "강재 기본 정보" 입력 폼 - requirement_field 기준정보 + 저장된 값(dpp_field_value).
+ * dppId를 안 주면 아직 저장 전인 새 폼(fields[].value가 전부 null)이 온다.
+ */
+export function fetchFieldForm(dppId) {
+  return authedFetch(dppId ? `/me/field-form?dppId=${dppId}` : '/me/field-form');
+}
+
+/** 임시저장 - dppId가 없으면(첫 저장) 서버가 새 product_model/dpp를 만들고 dppId를 내려준다. */
+export function saveFieldFormDraft(dppId, values) {
+  return authedFetch('/me/field-form/draft', {
+    method: 'POST',
+    body: JSON.stringify({ dppId: dppId || null, domain: 'STEEL', values }),
+  });
+}
+
+/** DPP 발급 제출 - status를 PENDING으로 바꾸고 issued_at을 찍는다(블록체인 앵커링은 별도 문서 업로드 플로우의 몫). */
+export function issueFieldFormDpp(dppId) {
+  return authedFetch(`/me/field-form/${dppId}/issue`, { method: 'POST' });
+}
+
+/** 협력사 초대 이력. status는 SENT/ACCEPTED/EXPIRED/REVOKED/REJECTED 원문 그대로 온다. */
+export function fetchInvitations() {
+  return authedFetch('/me/invitations');
+}
+
+/** 협력사 초대 발송. */
+export function sendInvitation(orgName, email) {
+  return authedFetch('/me/invitations', { method: 'POST', body: JSON.stringify({ orgName, email }) });
+}
+
+/** 초대 재발송 - 이미 수락(ACCEPTED)된 초대는 백엔드가 400으로 거부한다. */
+export function resendInvitation(invitationId) {
+  return authedFetch(`/me/invitations/${invitationId}/resend`, { method: 'POST' });
+}
+
 /** 알림 카테고리 목록: [{key, label}] */
 export function fetchNotificationCategories() {
   return authedFetch('/notifications/categories');

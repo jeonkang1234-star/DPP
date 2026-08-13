@@ -99,7 +99,9 @@ public class DashboardService {
                     dpp.getLifecycleStage(),
                     rate,
                     counts[0],
-                    counts[1]
+                    counts[1],
+                    dpp.getSerialNumber(),
+                    dpp.getIssuedAt() != null ? dpp.getIssuedAt().toLocalDate().toString() : null
             ));
             completenessSum += rate;
             if (rate < 100.0) {

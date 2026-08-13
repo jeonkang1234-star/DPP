@@ -43,6 +43,17 @@ public interface DppQueryRepository extends JpaRepository<Dpp, Long> {
     Object[] findCompletenessCounts(@Param("dppId") Long dppId);
 
     /**
+     * findCompletenessCounts와 같은 이유(주석 참고)로 status/completeness까지 한 번에
+     * 스칼라 프로젝션으로 읽는다 - FieldFormService가 recalcCompleteness() 직후 같은
+     * 트랜잭션 안에서 최신값을 돌려줘야 하는데, 이미 로드된 Dpp 엔티티를 그대로 쓰면
+     * 1차 캐시에 걸려 recalc 이전 값이 보인다. Object[] 순서: status, completeness,
+     * filled_count, required_count.
+     */
+    @Query(value = "SELECT status, completeness, filled_count, required_count FROM dpp WHERE dpp_id = :dppId",
+            nativeQuery = true)
+    Object[] findStatusAndCompleteness(@Param("dppId") Long dppId);
+
+    /**
      * V2__functions.sql의 v_dpp_missing_field 뷰(필수인데 미충족인 필드 + 책임 주체) 조회.
      * "대기작업 큐"의 실제 데이터 소스 - notification 테이블은 아직 아무것도 안 쓰고 있고
      * (com.dpp.notify 조사 결과 write 경로 없음) 개념적으로도 이 큐 항목과는 다른 대상이라

@@ -53,6 +53,12 @@ public class Dpp {
     @Column(name = "domain", nullable = false, length = 20)
     private String domain;
 
+    @Column(name = "serial_number", length = 100)
+    private String serialNumber;
+
+    @Column(name = "issued_at")
+    private OffsetDateTime issuedAt;
+
     @Column(name = "lifecycle_stage", nullable = false)
     private short lifecycleStage = 1;
 

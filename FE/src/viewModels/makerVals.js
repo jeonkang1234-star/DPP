@@ -29,6 +29,13 @@ export function makerVals(ctx) {
   const inputMeta = data.makerInputMeta[r] || {};
   const fieldSets = data.makerFieldSets[r] || [];
   const isBatch = state.issueMode === 'batch';
+  // "강재 기본 정보" 입력 폼 실데이터 - requirement_field 시딩이 STEEL 도메인만 있어서
+  // (battery/textile은 seed 자체가 없음) 철강 역할에서만 GET /me/field-form로 대체한다.
+  // 그 외 역할은 여전히 기존 목데이터 폼("SPHC" 같은 예시값 포함) - 실 규정 필드가
+  // 시딩되기 전까지는 정직하게 흉내낼 수도, 비워둘 수도 없어 손대지 않았다.
+  const ff = (r === 'steel') ? ctx.fieldFormData : null;
+  const ffInputs = ctx.fieldFormInputs || {};
+  const ffFilledCount = ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0;
   return {
     kpiTotal: dash ? String(dash.totalCount) : kpi[0],
     // "이번 달 신규"/"서류 대기"는 실데이터 쪽에 대응하는 집계가 없다(생성일 기준 집계도,
@@ -57,32 +64,83 @@ export function makerVals(ctx) {
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
     inputTitle: inputMeta.title, uploadTitle: inputMeta.upload, uploadHint: inputMeta.hint,
-    uploadedName: inputMeta.file, ocrCount: inputMeta.ocr, formTitle: inputMeta.form, fieldCount: inputMeta.count,
+    uploadedName: inputMeta.file, ocrCount: inputMeta.ocr, formTitle: inputMeta.form,
+    fieldCount: ff ? ff.fields.filter(f => f.required).length : inputMeta.count,
     isBatch,
     singleBtn: ctx.pill(!isBatch), batchBtn: ctx.pill(isBatch),
     setSingle: () => setState({ issueMode: 'single' }),
     setBatch: () => setState({ issueMode: 'batch' }),
     issueLabel: isBatch ? '배치 240건 발급' : 'DPP 발급',
     doUpload: () => ctx.say('파일을 업로드하고 필드를 자동 매핑했습니다.'),
-    saveDraft: () => ctx.say('임시저장했습니다.'),
-    issueDpp: () => ctx.say(isBatch ? '배치 240건의 DPP 발급을 시작했습니다.' : 'DPP를 발급하고 블록체인에 앵커링했습니다.'),
-    fields: fieldSets.map(([label, req, ph, value, hint]) => ({
-      key: label, label, req, ph, value, hint
-    })),
-    fieldCheck: fieldSets.map(([label, req, ph, value]) => ({
-      key: label, label, filled: !!value,
-      dot: { display: 'grid', placeItems: 'center', width: 22, height: 22, flex: 'none', borderRadius: 999, background: value ? '#12A150' : '#EEF2F8', color: value ? '#fff' : '#9AA8BE', fontSize: 12, fontWeight: 700 },
-      mark: value ? '✓' : '',
-      valueText: value || '미입력',
-      valueStyle: { fontSize: 12.5, color: value ? '#44546F' : '#C22B2B', fontWeight: value ? 500 : 600 }
-    })),
-    fieldFilledCount: fieldSets.filter(f => !!f[3]).length,
-    fieldTotalCount: fieldSets.length,
+    // ff(실 폼)가 있으면 실제로 저장한다 - 없으면(battery/textile, 아직 시딩 없음) 기존
+    // 목데이터 토스트만 보여준다.
+    saveDraft: async () => {
+      if (!ff) { ctx.say('임시저장했습니다.'); return; }
+      try {
+        const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
+        ctx.setFieldFormData(result);
+        ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
+        setState({ fieldFormDppId: result.dppId });
+        ctx.say('임시저장했습니다 · 완성도 ' + Math.round(result.completeness) + '%');
+      } catch (e) {
+        ctx.say(e.message || '임시저장에 실패했습니다.');
+      }
+    },
+    issueDpp: async () => {
+      if (!ff) { ctx.say(isBatch ? '배치 240건의 DPP 발급을 시작했습니다.' : 'DPP를 발급하고 블록체인에 앵커링했습니다.'); return; }
+      if (isBatch) { ctx.say('배치 대량 발급은 아직 실데이터 연동 전입니다.'); return; }
+      try {
+        let dppId = ff.dppId;
+        if (!dppId) {
+          const draft = await ctx.saveFieldFormDraft(null, ffInputs);
+          dppId = draft.dppId;
+          setState({ fieldFormDppId: dppId });
+        }
+        const issued = await ctx.issueFieldFormDpp(dppId);
+        ctx.setFieldFormData(issued);
+        ctx.setFieldFormInputs(Object.fromEntries((issued.fields || []).map(f => [f.fieldCode, f.value || ''])));
+        ctx.say('DPP를 제출했습니다 · 완성도 ' + Math.round(issued.completeness) + '%');
+      } catch (e) {
+        ctx.say(e.message || 'DPP 발급에 실패했습니다.');
+      }
+    },
+    // ff가 있으면(철강 역할) requirement_field 실 라벨/필수여부 + dpp_field_value 실 저장값,
+    // 없으면 기존 목데이터 폼("SPHC" 같은 예시값 포함, 미시딩 도메인 한정 - 위 주석 참고).
+    fields: ff
+      ? ff.fields.map(f => ({
+          key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
+          req: f.required ? '필수' : '선택', ph: f.helpText || '', value: ffInputs[f.fieldCode] || '',
+          hint: f.helpText || '',
+          onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
+        }))
+      : fieldSets.map(([label, req, ph, value, hint]) => ({
+          key: label, label, req, ph, value, hint, onChange: undefined
+        })),
+    fieldCheck: ff
+      ? ff.fields.map(f => {
+          const value = ffInputs[f.fieldCode] || '';
+          return {
+            key: f.fieldCode, label: f.labelKo, filled: !!value,
+            dot: { display: 'grid', placeItems: 'center', width: 22, height: 22, flex: 'none', borderRadius: 999, background: value ? '#12A150' : '#EEF2F8', color: value ? '#fff' : '#9AA8BE', fontSize: 12, fontWeight: 700 },
+            mark: value ? '✓' : '',
+            valueText: value || '미입력',
+            valueStyle: { fontSize: 12.5, color: value ? '#44546F' : '#C22B2B', fontWeight: value ? 500 : 600 }
+          };
+        })
+      : fieldSets.map(([label, req, ph, value]) => ({
+          key: label, label, filled: !!value,
+          dot: { display: 'grid', placeItems: 'center', width: 22, height: 22, flex: 'none', borderRadius: 999, background: value ? '#12A150' : '#EEF2F8', color: value ? '#fff' : '#9AA8BE', fontSize: 12, fontWeight: 700 },
+          mark: value ? '✓' : '',
+          valueText: value || '미입력',
+          valueStyle: { fontSize: 12.5, color: value ? '#44546F' : '#C22B2B', fontWeight: value ? 500 : 600 }
+        })),
+    fieldFilledCount: ff ? ffFilledCount : fieldSets.filter(f => !!f[3]).length,
+    fieldTotalCount: ff ? ff.fields.length : fieldSets.length,
     fieldCheckOpen: !!state.fieldCheckOpen,
     openFieldCheck: () => setState({ fieldCheckOpen: true }),
     closeFieldCheck: () => setState({ fieldCheckOpen: false }),
     validations: [
-      ['필수 필드 충족', fieldSets.filter(f => !!f[3]).length + ' / ' + fieldSets.length + '개 입력 완료', fieldSets.every(f => !!f[3]) ? '#12A150' : '#E3A008', true],
+      ['필수 필드 충족', (ff ? ffFilledCount : fieldSets.filter(f => !!f[3]).length) + ' / ' + (ff ? ff.fields.length : fieldSets.length) + '개 입력 완료', (ff ? ffFilledCount === ff.fields.length : fieldSets.every(f => !!f[3])) ? '#12A150' : '#E3A008', true],
       ['단위·형식 검증', '모든 수치 항목 단위 일치', '#12A150', false],
       ['제3자 인증서', 'ISO 14001 유효기간 D-12', '#E3A008', false],
       ['재생원료 비율', 'ZKP 증명 미생성 · 발급 전 필요', '#E03B3B', false]
@@ -101,36 +159,68 @@ export function makerVals(ctx) {
       },
       open: () => { if (clickable) setState({ fieldCheckOpen: true }); }
     })),
-    invites: [
-      ['우진메탈', 'contact@woojinmetal.co.kr', '2026-07-29', '수락'],
-      ['태강특수강', 'dpp@taekang.co.kr', '2026-07-28', '대기'],
-      ['신흥압연', 'admin@shinheung.kr', '2026-07-26', '수락'],
-      ['동보물류', 'log@dongbo.co.kr', '2026-07-24', '대기'],
-      ['한영코팅', 'plant@hanyoung.kr', '2026-07-18', '거절'],
-      ['세림리사이클', 'eco@serim.co.kr', '2026-07-15', '수락']
-    ].map(([name, email, at, status]) => ({
-      key: email, name, email, at, status,
-      statusDot: ctx.pillDot(status === '수락' ? '#12A150' : status === '대기' ? '#E3A008' : '#E03B3B'),
-      canResend: status !== '수락',
-      resendStyle: status === '수락'
-        ? { width: '100%', height: 32, border: '1px solid rgba(16,32,64,.08)', borderRadius: 9, background: '#F7F9FD', fontSize: 12, fontWeight: 600, color: '#C3CBD9', cursor: 'not-allowed' }
-        : { width: '100%', height: 32, border: '1px solid rgba(16,32,64,.12)', borderRadius: 9, background: '#fff', fontSize: 12, fontWeight: 600, color: '#44546F', cursor: 'pointer' },
-      resend: () => { if (status !== '수락') ctx.say(name + '에 초대를 재발송했습니다.'); }
-    })),
-    invRole1: ctx.roleCard(state.invRole !== 2 && state.invRole !== 3),
-    invRole2: ctx.roleCard(state.invRole === 2),
-    invRole3: ctx.roleCard(state.invRole === 3),
-    pickRole1: () => setState({ invRole: 1 }),
-    pickRole2: () => setState({ invRole: 2 }),
-    pickRole3: () => setState({ invRole: 3 }),
-    sendInvite: () => ctx.say('초대 메일을 발송했습니다. (유효기간 7일)'),
-    products: ctx.compData().filter(r => !state.removedProducts.includes(r[0])).map((row, i) => {
-      const [id, name, done, , , spec] = row;
+    // GET /me/invitations 실데이터 - 예전엔 6건이 통째로 하드코딩되어 있었다. status는
+    // BE가 SENT/ACCEPTED/EXPIRED/REVOKED/REJECTED 원문으로 내려주고, 여기서 한글 라벨/색을
+    // 입힌다(scan_history 상태 매핑과 같은 패턴).
+    invites: (ctx.invitesData || []).map((i) => {
+      const label = { SENT: '대기', ACCEPTED: '수락', REJECTED: '거절', EXPIRED: '만료', REVOKED: '취소' }[i.status] || i.status;
+      const color = i.status === 'ACCEPTED' ? '#12A150' : i.status === 'SENT' ? '#E3A008' : '#E03B3B';
+      return {
+        key: i.invitationId, name: i.orgName, email: i.email, at: i.sentAt, status: label,
+        statusDot: ctx.pillDot(color),
+        canResend: i.canResend,
+        resendStyle: !i.canResend
+          ? { width: '100%', height: 32, border: '1px solid rgba(16,32,64,.08)', borderRadius: 9, background: '#F7F9FD', fontSize: 12, fontWeight: 600, color: '#C3CBD9', cursor: 'not-allowed' }
+          : { width: '100%', height: 32, border: '1px solid rgba(16,32,64,.12)', borderRadius: 9, background: '#fff', fontSize: 12, fontWeight: 600, color: '#44546F', cursor: 'pointer' },
+        resend: async () => {
+          if (!i.canResend) return;
+          try {
+            const updated = await ctx.resendInvitation(i.invitationId);
+            ctx.setInvitesData(prev => prev.map(x => x.invitationId === updated.invitationId ? updated : x));
+            ctx.say(i.orgName + '에 초대를 재발송했습니다.');
+          } catch (e) {
+            ctx.say(e.message || '재발송에 실패했습니다.');
+          }
+        }
+      };
+    }),
+    inviteTotal: (ctx.invitesData || []).length,
+    invitePending: (ctx.invitesData || []).filter(i => i.status === 'SENT').length,
+    inviteRejected: (ctx.invitesData || []).filter(i => i.status === 'REJECTED').length,
+    inviteOrgName: state.inviteOrgName || '',
+    onInviteOrgName: e => setState({ inviteOrgName: e.target.value }),
+    inviteEmail: state.inviteEmail || '',
+    onInviteEmail: e => setState({ inviteEmail: e.target.value }),
+    sendInvite: async () => {
+      const orgName = (state.inviteOrgName || '').trim();
+      const email = (state.inviteEmail || '').trim();
+      if (!orgName || !email) { ctx.say('협력사명과 이메일을 입력해 주세요.'); return; }
+      try {
+        const created = await ctx.sendInvitation(orgName, email);
+        ctx.setInvitesData(prev => [created, ...prev]);
+        setState({ inviteOrgName: '', inviteEmail: '' });
+        ctx.say('초대 메일을 발송했습니다. (유효기간 7일)');
+      } catch (e) {
+        ctx.say(e.message || '초대 발송에 실패했습니다.');
+      }
+    },
+    // dash(GET /me/dashboard)가 있으면 실 DPP 목록(dash.dpps)에서, 없으면 기존 목데이터에서
+    // 구성한다. 실데이터에는 Heat/중량 같은 dpp_field_value 기반 값이 아직 없어서(강재 기본
+    // 정보 입력 API 미구축) spec/lot은 domain·serial_number 등 지금 실제로 존재하는 값만
+    // 쓰고, 없으면 '—'로 정직하게 표시한다 - 목데이터의 가짜 Heat 번호/날짜를 흉내내지 않는다.
+    products: (dash ? dash.dpps : ctx.compData().map(([id, name, done, , , spec]) => ({
+      dppId: id, internalSku: id, modelName: name, domain: spec, completeness: done,
+      serialNumber: spec.split(' · ')[0], issuedAtDate: null
+    }))).filter(d => !state.removedProducts.includes(d.dppId)).map((d) => {
+      const id = d.dppId;
+      const name = d.modelName || ('DPP #' + id);
+      const done = Math.round(d.completeness);
+      const spec = d.domain || '';
       const status = done === 100 ? '발급 완료' : done === 0 ? '입력 대기' : '작성 중';
       return {
-        key: id, id, name, spec, pct: done,
-        lot: spec.split(' · ')[0],
-        at: ['2026-07-24', '2026-07-22', '2026-07-19', '2026-07-16', '2026-07-12', '2026-07-08'][i] || '2026-07-05',
+        key: id, id: d.internalSku || ('DPP-' + id), name, spec, pct: done,
+        lot: d.serialNumber || '—',
+        at: d.issuedAtDate || '—',
         pctStyle: ctx.pctStyle(done),
         statusDot: ctx.pillDot(done === 100 ? '#12A150' : done === 0 ? '#E03B3B' : '#E3A008'),
         status,

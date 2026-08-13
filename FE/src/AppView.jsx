@@ -107,7 +107,14 @@ export default function AppView(v) {
     hazardSafe,
     inputTitle,
     inquiries,
+    inviteEmail,
+    inviteOrgName,
+    invitePending,
+    inviteRejected,
+    inviteTotal,
     invites,
+    onInviteEmail,
+    onInviteOrgName,
     isApp,
     isBatch,
     isLogin,
@@ -924,7 +931,9 @@ export default function AppView(v) {
                   {(fields || []).map((f, $index) => (<React.Fragment key={$index}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>{f.label}</span>
-                    <input placeholder={f.ph} defaultValue={f.value} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} />
+                    {f.onChange
+                      ? <input placeholder={f.ph} value={f.value} onChange={f.onChange} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} />
+                      : <input placeholder={f.ph} defaultValue={f.value} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} />}
                     <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.hint}</span>
                   </label>
                   </React.Fragment>))}
@@ -983,8 +992,8 @@ export default function AppView(v) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '16px', alignItems: 'start' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <span style={{ fontSize: '15px', fontWeight: '600' }}>새 초대 보내기</span>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" value={inviteOrgName} onChange={onInviteOrgName} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" value={inviteEmail} onChange={onInviteEmail} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>메시지</span><textarea rows="3" placeholder="협력사에 전달할 안내 문구를 입력하세요." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical' }}></textarea></label>
               <button onClick={sendInvite} style={{ height: '50px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>초대 발송</button>
             </div>
@@ -993,9 +1002,9 @@ export default function AppView(v) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '15px', fontWeight: '600' }}>초대 이력</span>
                 <div style={{ display: 'flex', gap: '6px' }}>
-                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#0B1B33', color: '#fff', fontSize: '12px', fontWeight: '600' }}>전체 12</span>
-                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>대기 4</span>
-                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>거절 1</span>
+                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#0B1B33', color: '#fff', fontSize: '12px', fontWeight: '600' }}>전체 {inviteTotal}</span>
+                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>대기 {invitePending}</span>
+                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>거절 {inviteRejected}</span>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr 70px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
