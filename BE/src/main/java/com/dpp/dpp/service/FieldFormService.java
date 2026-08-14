@@ -77,8 +77,11 @@ public class FieldFormService {
 
         if (dppId == null) {
             // 새 DPP 초안 - 아직 dpp 행이 없으니 참여 협력사 개념 자체가 성립하지 않는다.
-            // OWNER가 처음 폼을 여는 경우만 여기로 들어온다.
-            List<FieldFormItemDto> allFields = fieldsFor(null);
+            // OWNER가 처음 폼을 여는 경우만 여기로 들어온다. 값은 아직 하나도 없으니 전부 null.
+            List<FieldFormItemDto> allFields = fieldsFor(null).stream()
+                    .map(f -> new FieldFormItemDto(f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getUnit(),
+                            f.getHelpText(), f.isRequired(), null))
+                    .toList();
             return new FieldFormResponse(null, DOMAIN, "DRAFT", 0.0, 0, 0, allFields);
         }
 
@@ -118,7 +121,7 @@ public class FieldFormService {
             access = resolveAccess(orgId, dpp);
         } else {
             dpp = createDraftDpp(orgId, request.values());
-            access = Access.owner();
+            access = Access.forOwner();
         }
 
         upsertValues(dpp.getDppId(), orgId, userId, request.values(), access.participantRoleCode());
@@ -146,16 +149,23 @@ public class FieldFormService {
         return getForm(userId, dpp.getDppId());
     }
 
-    /** OWNER면 participantRoleCode가 null(=담당 구분 없이 전체 접근), 참여 협력사면 자기 role_code가 담긴다. */
+    /**
+     * OWNER면 participantRoleCode가 null(=담당 구분 없이 전체 접근), 참여 협력사면 자기
+     * role_code가 담긴다. 정적 팩토리 메서드 이름을 owner()가 아니라 forOwner()로 지은
+     * 이유: 레코드 컴포넌트 이름이 owner라서 컴파일러가 그 이름으로 인스턴스 접근자
+     * boolean owner()를 자동 생성하는데, 정적 메서드까지 같은 이름 owner()로 두면
+     * 시그니처가 겹쳐서 컴파일이 깨진다(2026-08-13 실제로 이걸로 로컬 빌드가 깨졌었음 -
+     * "bad operand type Access for unary operator '!'", "accessor method must be public").
+     */
     private record Access(boolean owner, String participantRoleCode) {
-        static Access owner() {
+        static Access forOwner() {
             return new Access(true, null);
         }
     }
 
     private Access resolveAccess(Long orgId, Dpp dpp) {
         if (orgId.equals(dpp.getOwnerOrgId())) {
-            return Access.owner();
+            return Access.forOwner();
         }
         DppParticipant participant = participantRepository.findByDppIdAndOrgId(dpp.getDppId(), orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP에 접근할 권한이 없습니다."));
