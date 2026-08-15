@@ -36,6 +36,16 @@ export function makerVals(ctx) {
   const ff = (r === 'steel') ? ctx.fieldFormData : null;
   const ffInputs = ctx.fieldFormInputs || {};
   const ffFilledCount = ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0;
+  // "필수 문서" 업로드 실데이터(GET /me/documents) - ff와 마찬가지로 철강 역할, 그리고
+  // dppId가 이미 있을 때만(초안조차 없으면 문서를 붙일 곳이 없음).
+  const df = (r === 'steel') ? ctx.documentFormData : null;
+  // Mill Sheet 업로드 결과 실데이터 - 예전엔 이 카드 전체가 목데이터였다(버튼 눌러도 실제
+  // 파일선택창 자체가 안 뜨고 가짜 토스트만 나옴, 2026-08-14 사용자 리포트로 발견).
+  const msr = (r === 'steel') ? ctx.millSheetResult : null;
+  // CBAM 업로드 결과 실데이터 - Mill Sheet와 같은 패턴(2026-08-15).
+  const cbr = (r === 'steel') ? ctx.cbamResult : null;
+  const DOC_STATUS_LABEL = { NOT_UPLOADED: '미제출', PENDING: '검토 중', APPROVED: '제출 완료', REJECTED: '반려됨', EXPIRED: '만료됨' };
+  const DOC_STATUS_COLOR = { NOT_UPLOADED: '#9AA8BE', PENDING: '#E3A008', APPROVED: '#12A150', REJECTED: '#E03B3B', EXPIRED: '#C22B2B' };
   return {
     kpiTotal: dash ? String(dash.totalCount) : kpi[0],
     // "이번 달 신규"/"서류 대기"는 실데이터 쪽에 대응하는 집계가 없다(생성일 기준 집계도,
@@ -51,7 +61,22 @@ export function makerVals(ctx) {
     // 반려 건수(문서 업로드 -> ZKP 검증 실패 시 REJECTED로 저장된 실제 행).
     zkpPendingCount: dash ? dash.zkpPendingCount : 2,
     zkpRejectedCount: dash ? dash.zkpRejectedCount : 1,
-    goInput: () => setState({ tab: 'input' }),
+    // "+ 새 DPP 발급" 버튼 - 진행 중이던 draft dppId를 안 지우면 이 버튼을 눌러도 이전
+    // draft가 그대로 다시 열려서 두 번째 DPP를 새로 시작할 방법이 없었다(2026-08-15, 강
+    // 리포트). fieldFormDppId를 null로 같이 넘기면 위 useAppLogic의 field-form fetch
+    // effect가 dppId=undefined로 다시 불러서 진짜 빈 초안을 받아온다(FieldFormService.
+    // getForm의 dppId==null 분기). 특정 기존 DPP를 "이어서 작성"하는 경로(완성도 목록의
+    // open 핸들러, 아래 424번째 줄 근처)는 fieldFormDppId를 그 DPP id로 명시적으로 넘기니
+    // 이 초기화와 충돌하지 않는다. millSheetResult/cbamResult/fieldFormInputs/
+    // documentFormData도 같이 비워야 이전 DPP의 업로드 결과·입력값이 새 화면에 잠깐이라도
+    // 남아 보이지 않는다.
+    goInput: () => {
+      ctx.setMillSheetResult(null);
+      ctx.setCbamResult(null);
+      ctx.setFieldFormInputs({});
+      ctx.setDocumentFormData(null);
+      setState({ tab: 'input', fieldFormDppId: null });
+    },
     queue: queueRows.map(([due, task, target, key]) => ({
       key, due, task, target,
       dueDot: ctx.pillDot(due === 'D-1' ? '#E03B3B' : due === 'D-2' ? '#E3A008' : '#9AA8BE'),
@@ -64,14 +89,77 @@ export function makerVals(ctx) {
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
     inputTitle: inputMeta.title, uploadTitle: inputMeta.upload, uploadHint: inputMeta.hint,
-    uploadedName: inputMeta.file, ocrCount: inputMeta.ocr, formTitle: inputMeta.form,
+    // msr(실제 업로드 결과)이 있으면 그걸, 없으면 아직 아무것도 업로드 안 한 상태 -
+    // 예전엔 항상 mock 파일명/건수가 떠있어서 마치 이미 업로드된 것처럼 보였다.
+    uploadedName: msr ? msr.fileName : '',
+    ocrCount: msr ? Object.keys(msr.verdicts || {}).length : 0,
+    hasMillSheetResult: !!msr,
+    millSheetInputId: 'mill-sheet-upload',
+    // specPassed(12개 항목 전부 규격 충족)를 봐야 한다 - cryptoVerified는 증명 자체의
+    // 크립토 유효성일 뿐이라 규격 미달이어도 거의 항상 true다(2026-08-15 수정, 강 리포트).
+    millSheetStatusLabel: msr ? (msr.specPassed ? '검증 통과' : '검증 실패') : '',
+    millSheetStatusChip: msr
+      ? (msr.specPassed ? ctx.chip('rgba(18,161,80,.10)', '#12A150') : ctx.chip('rgba(224,59,59,.10)', '#E03B3B'))
+      : ctx.tier2Chip,
+    formTitle: inputMeta.form,
     fieldCount: ff ? ff.fields.filter(f => f.required).length : inputMeta.count,
     isBatch,
     singleBtn: ctx.pill(!isBatch), batchBtn: ctx.pill(isBatch),
     setSingle: () => setState({ issueMode: 'single' }),
     setBatch: () => setState({ issueMode: 'batch' }),
     issueLabel: isBatch ? '배치 240건 발급' : 'DPP 발급',
-    doUpload: () => ctx.say('파일을 업로드하고 필드를 자동 매핑했습니다.'),
+    // 예전엔 이 버튼이 실제 파일선택창도 안 띄우고 가짜 토스트만 보여줬다 - 이제
+    // AppView의 숨겨진 <input type="file" id={millSheetInputId}>를 라벨로 트리거해서
+    // 실제 /document/upload/steel-mill(파서 -> ZKP -> 블록체인)로 올린다.
+    onMillSheetFileChange: async (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      ctx.say('업로드 중 · 화학성분/기계적성질 검증에는 수십 초가 걸릴 수 있습니다.');
+      try {
+        const result = await ctx.uploadSteelMillSheet(file);
+        ctx.setMillSheetResult({ ...result, fileName: file.name });
+        if (result.dppId) {
+          setState({ fieldFormDppId: result.dppId });
+          ctx.refreshFieldForm(result.dppId);
+          ctx.refreshDocumentForm(result.dppId);
+        }
+        ctx.say(result.specPassed ? '제강 성적서 검증을 통과했습니다.' : '제강 성적서 검증에 실패했습니다 - 규격 미달 항목이 있습니다.');
+      } catch (err) {
+        ctx.say(err.message || '문서 업로드에 실패했습니다.');
+      }
+    },
+    // CBAM(Q2_06) 탄소보고서 업로드 - obligated는 "적합/부적합"이 아니라 "de minimis
+    // 수입량(50t) 초과로 신고 의무가 발생했는가"라서 true/false 둘 다 정상 결과다. 그래서
+    // Mill Sheet처럼 "검증 통과/실패"라고 하면 안 되고 "신고 의무 있음/없음"으로 표시한다.
+    uploadedCbamName: cbr ? cbr.fileName : '',
+    hasCbamResult: !!cbr,
+    cbamInputId: 'cbam-upload',
+    cbamStatusLabel: cbr ? (cbr.obligated ? 'CBAM 신고 의무 있음' : 'CBAM 신고 의무 없음(de minimis 이하)') : '',
+    cbamStatusChip: cbr
+      ? (cbr.obligated ? ctx.chip('rgba(227,160,8,.10)', '#E3A008') : ctx.chip('rgba(18,161,80,.10)', '#12A150'))
+      : ctx.tier2Chip,
+    cbamImportQtyLabel: cbr ? (cbr.importQuantityT + 't (기준 ' + cbr.deMinimisT + 't)') : '',
+    onCbamFileChange: async (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      ctx.say('업로드 중 · 수입량 검증에 시간이 걸릴 수 있습니다.');
+      try {
+        const result = await ctx.uploadCbamReport(file);
+        ctx.setCbamResult({ ...result, fileName: file.name });
+        if (result.dppId) {
+          setState({ fieldFormDppId: result.dppId });
+          ctx.refreshFieldForm(result.dppId);
+          ctx.refreshDocumentForm(result.dppId);
+        }
+        ctx.say(result.obligated
+          ? 'CBAM 신고 의무가 있습니다 (수입량이 de minimis 기준을 초과).'
+          : 'CBAM 신고 의무가 없습니다 (수입량이 de minimis 기준 이하).');
+      } catch (err) {
+        ctx.say(err.message || '문서 업로드에 실패했습니다.');
+      }
+    },
     // ff(실 폼)가 있으면 실제로 저장한다 - 없으면(battery/textile, 아직 시딩 없음) 기존
     // 목데이터 토스트만 보여준다.
     saveDraft: async () => {
@@ -137,13 +225,75 @@ export function makerVals(ctx) {
     fieldFilledCount: ff ? ffFilledCount : fieldSets.filter(f => !!f[3]).length,
     fieldTotalCount: ff ? ff.fields.length : fieldSets.length,
     fieldCheckOpen: !!state.fieldCheckOpen,
+    // 필수 문서 10종(제강 성적서 포함, 다만 그건 업로드 시 별도 파서/ZKP 엔드포인트를 씀)
+    // 실데이터 - df가 없으면(초안 저장 전이거나 철강 역할이 아니면) 빈 목록. 예전엔 이
+    // 목록(왼쪽 "필수 문서" 카드)이랑 오른쪽 "입력 검증 결과" 패널 아래 두 카드(검증 필요
+    // 데이터/형식만 확인)가 완전히 같은 문서를 두 번 보여주는 중복이었다(2026-08-15 사용자
+    // 피드백: "굳이 아래에 넣어야 하나 싶어") - 오른쪽 두 카드는 걷어내고, 이 한 목록 안에
+    // 카테고리 배지(category*)와 진행 단계(steps: 미제출→검증 중→제출 완료)를 같이 넣어서
+    // 정보를 한 곳에서만 보여준다. "검증 중" 단계는 서버가 PENDING을 내려줄 때뿐 아니라,
+    // 업로드 요청이 아직 응답을 안 받은 동안(uploadingDocTypes)도 표시한다 - 지금은 문서
+    // 9종이 업로드 즉시 동기 응답(APPROVED)이라 PENDING 상태가 서버에 실제로 존재하지
+    // 않고, Mill Sheet만 파서+ZKP로 수십 초가 걸려서 이 클라이언트 쪽 표시가 사실상
+    // 유일한 "검증 중" 시각화다.
+    documentSlots: df
+      ? df.documents.map(d => {
+          const uploading = (state.uploadingDocTypes || []).includes(d.docTypeCode);
+          const failed = !uploading && (d.status === 'REJECTED' || d.status === 'EXPIRED');
+          const stageIdx = uploading || d.status === 'PENDING' ? 1
+            : (d.status === 'APPROVED' || d.status === 'REJECTED' || d.status === 'EXPIRED') ? 2
+            : 0;
+          // 마지막 단계("제출 완료")에 도달한 시점을 '진행 중(active, 노란색)'과 '완료(done,
+          // 초록색)'로 나눠야 하는데, i < stageIdx만으로는 stageIdx 자체(=마지막 단계)가
+          // 영원히 '진행 중'으로만 남아서 승인된 뒤에도 계속 노란불이었다(2026-08-15 사용자
+          // 리포트: "제출 완료에 계속 노란색으로 떠있어"). stageIdx===2이고 실패가 아니면
+          // 그 단계 자체를 done으로 표시해야 한다 - "검증 중"(stageIdx===1)일 때만 진짜
+          // active(진행 중)로 남겨둔다.
+          const success = stageIdx === 2 && !failed;
+          return {
+            key: d.fieldCode, label: d.labelKo, req: d.required ? '필수' : '선택',
+            fileName: d.fileName || '',
+            statusLabel: uploading ? '검증 중' : (DOC_STATUS_LABEL[d.status] || d.status),
+            dot: ctx.pillDot(uploading ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
+            categoryLabel: d.zkpTarget ? '데이터 검증' : '형식 확인',
+            categoryChip: d.zkpTarget ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#6B7A93'),
+            steps: ['미제출', '검증 중', '제출 완료'].map((label, i) => ({
+              key: label, label,
+              status: (i < stageIdx || (i === stageIdx && success)) ? 'done'
+                : i === stageIdx ? (failed ? 'failed' : 'active')
+                : 'upcoming'
+            })),
+            // 데이터 검증(ZKP) 대상 문서(Mill Sheet, CBAM 등)는 이 일반 업로드 버튼으로
+            // 못 올린다 - 서버가 이제 막고 있고(DocumentSlotService.upload), 애초에 파서+
+            // ZKP를 안 거치는 이 경로로 올리면 증명 없이 승인된 것처럼 보이는 구멍이었다
+            // (2026-08-15). 대신 화면 위쪽 전용 업로드 박스를 쓰라고 안내만 한다.
+            uploadDisabled: d.zkpTarget,
+            inputId: 'doc-upload-' + d.fieldCode,
+            onFileChange: async (e) => {
+              const file = e.target.files && e.target.files[0];
+              e.target.value = '';
+              if (!file) return;
+              if (d.zkpTarget) { ctx.say(d.labelKo + '는 위쪽 전용 업로드 박스를 이용해 주세요.'); return; }
+              if (!state.fieldFormDppId) { ctx.say('먼저 임시저장으로 DPP를 만든 뒤 문서를 올려 주세요.'); return; }
+              setState({ uploadingDocTypes: [...(state.uploadingDocTypes || []), d.docTypeCode] });
+              try {
+                const result = await ctx.uploadDocument(state.fieldFormDppId, d.docTypeCode, file);
+                ctx.setDocumentFormData(result);
+                ctx.say(d.labelKo + ' 업로드했습니다.');
+              } catch (err) {
+                ctx.say(err.message || '문서 업로드에 실패했습니다.');
+              } finally {
+                setState({ uploadingDocTypes: (state.uploadingDocTypes || []).filter(c => c !== d.docTypeCode) });
+              }
+            }
+          };
+        })
+      : [],
+    documentSlotsEmpty: df ? df.documents.length === 0 : true,
     openFieldCheck: () => setState({ fieldCheckOpen: true }),
     closeFieldCheck: () => setState({ fieldCheckOpen: false }),
     validations: [
-      ['필수 필드 충족', (ff ? ffFilledCount : fieldSets.filter(f => !!f[3]).length) + ' / ' + (ff ? ff.fields.length : fieldSets.length) + '개 입력 완료', (ff ? ffFilledCount === ff.fields.length : fieldSets.every(f => !!f[3])) ? '#12A150' : '#E3A008', true],
-      ['단위·형식 검증', '모든 수치 항목 단위 일치', '#12A150', false],
-      ['제3자 인증서', 'ISO 14001 유효기간 D-12', '#E3A008', false],
-      ['재생원료 비율', 'ZKP 증명 미생성 · 발급 전 필요', '#E03B3B', false]
+      ['필수 필드 충족', (ff ? ffFilledCount : fieldSets.filter(f => !!f[3]).length) + ' / ' + (ff ? ff.fields.length : fieldSets.length) + '개 입력 완료', (ff ? ffFilledCount === ff.fields.length : fieldSets.every(f => !!f[3])) ? '#12A150' : '#E3A008', true]
     ].map(([label, detail, c, clickable]) => ({
       key: label, label, detail, dot: ctx.dot(c),
       arrow: clickable ? '→' : '',
@@ -173,7 +323,7 @@ export function makerVals(ctx) {
           background: selected ? '#0045A9' : '#fff', color: selected ? '#fff' : '#0B1B33',
           cursor: 'pointer', textAlign: 'left', flex: 'none'
         },
-        select: () => setState({ partnersDppId: d.dppId, inviteRows: [{ orgName: '', email: '' }] })
+        select: () => setState({ partnersDppId: d.dppId, inviteRows: [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }] })
       };
     }),
     partnerDppsEmpty: !dash || dash.dpps.length === 0,
@@ -189,8 +339,9 @@ export function makerVals(ctx) {
     invites: (ctx.invitesData || []).filter(i => i.dppId === state.partnersDppId).map((i) => {
       const label = { SENT: '대기', ACCEPTED: '수락', REJECTED: '거절', EXPIRED: '만료', REVOKED: '취소' }[i.status] || i.status;
       const color = i.status === 'ACCEPTED' ? '#12A150' : i.status === 'SENT' ? '#E3A008' : '#E03B3B';
+      const roleLabel = { RAW_SUPPLIER: '원자재·화학 공급사', TEST_LAB: '시험·인증기관' }[i.roleCode] || i.roleCode;
       return {
-        key: i.invitationId, name: i.orgName, email: i.email, at: i.sentAt, status: label,
+        key: i.invitationId, name: i.orgName, email: i.email, at: i.sentAt, status: label, roleLabel,
         statusDot: ctx.pillDot(color),
         canResend: i.canResend,
         resendStyle: !i.canResend
@@ -215,26 +366,33 @@ export function makerVals(ctx) {
     // 다중 발송 폼 - 협력사명/이메일 행을 여러 개 만들어 한 번에 보낼 수 있게. 백엔드
     // API 자체는 여전히 1건씩만 받아서(SendInviteRequest 참고), sendInvite가 행 수만큼
     // 반복 호출한다.
-    inviteRows: (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '' }]).map((row, idx, arr) => ({
-      key: idx, orgName: row.orgName, email: row.email, canRemove: arr.length > 1,
-      onOrgName: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '' }]).map((r, i) => i === idx ? { ...r, orgName: e.target.value } : r) })),
-      onEmail: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '' }]).map((r, i) => i === idx ? { ...r, email: e.target.value } : r) })),
+    // 역할 선택지 - 초대 대상 협력사가 실제로 뭘 제출하게 되는지 미리 보여준다(2026-08-15,
+    // requirement_field.responsible_role이 RAW_SUPPLIER/TEST_LAB 둘로 나뉘면서 추가).
+    inviteRoleOptions: [
+      { value: 'RAW_SUPPLIER', label: '원자재·화학 공급사 (스크랩 매입증빙, SDS 등)' },
+      { value: 'TEST_LAB', label: '시험·인증기관 (시험성적서, LCA/EPD, 탄소보고서)' }
+    ],
+    inviteRows: (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((row, idx, arr) => ({
+      key: idx, orgName: row.orgName, email: row.email, roleCode: row.roleCode || 'RAW_SUPPLIER', canRemove: arr.length > 1,
+      onOrgName: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((r, i) => i === idx ? { ...r, orgName: e.target.value } : r) })),
+      onEmail: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((r, i) => i === idx ? { ...r, email: e.target.value } : r) })),
+      onRoleCode: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((r, i) => i === idx ? { ...r, roleCode: e.target.value } : r) })),
       remove: () => setState(s => ({ inviteRows: (s.inviteRows || []).filter((_, i) => i !== idx) }))
     })),
-    addInviteRow: () => setState(s => ({ inviteRows: (s.inviteRows && s.inviteRows.length ? s.inviteRows : [{ orgName: '', email: '' }]).concat([{ orgName: '', email: '' }]) })),
+    addInviteRow: () => setState(s => ({ inviteRows: (s.inviteRows && s.inviteRows.length ? s.inviteRows : [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).concat([{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]) })),
     inviteSendLabel: (state.inviteRows || []).length > 1 ? `초대 발송 (${state.inviteRows.length}건)` : '초대 발송',
     sendInvite: async () => {
       const dppId = state.partnersDppId;
       if (!dppId) { ctx.say('먼저 DPP를 선택해 주세요.'); return; }
-      const rows = (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '' }])
-        .map(r => ({ orgName: (r.orgName || '').trim(), email: (r.email || '').trim() }))
+      const rows = (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }])
+        .map(r => ({ orgName: (r.orgName || '').trim(), email: (r.email || '').trim(), roleCode: r.roleCode || 'RAW_SUPPLIER' }))
         .filter(r => r.orgName && r.email);
       if (rows.length === 0) { ctx.say('협력사명과 이메일을 입력해 주세요.'); return; }
       let successCount = 0;
       const created = [];
       for (const row of rows) {
         try {
-          created.push(await ctx.sendInvitation(row.orgName, row.email, dppId));
+          created.push(await ctx.sendInvitation(row.orgName, row.email, dppId, row.roleCode));
           successCount++;
         } catch (e) {
           ctx.say((row.orgName) + ' 초대 실패: ' + (e.message || '알 수 없는 오류'));
@@ -242,7 +400,7 @@ export function makerVals(ctx) {
       }
       if (created.length) {
         ctx.setInvitesData(prev => [...created, ...prev]);
-        setState({ inviteRows: [{ orgName: '', email: '' }] });
+        setState({ inviteRows: [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }] });
       }
       if (successCount > 0) {
         ctx.say(successCount + '건의 초대 메일을 발송했습니다. (유효기간 7일)');
@@ -271,6 +429,16 @@ export function makerVals(ctx) {
         canDelete: done < 100,
         isIssued: done === 100,
         open: () => setState({ dppOpen: true, dppId: id }),
+        // DPP 식별자를 누르면 "상세"(생애주기/미충족 필드 읽기전용 패널)가 아니라 작성하던
+        // 입력 화면으로 되돌아간다 - 예전엔 둘 다 같은 open()이라 이어서 작성할 방법이
+        // 없었다(2026-08-15 사용자 피드백: "식별자 ID 누르면 다시 작성하던 로그로 돌아갈
+        // 수 있어야"). fieldFormDppId를 이 DPP로 바꾸면 입력 화면 진입 useEffect가
+        // GET /me/field-form?dppId=로 기존 값을 그대로 불러온다(FieldFormService.getForm).
+        // steel 역할만 실제 입력 화면이 있어서(다른 도메인은 아직 시딩 전) 그 외엔 기존
+        // 상세 패널로 폴백한다.
+        resume: r === 'steel'
+          ? () => setState({ tab: 'input', fieldFormDppId: id })
+          : () => setState({ dppOpen: true, dppId: id }),
         remove: () => setState({
           confirm: done === 100
             ? {

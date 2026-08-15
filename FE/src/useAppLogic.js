@@ -5,13 +5,13 @@ import {
   chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,
 } from './uiStyles.js';
 import { fetchAppData } from './api/mockApi.js';
-import { loadSession, saveSession } from './api/session.js';
+import { loadSession, saveSession, loadDraftDppId, saveDraftDppId } from './api/session.js';
 import {
   login, requestBusinessSignupCode, verifyBusinessSignupCode,
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport } from './api/meApi.js';
 import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
 import { partnerVals } from './viewModels/partnerVals.js';
@@ -89,6 +89,16 @@ export function useAppLogic(userProps) {
   // 역할에서만 실데이터로 불러온다 - 그 외 역할은 기존 목데이터 폼 그대로 유지.
   const [fieldFormData, setFieldFormData] = useState(null);
   const [fieldFormInputs, setFieldFormInputs] = useState({});
+  // "필수 문서" 업로드 화면(GET/POST /me/documents*) - fieldFormData와 같은 dppId를 공유하고,
+  // dppId가 아직 없으면(새 DPP 초안 저장 전) 불러올 게 없어서 null로 남는다.
+  const [documentFormData, setDocumentFormData] = useState(null);
+  // 제강 성적서(Mill Sheet) 업로드 결과 - 예전엔 이 자리가 통째로 목데이터였다(버튼을 눌러도
+  // 실제 파일 선택창조차 안 뜨고 "업로드했다"는 토스트만 나오는 가짜였음, 2026-08-14 사용자가
+  // 지적해서 실제 /document/upload/steel-mill 연동으로 교체).
+  const [millSheetResult, setMillSheetResult] = useState(null);
+  // CBAM(Q2_06) 업로드 결과 - Mill Sheet와 같은 패턴. obligated는 "적합/부적합"이 아니라
+  // "de minimis 수입량 초과로 신고 의무가 발생했는가"라서 true/false 둘 다 정상 결과다.
+  const [cbamResult, setCbamResult] = useState(null);
   const [scansData, setScansData] = useState([]);
   const [invitesData, setInvitesData] = useState([]);
   const [participationsData, setParticipationsData] = useState([]);
@@ -105,10 +115,11 @@ export function useAppLogic(userProps) {
     if (snsLoggedIn) saveSession({ ...snsResult, role: 'personal', at: Date.now() });
     if (snsResult && snsResult.error) pendingSnsError.current = snsResult.error;
     const saved = snsLoggedIn ? { role: 'personal' } : loadSession();
+    const initialRole = fromUrl.role || saved?.role || props.startRole || 'steel';
 
     return {
       view: fromUrl.view || (saved ? 'app' : props.startView || 'login'),
-      role: fromUrl.role || saved?.role || props.startRole || 'steel',
+      role: initialRole,
       tab: fromUrl.tab || 'dash',
     loginTab: 'company',
       suTab: 'company',
@@ -121,7 +132,11 @@ export function useAppLogic(userProps) {
       removedScans: [],
       removedProducts: [],
       confirm: null,
-      toast: ''
+      toast: '',
+      // 새로고침해도 "철강 데이터 입력" 화면이 작성 중이던 DPP를 계속 이어서 보여주도록
+      // localStorage에서 복원한다 - 로그인 안 된 상태(saved 없음)에서는 애초에 이 화면에
+      // 못 들어가니 복원할 필요가 없다.
+      fieldFormDppId: saved ? loadDraftDppId(initialRole, saved.email) : null
     };
   });
 
@@ -190,6 +205,75 @@ export function useAppLogic(userProps) {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view, state.role, state.tab, state.partnerAssignedDppId]);
+
+  /**
+   * Mill Sheet 업로드처럼 fieldFormData 바깥(별도 엔드포인트)에서 완성도가 바뀌는 경우,
+   * 위 useEffect를 다시 트리거하지 않고도 fieldFormData/fieldFormInputs를 최신값으로
+   * 맞추기 위한 수동 새로고침. makerVals.js의 Mill Sheet 업로드 핸들러가 사용한다.
+   */
+  const refreshFieldForm = useCallback((dppId) => {
+    if (!dppId) return;
+    fetchFieldForm(dppId)
+      .then((res) => {
+        setFieldFormData(res);
+        setFieldFormInputs(Object.fromEntries((res.fields || []).map(f => [f.fieldCode, f.value || ''])));
+      })
+      .catch(() => {});
+  }, []);
+
+  /**
+   * refreshFieldForm과 같은 이유로 필요 - Mill Sheet/CBAM은 documentFormData(아래 "필수 문서"
+   * 체크리스트, GET /me/documents)가 아니라 전용 엔드포인트(/document/upload/steel-mill,
+   * /document/upload/cbam)로 올라가서 응답 모양이 아예 다르다(SteelMillUploadResponse 등) -
+   * 그 응답을 documentFormData에 그대로 못 넣는다. 일반 9종 업로드(onFileChange)는 서버가
+   * 업데이트된 문서함 전체를 그대로 돌려줘서 setDocumentFormData(result)로 바로 반영되는데,
+   * Mill Sheet/CBAM 핸들러는 refreshFieldForm만 부르고 이걸 안 불러서 성적서를 올려도
+   * 체크리스트 쪽 상태(미제출→검증중→제출완료)가 안 바뀌는 버그였다(2026-08-15, 강 리포트 -
+   * "제강성적서를 올려도 끝난건지 안끝난건지 아래에 반영이 안됨"). makerVals.js의
+   * onMillSheetFileChange/onCbamFileChange가 업로드 성공 직후 이걸 같이 호출해야 한다.
+   */
+  const refreshDocumentForm = useCallback((dppId) => {
+    if (!dppId) return;
+    fetchDocumentForm(dppId).then((res) => setDocumentFormData(res)).catch(() => {});
+  }, []);
+
+  /**
+   * "필수 문서" 업로드 화면 - 위 필드 폼과 같은 dppId 진입점을 공유한다. 예전엔 dppId가
+   * 실제로 있어야만(=최소 한 번 임시저장된 DPP) 목록 자체를 안 불러왔는데, 그러면 첫
+   * 임시저장 전에는 "뭘 제출해야 하는지" 체크리스트가 화면에 아예 안 보였다(2026-08-15,
+   * "임시저장 하기 전부터 보여줘야지" 사용자 피드백). fetchFieldForm과 같은 패턴으로
+   * dppId 없이도 호출하면 백엔드가 도메인 공통 체크리스트(전부 NOT_UPLOADED)를 내려준다 -
+   * 실제 업로드 자체는 여전히 dppId가 있어야 가능(document.owner_id가 dpp_id를 가리켜야
+   * 함)하고, makerVals.js의 onFileChange가 그 시점에 안내 토스트로 막는다. 협력사 쪽은
+   * 선택된 dppId가 없으면 어느 DPP에 붙일지 알 수 없어 목록 자체가 성립하지 않으므로
+   * 그 경우만 계속 스킵한다.
+   */
+  useEffect(() => {
+    if (state.view !== 'app') return;
+    const isSteelInput = state.role === 'steel' && state.tab === 'input';
+    const isPartnerAssigned = state.role === 'partner' && state.tab === 'assigned' && !!state.partnerAssignedDppId;
+    if (!isSteelInput && !isPartnerAssigned) { setDocumentFormData(null); return; }
+    const dppId = isSteelInput ? state.fieldFormDppId : state.partnerAssignedDppId;
+    if (isPartnerAssigned && !dppId) { setDocumentFormData(null); return; }
+    const session = loadSession();
+    if (!session?.accessToken) return;
+    let alive = true;
+    fetchDocumentForm(dppId || undefined).then((res) => { if (alive) setDocumentFormData(res); }).catch(() => {});
+    return () => { alive = false; };
+  }, [state.view, state.role, state.tab, state.fieldFormDppId, state.partnerAssignedDppId]);
+
+  /**
+   * fieldFormDppId를 role+계정(email)별로 localStorage에 계속 동기화 - 첫 임시저장으로
+   * 새로 생기든, "제품 조회"에서 식별자를 눌러 이어서 작성하든, 어느 경로로 바뀌든 다음
+   * 새로고침에서 그대로 복원되게 한다(위 useState 초기값 참고). role만으로 키를 잡으면
+   * 로그아웃 없이 같은 브라우저에서 다른 계정으로 재로그인했을 때 이전 계정의 dppId를
+   * 물려받는 버그가 있었다(2026-08-15) - email을 키에 포함시켜서 계정이 바뀌면 완전히
+   * 다른 자리에 저장/복원되게 한다. 로그아웃(clearSession)은 여전히 'ieum.' 전체를
+   * 지우니 그 경로는 그대로 안전하다.
+   */
+  useEffect(() => {
+    saveDraftDppId(state.role, loadSession()?.email, state.fieldFormDppId ?? null);
+  }, [state.role, state.fieldFormDppId]);
 
   /* URL → 상태 */
   useEffect(() => {
@@ -616,6 +700,9 @@ export function useAppLogic(userProps) {
     meData, orgData, setOrgData, dashboardData, scansData, notifCatsData, notifsData, fmtRelative,
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft, issueFieldFormDpp,
+    documentFormData, setDocumentFormData, uploadDocument,
+    millSheetResult, setMillSheetResult, uploadSteelMillSheet, refreshFieldForm, refreshDocumentForm,
+    cbamResult, setCbamResult, uploadCbamReport,
     invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate,
     participationsData,
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
