@@ -43,6 +43,12 @@ public class RequirementField {
     @Column(name = "storage_target", nullable = false, length = 30)
     private String storageTarget;
 
+    // storage_target='DOCUMENT'인 행에서만 값이 있다 - document_type.doc_type_code를
+    // 가리킨다(예: DOC_MILL_SHEET -> 'MILL_SHEET'). 문서 업로드 화면(DocumentSlotService)이
+    // 이 값으로 document/document_link 테이블을 조회한다.
+    @Column(name = "linked_doc_type", length = 40)
+    private String linkedDocType;
+
     @Column(name = "data_type", nullable = false, length = 20)
     private String dataType;
 

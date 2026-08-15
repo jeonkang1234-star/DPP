@@ -13,7 +13,7 @@
 
 import http from 'node:http';
 import { Field, verify } from 'o1js';
-import { SteelMillCheck, SteelLimits, SteelMeasured } from './circuits.mjs';
+import { SteelMillCheck, SteelLimits, SteelMeasured, CbamCheck, CbamPublic, CbamPrivate } from './circuits.mjs';
 
 const PORT = process.env.PORT || 4001;
 
@@ -21,6 +21,13 @@ console.log('SteelMillCheck 컴파일 중... (서버 기동 시 1회, 약 10~15�
 const t0 = Date.now();
 const { verificationKey } = await SteelMillCheck.compile();
 console.log(`컴파일 완료: ${Date.now() - t0}ms`);
+
+// CBAM(Q2_06) 회로도 같은 서버에서 같이 노출한다 - 별도 프로세스로 안 쪼갠 이유는 o1js
+// 컴파일 비용(회로당 약 10~15초)이 서버 기동 시 1회뿐이라 굳이 나눌 필요가 없어서다.
+console.log('CbamCheck 컴파일 중... (서버 기동 시 1회, 약 10~15초)');
+const t0b = Date.now();
+const { verificationKey: cbamVerificationKey } = await CbamCheck.compile();
+console.log(`컴파일 완료: ${Date.now() - t0b}ms`);
 
 function toFields(obj, keys) {
   const out = {};
@@ -81,6 +88,58 @@ async function handleSteelMillCheck(req, res) {
   }
 }
 
+// CBAM(Q2_06) - "연간 누적 수입수량이 de minimis(50t) 기준을 초과했는가"만 증명한다.
+// 이게 스틸밀체크와 다른 점: 출력(publicOutput)이 "적합/부적합"이 아니라 "의무 발생
+// 여부(둘 다 정상적인 결과)"라서, verdicts를 review_status(승인/반려)에 매핑하면 안 된다 -
+// 파서가 값을 못 읽거나 크립토 검증 자체가 실패한 경우에만 처리 실패로 본다. 실제
+// 의무 발생 여부(obligated)는 CBAM_APPLICABLE 필드에 자동 반영하는 용도로만 쓴다
+// (Java쪽 CbamIngestService 참고).
+async function handleCbamCheck(req, res) {
+  let body = '';
+  for await (const chunk of req) body += chunk;
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: '잘못된 JSON입니다.' }));
+    return;
+  }
+
+  try {
+    const deMinimisX10 = payload.deMinimisX10;
+    const qtyX10 = payload.qtyX10;
+    if (!Number.isFinite(Number(deMinimisX10)) || !Number.isFinite(Number(qtyX10))) {
+      throw new Error('deMinimisX10/qtyX10이 숫자가 아닙니다.');
+    }
+
+    const pub = new CbamPublic({ deMinimisX10: Field(Math.trunc(Number(deMinimisX10))) });
+    const priv = new CbamPrivate({ qtyX10: Field(Math.trunc(Number(qtyX10))) });
+
+    const t1 = Date.now();
+    const { proof } = await CbamCheck.checkObligation(pub, priv);
+    const proveMs = Date.now() - t1;
+
+    const t2 = Date.now();
+    const verified = await verify(proof, cbamVerificationKey);
+    const verifyMs = Date.now() - t2;
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      verified,
+      obligated: proof.publicOutput.toBoolean(),
+      proveMs,
+      verifyMs,
+      proof: proof.toJSON(),
+    }));
+  } catch (err) {
+    console.error(err);
+    res.writeHead(422, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: String(err.message || err) }));
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -89,6 +148,10 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && req.url === '/prove/steel-mill-check') {
     await handleSteelMillCheck(req, res);
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/prove/cbam-check') {
+    await handleCbamCheck(req, res);
     return;
   }
   res.writeHead(404, { 'Content-Type': 'application/json' });
