@@ -148,10 +148,11 @@ public class DashboardService {
     }
 
     private int[] fetchCounts(Long dppId) {
-        Object[] counts = dppRepository.findCompletenessCounts(dppId);
-        if (counts == null || counts.length < 2) {
+        List<Object[]> rows = dppRepository.findCompletenessCounts(dppId);
+        if (rows.isEmpty()) {
             return new int[]{0, 0};
         }
+        Object[] counts = rows.get(0);
         int filled = counts[0] != null ? ((Number) counts[0]).intValue() : 0;
         int required = counts[1] != null ? ((Number) counts[1]).intValue() : 0;
         return new int[]{filled, required};
