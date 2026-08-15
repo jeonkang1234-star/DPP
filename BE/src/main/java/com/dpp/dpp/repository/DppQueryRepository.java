@@ -38,20 +38,29 @@ public interface DppQueryRepository extends JpaRepository<Dpp, Long> {
      * 인스턴스를 그대로 반환). 그래서 completeness와 별개로, 엔티티를 거치지 않는 순수
      * 스칼라 프로젝션으로 filled_count/required_count를 직접 다시 읽는다 - Object[] 프로젝션은
      * 엔티티 식별자 기준 1차 캐시에 안 걸린다.
+     *
+     * 반환 타입을 Object[]가 아니라 List<Object[]>로 선언하는 이유: Spring Data JPA가 네이티브
+     * 다중 컬럼 쿼리를 "컬렉션 쿼리"로 인식해서(Object[]도 배열이라 이 판정에 걸림)
+     * getResultList()로 실행한 뒤 그 List를 통째로 다시 Object[]로 변환해버린다 - 그 결과
+     * 반환된 Object[]의 0번째 원소가 컬럼값이 아니라 "행 전체"(Object[])가 되어 버려서
+     * 호출부의 (String) 캐스팅이 무조건 ClassCastException으로 죽었다(2026-08-15, 첫
+     * 임시저장에서 발견 - public_uuid 버그를 고치고 나서야 이 코드 경로에 처음 도달함).
+     * List<Object[]>로 받고 get(0)으로 첫 행을 꺼내면 정상적인 단일 행 Object[]가 나온다.
      */
     @Query(value = "SELECT filled_count, required_count FROM dpp WHERE dpp_id = :dppId", nativeQuery = true)
-    Object[] findCompletenessCounts(@Param("dppId") Long dppId);
+    List<Object[]> findCompletenessCounts(@Param("dppId") Long dppId);
 
     /**
      * findCompletenessCounts와 같은 이유(주석 참고)로 status/completeness까지 한 번에
      * 스칼라 프로젝션으로 읽는다 - FieldFormService가 recalcCompleteness() 직후 같은
      * 트랜잭션 안에서 최신값을 돌려줘야 하는데, 이미 로드된 Dpp 엔티티를 그대로 쓰면
      * 1차 캐시에 걸려 recalc 이전 값이 보인다. Object[] 순서: status, completeness,
-     * filled_count, required_count.
+     * filled_count, required_count. List<Object[]>로 선언하는 이유는 findCompletenessCounts
+     * 주석 참고 - 단일 Object[]로 선언하면 Spring Data JPA가 결과를 잘못 감싸서 반환한다.
      */
     @Query(value = "SELECT status, completeness, filled_count, required_count FROM dpp WHERE dpp_id = :dppId",
             nativeQuery = true)
-    Object[] findStatusAndCompleteness(@Param("dppId") Long dppId);
+    List<Object[]> findStatusAndCompleteness(@Param("dppId") Long dppId);
 
     /**
      * V2__functions.sql의 v_dpp_missing_field 뷰(필수인데 미충족인 필드 + 책임 주체) 조회.
@@ -64,4 +73,24 @@ public interface DppQueryRepository extends JpaRepository<Dpp, Long> {
             + "FROM v_dpp_missing_field WHERE dpp_id IN (:dppIds) ORDER BY sort_order LIMIT :limit",
             nativeQuery = true)
     List<Object[]> findMissingFields(@Param("dppIds") List<Long> dppIds, @Param("limit") int limit);
+
+    /**
+     * V2__functions.sql의 fn_create_dpp_snapshot(dpp_id, reason, user_id, mock)을 호출한다.
+     * 이 함수는 지금까지 존재만 하고 Java에서 한 번도 호출된 적이 없었다(2026-08-15 확인) -
+     * 문서 업로드 시점 앵커링(DocumentIngestService.anchorDocumentHash/anchorZkpVerification,
+     * target_type='DOCUMENT'/'EVENT')은 "개별 증빙 문서/검증 결과가 그 시점에 존재·검증됐다"만
+     * 증명하고, dpp_field_value로 직접 입력한 값(강종·Heat No 등 문서화 안 된 필드)이나
+     * "발급 시점에 DPP 전체가 정확히 이 내용이었다"는 별도로 증명되지 않는다 - 발급 후 값이
+     * 조용히 바뀌어도 개별 문서 해시만으로는 감지가 안 된다는 뜻. fn_create_dpp_snapshot이
+     * dpp+fields+documents+materials를 한 덩어리 JSONB로 얼려서 해시 하나로 anchor하는 게
+     * 그 빈 자리를 메운다 - FieldFormService.issue()에서 호출(target_type='DPP_SNAPSHOT').
+     * p_mock=true로 고정 호출해서 mock 앵커 행은 항상 즉시 생기고(로컬/체인 비활성 환경에서도
+     * 스냅샷 자체는 남게), blockchain.enabled=true인 환경에서는 이후 Java 쪽에서 실제
+     * 체인코드 호출 결과로 같은 anchor 행을 CONFIRMED로 덮어쓴다(anchorDppSnapshot 참고).
+     */
+    @Query(value = "SELECT fn_create_dpp_snapshot(:dppId, :reason, :userId, true)", nativeQuery = true)
+    Long createSnapshot(@Param("dppId") Long dppId, @Param("reason") String reason, @Param("userId") Long userId);
+
+    @Query(value = "SELECT content_hash FROM dpp_snapshot WHERE snapshot_id = :snapshotId", nativeQuery = true)
+    String findSnapshotContentHash(@Param("snapshotId") Long snapshotId);
 }
