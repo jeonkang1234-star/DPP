@@ -7,7 +7,10 @@
     "jw.han@customs.go.kr": "customs",
     "inspector@douane.gouv.fr": "customs",
     "gr.yoon@korea.kr": "eu",
-    "audit@zoll.de": "eu"
+    "audit@zoll.de": "eu",
+    "steel-test@daesungsteel.test": "steel",
+    "partner-test@woojinmetal.test": "partner",
+    "testlab-test@krtest.test": "partner"
   },
   "products": {
     "steel": [
