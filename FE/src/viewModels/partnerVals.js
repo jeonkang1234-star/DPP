@@ -16,16 +16,27 @@ export function partnerVals(ctx) {
   const isPartner = state.role === 'partner';
   const ff = isPartner ? ctx.fieldFormData : null;
   const ffInputs = ctx.fieldFormInputs || {};
+  const df = isPartner ? ctx.documentFormData : null;
+  const DOC_STATUS_LABEL = { NOT_UPLOADED: '미제출', PENDING: '검토 중', APPROVED: '제출 완료', REJECTED: '반려됨', EXPIRED: '만료됨' };
+  const DOC_STATUS_COLOR = { NOT_UPLOADED: '#9AA8BE', PENDING: '#E3A008', APPROVED: '#12A150', REJECTED: '#E03B3B', EXPIRED: '#C22B2B' };
 
   return {
+    // "DPP 전체 상세는 안 보이고 본인이 올려야 하는 것만" - myFieldsFilled/Total(입력값)과
+    // myDocsFilled/Total(업로드 문서)을 합쳐서 하나의 진행률로 보여준다. 둘 다 백엔드가
+    // 이 협력사 role_code 담당 항목만 세서 내려주므로(ParticipationService 참고) DPP
+    // 전체 완성도는 여기 전혀 안 섞인다(2026-08-15).
     participations: (ctx.participationsData || []).map(p => {
-      const roleLabel = { RAW_SUPPLIER: '원자재공급사', LOGISTICS: '물류사', DISTRIBUTOR: '유통사', RECYCLER: '재활용업체', TEST_LAB: '시험·인증기관' }[p.roleCode] || p.roleCode;
+      const roleLabel = { RAW_SUPPLIER: '원자재·화학 공급사', LOGISTICS: '물류사', DISTRIBUTOR: '유통사', RECYCLER: '재활용업체', TEST_LAB: '시험·인증기관' }[p.roleCode] || p.roleCode;
       const statusLabel = { INVITED: '입력 대기', IN_PROGRESS: '작성 중', SUBMITTED: '제출 완료', COMPLETED: '완료' }[p.submitStatus] || p.submitStatus;
       const selected = state.partnerAssignedDppId === p.dppId;
+      const filled = (p.myFieldsFilled || 0) + (p.myDocsFilled || 0);
+      const total = (p.myFieldsTotal || 0) + (p.myDocsTotal || 0);
       return {
         key: p.dppId, dppId: p.dppId, label: p.dppLabel, owner: p.ownerOrgName, roleLabel, statusLabel,
-        filled: p.myFieldsFilled, total: p.myFieldsTotal,
-        pct: p.myFieldsTotal > 0 ? Math.round((p.myFieldsFilled / p.myFieldsTotal) * 100) : 0,
+        filled, total,
+        fieldsFilled: p.myFieldsFilled, fieldsTotal: p.myFieldsTotal,
+        docsFilled: p.myDocsFilled, docsTotal: p.myDocsTotal,
+        pct: total > 0 ? Math.round((filled / total) * 100) : 0,
         selected,
         cardStyle: {
           display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px',
@@ -53,6 +64,29 @@ export function partnerVals(ctx) {
       : [],
     partnerFieldFilledCount: ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0,
     partnerFieldTotalCount: ff ? ff.fields.length : 0,
+    // 참여 협력사 담당 문서(예: RAW_SUPPLIER의 스크랩 매입증빙) - 백엔드가 자기 role_code
+    // 담당 문서만 내려주므로 FE는 필터링 없이 그대로 보여준다.
+    partnerDocumentSlots: df
+      ? df.documents.map(d => ({
+          key: d.fieldCode, label: d.labelKo, req: d.required ? '필수' : '선택',
+          fileName: d.fileName || '',
+          statusLabel: DOC_STATUS_LABEL[d.status] || d.status,
+          dot: ctx.pillDot(DOC_STATUS_COLOR[d.status] || '#9AA8BE'),
+          inputId: 'partner-doc-upload-' + d.fieldCode,
+          onFileChange: async (e) => {
+            const file = e.target.files && e.target.files[0];
+            e.target.value = '';
+            if (!file || !state.partnerAssignedDppId) return;
+            try {
+              const result = await ctx.uploadDocument(state.partnerAssignedDppId, d.docTypeCode, file);
+              ctx.setDocumentFormData(result);
+              ctx.say(d.labelKo + ' 업로드했습니다.');
+            } catch (err) {
+              ctx.say(err.message || '문서 업로드에 실패했습니다.');
+            }
+          }
+        }))
+      : [],
     partnerSaveDraft: async () => {
       if (!ff || !ff.dppId) return;
       try {

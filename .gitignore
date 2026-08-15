@@ -38,6 +38,14 @@ parser/venv/
 # --- Docker ---
 docker/pgdata/
 docker/docker-compose.override.yml
+docker/document-uploads/
 
 # --- Logs ---
 *.log
+
+# --- 로컬 테스트 중 생긴 잡동사니(커밋 대상 아님) ---
+FE/vite.config.js.timestamp-*.mjs
+FE/tsconfig.node.tsbuildinfo
+/login.json
+/org.json
+docker/login.json

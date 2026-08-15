@@ -18,10 +18,15 @@ async function authedFetch(path, options = {}) {
   const session = loadSession();
   const token = session?.accessToken;
 
+  // FormData(멀티파트 업로드, /me/documents/upload)일 땐 Content-Type을 직접 지정하면 안
+  // 된다 - 브라우저가 파일 바이너리 경계(boundary)를 포함해서 자동으로 채워야 하는데,
+  // 여기서 application/json으로 덮어쓰면 백엔드가 멀티파트를 못 읽어서 400/415가 난다.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+
   const res = await fetch(path, {
     ...options,
     headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
@@ -121,14 +126,61 @@ export function issueFieldFormDpp(dppId) {
   return authedFetch(`/me/field-form/${dppId}/issue`, { method: 'POST' });
 }
 
+/**
+ * 필수 문서 업로드 화면(제강 성적서 제외 9종 - Mill Sheet는 uploadSteelMillSheet 별도 사용).
+ * status: NOT_UPLOADED/PENDING/APPROVED/REJECTED/EXPIRED.
+ */
+export function fetchDocumentForm(dppId) {
+  return authedFetch(dppId ? `/me/documents?dppId=${dppId}` : '/me/documents');
+}
+
+/** 문서 1건 업로드 - 업로드 즉시 승인 처리되고(관리자 검수 화면 아직 없음) 완성도가 재계산된다. */
+export function uploadDocument(dppId, docTypeCode, file) {
+  const formData = new FormData();
+  formData.append('dppId', dppId);
+  formData.append('docTypeCode', docTypeCode);
+  formData.append('file', file);
+  return authedFetch('/me/documents/upload', { method: 'POST', body: formData });
+}
+
+/**
+ * 제강 성적서(Mill Sheet) 업로드 - 파서(화학성분/기계적성질 12개 값 추출) -> ZKP 증명 생성/검증
+ * -> (blockchain.enabled=true인 환경만) 블록체인 앵커링까지 한 번에 처리한다. dppId를 안
+ * 받는다 - 백엔드가 "이 계정 조직의 첫 번째 DPP"에 자동으로 붙인다(product/DPP 선택 화면이
+ * 아직 없어서의 임시 조치, com.dpp.document.service.DocumentIngestService 참고).
+ * /me/* 가 아니라 /document/upload/steel-mill이라 authedFetch를 경로만 다르게 재사용한다.
+ */
+export function uploadSteelMillSheet(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedFetch('/document/upload/steel-mill', { method: 'POST', body: formData });
+}
+
+/**
+ * CBAM(Q2_06) 탄소보고서 업로드 - 파서(수입 수량) -> cbam-check ZKP(de minimis 초과 여부) ->
+ * (blockchain.enabled=true인 환경만) 블록체인 앵커링. Mill Sheet와 마찬가지로 dppId를 안
+ * 받고 "이 계정 조직의 첫 번째 DPP"에 자동으로 붙는다(com.dpp.document.service.CbamIngestService).
+ */
+export function uploadCbamReport(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedFetch('/document/upload/cbam', { method: 'POST', body: formData });
+}
+
 /** 협력사 초대 이력. status는 SENT/ACCEPTED/EXPIRED/REVOKED/REJECTED 원문 그대로 온다. */
 export function fetchInvitations() {
   return authedFetch('/me/invitations');
 }
 
-/** 협력사 초대 발송 - dppId 필수(V11__invitation_dpp_link.sql 이후 초대는 항상 특정 DPP에 대한 것). */
-export function sendInvitation(orgName, email, dppId) {
-  return authedFetch('/me/invitations', { method: 'POST', body: JSON.stringify({ orgName, email, dppId }) });
+/**
+ * 협력사 초대 발송 - dppId 필수(V11__invitation_dpp_link.sql 이후 초대는 항상 특정 DPP에
+ * 대한 것). roleCode는 'RAW_SUPPLIER'(원자재/화학 공급사) 또는 'TEST_LAB'(제3자 시험·
+ * 인증기관) - 안 주면 백엔드가 RAW_SUPPLIER로 기본 처리한다(com.dpp.collab.service.
+ * InvitationService 참고, 2026-08-15부터 requirement_field.responsible_role이 이
+ * 둘로 나뉘어서 초대 시점에 역할을 지정해야 협력사가 맞는 항목을 볼 수 있다).
+ */
+export function sendInvitation(orgName, email, dppId, roleCode) {
+  return authedFetch('/me/invitations', { method: 'POST', body: JSON.stringify({ orgName, email, dppId, roleCode }) });
 }
 
 /** 초대 재발송 - 이미 수락(ACCEPTED)된 초대는 백엔드가 400으로 거부한다. */
