@@ -14,7 +14,11 @@ import com.dpp.collab.repository.InvitationRepository;
 import com.dpp.dpp.entity.DppParticipant;
 import com.dpp.dpp.repository.DppParticipantRepository;
 import com.dpp.mypage.entity.Organization;
+import com.dpp.mypage.repository.OrganizationRepository;
 import com.dpp.mypage.service.OrganizationService;
+import com.dpp.notify.entity.Notification;
+import com.dpp.notify.entity.NotificationCategory;
+import com.dpp.notify.repository.NotificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -45,6 +49,8 @@ public class BusinessSignupService {
     private final OrganizationService organizationService;
     private final DppParticipantRepository dppParticipantRepository;
     private final InvitationRepository invitationRepository;
+    private final OrganizationRepository organizationRepository;
+    private final NotificationRepository notificationRepository;
 
     public BusinessSignupService(UserAccountRepository userAccountRepository,
                                   EmailVerificationService emailVerificationService,
@@ -53,7 +59,9 @@ public class BusinessSignupService {
                                   JwtTokenProvider jwtTokenProvider,
                                   OrganizationService organizationService,
                                   DppParticipantRepository dppParticipantRepository,
-                                  InvitationRepository invitationRepository) {
+                                  InvitationRepository invitationRepository,
+                                  OrganizationRepository organizationRepository,
+                                  NotificationRepository notificationRepository) {
         this.userAccountRepository = userAccountRepository;
         this.emailVerificationService = emailVerificationService;
         this.phoneVerificationService = phoneVerificationService;
@@ -62,6 +70,8 @@ public class BusinessSignupService {
         this.organizationService = organizationService;
         this.dppParticipantRepository = dppParticipantRepository;
         this.invitationRepository = invitationRepository;
+        this.organizationRepository = organizationRepository;
+        this.notificationRepository = notificationRepository;
     }
 
     @Transactional
@@ -96,7 +106,7 @@ public class BusinessSignupService {
         user.setOrgId(org.getOrgId());
         userAccountRepository.save(user);
 
-        linkPendingCollaborations(request.email(), org.getOrgId());
+        linkPendingCollaborations(request.email(), org.getOrgId(), user.getUserId());
 
         String access = jwtTokenProvider.createAccessToken(
                 user.getUserId().toString(), Map.of("accountType", user.getAccountType().name()));
@@ -113,8 +123,13 @@ public class BusinessSignupService {
      * 초대 이메일과 가입 이메일이 정확히 같아야 매칭된다(대소문자까지 - 둘 다 저장 시
      * lower-case 정규화하는 곳이 없어서 그대로 비교). 다르게 가입하면 수동 연결 수단이
      * 아직 없다 - 나중에 이슈가 되면 관리자 도구나 "초대 링크로 가입" 플로우를 추가할 것.
+     *
+     * 연결된 초대 건마다 새로 가입한 사용자에게 알림도 하나씩 남긴다(notification.
+     * recipient_user_id) - 그 전까지는 dpp_participant/invitation을 채우기만 하고 아무도
+     * 이걸 알 방법이 없었다(알림센터는 화면만 있고 쓰는 코드가 이 프로젝트에 하나도
+     * 없었음, 2026-08-14).
      */
-    private void linkPendingCollaborations(String email, Long orgId) {
+    private void linkPendingCollaborations(String email, Long orgId, Long userId) {
         List<DppParticipant> participants = dppParticipantRepository.findByGuestEmailAndOrgIdIsNull(email);
         for (DppParticipant participant : participants) {
             participant.setOrgId(orgId);
@@ -127,6 +142,16 @@ public class BusinessSignupService {
             invitation.setAcceptedOrgId(orgId);
             invitation.setAcceptedAt(OffsetDateTime.now());
             invitationRepository.save(invitation);
+
+            String inviterOrgName = organizationRepository.findById(invitation.getInviterOrgId())
+                    .map(Organization::getOrgName)
+                    .orElse("협력사");
+            Notification notification = new Notification();
+            notification.setRecipientUserId(userId);
+            notification.setCategory(NotificationCategory.SYSTEM);
+            notification.setTitle("협력사 참여 요청이 도착했습니다");
+            notification.setBody(inviterOrgName + "에서 DPP 데이터 제출을 요청했습니다. '참여 DPP' 탭에서 확인해 주세요.");
+            notificationRepository.save(notification);
         }
 
         if (!participants.isEmpty() || !invitations.isEmpty()) {
