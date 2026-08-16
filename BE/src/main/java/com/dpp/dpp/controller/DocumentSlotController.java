@@ -29,8 +29,9 @@ public class DocumentSlotController {
 
     @GetMapping("/me/documents")
     public ResponseEntity<DocumentFormResponse> getForm(Authentication authentication,
-                                                          @RequestParam(required = false) Long dppId) {
-        return ResponseEntity.ok(documentSlotService.getForm(parseUserId(authentication), dppId));
+                                                          @RequestParam(required = false) Long dppId,
+                                                          @RequestParam(required = false) String domain) {
+        return ResponseEntity.ok(documentSlotService.getForm(parseUserId(authentication), dppId, domain));
     }
 
     @PostMapping(value = "/me/documents/upload", consumes = "multipart/form-data")

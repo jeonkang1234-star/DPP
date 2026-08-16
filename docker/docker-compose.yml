@@ -36,15 +36,18 @@ services:
       dockerfile: Dockerfile
     container_name: dpp-zkp
     restart: unless-stopped
-    # SteelMillCheck 컴파일이 기동 시 (환경에 따라) 최대 90초 가까이 걸려서
-    # healthcheck 시작을 넉넉히 늦춘다 (기존 30s/6회는 실제 환경에서 컴파일 도중에
-    # unhealthy로 판정돼버려서 늘림).
+    # 회로 컴파일이 서버 기동 시 순차로 다 끝나야 /health가 응답한다(server.mjs가
+    # server.listen()보다 앞에서 전부 await compile() 함). 회로 1개당 환경에 따라 최대
+    # 90초 가까이 걸릴 수 있고(SteelMillCheck 기준 실측), 2026-08-16 배터리 도메인
+    # 추가로 회로가 4개(Steel/Cbam/Fiber/Oekotex)에서 6개(+Battery/Recycling)로 늘면서
+    # 기존 60s/10회(총 160s 예산)로는 실제로 166.5s에 unhealthy 판정이 나는 걸 확인했다
+    # (강 리포트, docker compose up 로그) - 예산을 넉넉히 늘린다.
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 60s
+      retries: 18
+      start_period: 120s
 
   backend:
     build:

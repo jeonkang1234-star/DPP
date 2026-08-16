@@ -56,7 +56,11 @@ import java.util.UUID;
 public class InvitationService {
 
     private static final String DEFAULT_ROLE_CODE = "RAW_SUPPLIER";
-    private static final Set<String> ALLOWED_ROLE_CODES = Set.of("RAW_SUPPLIER", "TEST_LAB");
+    // RECYCLER는 원래 role 테이블(V3__seed_master.sql)에 있었지만 담당 필드가 하나도 없어
+    // 초대 옵션에서 빠져 있었다 - 배터리 도메인의 RECYCLING_REPORT(Q4_15)가 처음으로 이
+    // 역할을 실사용해서 여기 화이트리스트에 추가한다(2026-08-16, V17__seed_requirement_
+    // battery.sql). LOGISTICS/DISTRIBUTOR는 여전히 담당 필드가 없어 계속 제외.
+    private static final Set<String> ALLOWED_ROLE_CODES = Set.of("RAW_SUPPLIER", "TEST_LAB", "RECYCLER");
     private static final int EXPIRY_DAYS = 7;
 
     private final UserAccountRepository userAccountRepository;
