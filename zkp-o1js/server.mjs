@@ -13,7 +13,14 @@
 
 import http from 'node:http';
 import { Field, verify } from 'o1js';
-import { SteelMillCheck, SteelLimits, SteelMeasured, CbamCheck, CbamPublic, CbamPrivate } from './circuits.mjs';
+import {
+  SteelMillCheck, SteelLimits, SteelMeasured,
+  CbamCheck, CbamPublic, CbamPrivate,
+  FiberSumCheck, FiberPublic, FiberPrivate,
+  OekotexCheck, OekotexPublic, OekotexPrivate,
+  BatteryCheck, BatteryPublic, BatteryPrivate,
+  RecyclingCheck, RecyclingPublic, RecyclingPrivate,
+} from './circuits.mjs';
 
 const PORT = process.env.PORT || 4001;
 
@@ -28,6 +35,31 @@ console.log('CbamCheck 컴파일 중... (서버 기동 시 1회, 약 10~15초)')
 const t0b = Date.now();
 const { verificationKey: cbamVerificationKey } = await CbamCheck.compile();
 console.log(`컴파일 완료: ${Date.now() - t0b}ms`);
+
+// 섬유(TEXTILE) 도메인 - Q1_04 섬유케어라벨(FiberSumCheck)/Q3_10 OEKO-TEX(OekotexCheck).
+// 철강(SteelMillCheck)/CBAM(CbamCheck)과 같은 이유로 같은 서버 프로세스에서 같이 컴파일한다.
+console.log('FiberSumCheck 컴파일 중... (서버 기동 시 1회, 약 10~15초)');
+const t0c = Date.now();
+const { verificationKey: fiberVerificationKey } = await FiberSumCheck.compile();
+console.log(`컴파일 완료: ${Date.now() - t0c}ms`);
+
+console.log('OekotexCheck 컴파일 중... (서버 기동 시 1회, 약 10~15초)');
+const t0d = Date.now();
+const { verificationKey: oekotexVerificationKey } = await OekotexCheck.compile();
+console.log(`컴파일 완료: ${Date.now() - t0d}ms`);
+
+// 배터리(BATTERY) 도메인 - Q2_07 배터리 탄소발자국 선언(BatteryCheck)/Q4_15 재활용 처리
+// 결과 보고서(RecyclingCheck). 위 4개 회로와 같은 이유로 같은 서버 프로세스에서 같이
+// 컴파일한다(2026-08-16).
+console.log('BatteryCheck 컴파일 중... (서버 기동 시 1회, 약 10~15초)');
+const t0e = Date.now();
+const { verificationKey: batteryVerificationKey } = await BatteryCheck.compile();
+console.log(`컴파일 완료: ${Date.now() - t0e}ms`);
+
+console.log('RecyclingCheck 컴파일 중... (서버 기동 시 1회, 약 10~15초)');
+const t0f = Date.now();
+const { verificationKey: recyclingVerificationKey } = await RecyclingCheck.compile();
+console.log(`컴파일 완료: ${Date.now() - t0f}ms`);
 
 function toFields(obj, keys) {
   const out = {};
@@ -140,6 +172,226 @@ async function handleCbamCheck(req, res) {
   }
 }
 
+// 섬유(Q1_04) - 섬유 혼용률 합계가 목표치(100%) 허용오차 이내인지만 증명한다(개별 섬유명은
+// 비공개, Annex I 명칭 유효성은 회로화 대상 아님 - README "ZKP 비대상 4개 항목" 참고).
+// Java쪽(FiberZkpMapper)이 임의 개수의 섬유 조성 항목을 p1(=합계)에 몰아넣고 p2~p4는 0으로
+// 채워 보낸다 - 회로는 4개를 그냥 합산만 하므로 이렇게 해도 "혼용률 합계" 자체는 정확하다.
+async function handleFiberSumCheck(req, res) {
+  let body = '';
+  for await (const chunk of req) body += chunk;
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: '잘못된 JSON입니다.' }));
+    return;
+  }
+
+  try {
+    const pub = new FiberPublic({
+      targetX10: Field(Math.trunc(Number(payload.targetX10))),
+      toleranceX10: Field(Math.trunc(Number(payload.toleranceX10))),
+    });
+    const priv = new FiberPrivate({
+      p1: Field(Math.trunc(Number(payload.p1 ?? 0))),
+      p2: Field(Math.trunc(Number(payload.p2 ?? 0))),
+      p3: Field(Math.trunc(Number(payload.p3 ?? 0))),
+      p4: Field(Math.trunc(Number(payload.p4 ?? 0))),
+    });
+
+    const t1 = Date.now();
+    const { proof } = await FiberSumCheck.checkSum(pub, priv);
+    const proveMs = Date.now() - t1;
+
+    const t2 = Date.now();
+    const verified = await verify(proof, fiberVerificationKey);
+    const verifyMs = Date.now() - t2;
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      verified,
+      passed: proof.publicOutput.toBoolean(),
+      proveMs,
+      verifyMs,
+      proof: proof.toJSON(),
+    }));
+  } catch (err) {
+    console.error(err);
+    res.writeHead(422, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: String(err.message || err) }));
+  }
+}
+
+// OEKO-TEX(Q3_10) - pH 실측값이 [low, high] 범위 안인지만 증명한다.
+async function handleOekotexCheck(req, res) {
+  let body = '';
+  for await (const chunk of req) body += chunk;
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: '잘못된 JSON입니다.' }));
+    return;
+  }
+
+  try {
+    const pub = new OekotexPublic({
+      lowX10: Field(Math.trunc(Number(payload.lowX10))),
+      highX10: Field(Math.trunc(Number(payload.highX10))),
+    });
+    const priv = new OekotexPrivate({ phX10: Field(Math.trunc(Number(payload.phX10))) });
+
+    const t1 = Date.now();
+    const { proof } = await OekotexCheck.checkPh(pub, priv);
+    const proveMs = Date.now() - t1;
+
+    const t2 = Date.now();
+    const verified = await verify(proof, oekotexVerificationKey);
+    const verifyMs = Date.now() - t2;
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      verified,
+      passed: proof.publicOutput.toBoolean(),
+      proveMs,
+      verifyMs,
+      proof: proof.toJSON(),
+    }));
+  } catch (err) {
+    console.error(err);
+    res.writeHead(422, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: String(err.message || err) }));
+  }
+}
+
+// 배터리(Q2_07) - 재생원료 4원소(Co/Li/Ni/Pb) 임계값 충족 여부 + 탄소발자국 선언의무 용량
+// 플래그(정보성, pass/fail 아님) 5항목을 한 번에 증명한다. SteelMillCheck처럼 여러 항목을
+// 각각 Bool로 돌려주는 구조 - capacityDeclarationFlag는 CbamCheck의 obligated와 같은 성격
+// (정보 플래그일 뿐, 규격 적합 여부 판정에는 안 쓴다 - Java쪽 BatteryIngestService 참고).
+async function handleBatteryCheck(req, res) {
+  let body = '';
+  for await (const chunk of req) body += chunk;
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: '잘못된 JSON입니다.' }));
+    return;
+  }
+
+  try {
+    const pub = new BatteryPublic({
+      coThresholdX10: Field(Math.trunc(Number(payload.coThresholdX10))),
+      liThresholdX10: Field(Math.trunc(Number(payload.liThresholdX10))),
+      niThresholdX10: Field(Math.trunc(Number(payload.niThresholdX10))),
+      pbThresholdX10: Field(Math.trunc(Number(payload.pbThresholdX10))),
+      capacityThresholdX10: Field(Math.trunc(Number(payload.capacityThresholdX10))),
+    });
+    const priv = new BatteryPrivate({
+      coX10: Field(Math.trunc(Number(payload.coX10))),
+      liX10: Field(Math.trunc(Number(payload.liX10))),
+      niX10: Field(Math.trunc(Number(payload.niX10))),
+      pbX10: Field(Math.trunc(Number(payload.pbX10))),
+      capacityX10: Field(Math.trunc(Number(payload.capacityX10))),
+    });
+
+    const t1 = Date.now();
+    const { proof } = await BatteryCheck.checkAll(pub, priv);
+    const proveMs = Date.now() - t1;
+
+    const t2 = Date.now();
+    const verified = await verify(proof, batteryVerificationKey);
+    const verifyMs = Date.now() - t2;
+
+    const out = proof.publicOutput;
+    const verdicts = {
+      coOk: out.coOk.toBoolean(),
+      liOk: out.liOk.toBoolean(),
+      niOk: out.niOk.toBoolean(),
+      pbOkOrExempt: out.pbOkOrExempt.toBoolean(),
+      capacityDeclarationFlag: out.capacityDeclarationFlag.toBoolean(),
+    };
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      verified,
+      verdicts,
+      proveMs,
+      verifyMs,
+      proof: proof.toJSON(),
+    }));
+  } catch (err) {
+    console.error(err);
+    res.writeHead(422, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: String(err.message || err) }));
+  }
+}
+
+// 재활용 처리결과(Q4_15) - 구리(직접) + 리튬/코발트(리튬코발트산화물 화합물 파생) 물질회수율
+// 3항목이 각각 기준치를 넘는지 증명한다. 종합재활용효율(judge.py의 "재활용효율(2025~)")은
+// 회로 대상이 아니다(단순 임계값 비교가 아니라 분모 정합성 검증까지 포함해서 - README
+// "ZKP 비대상 4개 항목" 참고) - Java쪽에서 파싱값을 그대로 정보성 필드로만 반영한다.
+async function handleRecyclingCheck(req, res) {
+  let body = '';
+  for await (const chunk of req) body += chunk;
+
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: '잘못된 JSON입니다.' }));
+    return;
+  }
+
+  try {
+    const pub = new RecyclingPublic({
+      cuThresholdX10: Field(Math.trunc(Number(payload.cuThresholdX10))),
+      liThresholdX10: Field(Math.trunc(Number(payload.liThresholdX10))),
+      coThresholdX10: Field(Math.trunc(Number(payload.coThresholdX10))),
+    });
+    const priv = new RecyclingPrivate({
+      cuX10: Field(Math.trunc(Number(payload.cuX10))),
+      liDerivedX10: Field(Math.trunc(Number(payload.liDerivedX10))),
+      coDerivedX10: Field(Math.trunc(Number(payload.coDerivedX10))),
+    });
+
+    const t1 = Date.now();
+    const { proof } = await RecyclingCheck.checkAll(pub, priv);
+    const proveMs = Date.now() - t1;
+
+    const t2 = Date.now();
+    const verified = await verify(proof, recyclingVerificationKey);
+    const verifyMs = Date.now() - t2;
+
+    const out = proof.publicOutput;
+    const verdicts = {
+      cuOk: out.cuOk.toBoolean(),
+      liOk: out.liOk.toBoolean(),
+      coOk: out.coOk.toBoolean(),
+    };
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      verified,
+      verdicts,
+      proveMs,
+      verifyMs,
+      proof: proof.toJSON(),
+    }));
+  } catch (err) {
+    console.error(err);
+    res.writeHead(422, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: String(err.message || err) }));
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -152,6 +404,22 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && req.url === '/prove/cbam-check') {
     await handleCbamCheck(req, res);
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/prove/fiber-sum-check') {
+    await handleFiberSumCheck(req, res);
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/prove/oekotex-check') {
+    await handleOekotexCheck(req, res);
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/prove/battery-check') {
+    await handleBatteryCheck(req, res);
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/prove/recycling-check') {
+    await handleRecyclingCheck(req, res);
     return;
   }
   res.writeHead(404, { 'Content-Type': 'application/json' });

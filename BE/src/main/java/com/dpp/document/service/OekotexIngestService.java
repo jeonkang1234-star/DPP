@@ -8,7 +8,7 @@ import com.dpp.blockchain.repository.BlockchainAnchorRepository;
 import com.dpp.document.client.ParserClient;
 import com.dpp.document.client.ZkpClient;
 import com.dpp.document.config.DocumentIntegrationProperties;
-import com.dpp.document.dto.CbamUploadResponse;
+import com.dpp.document.dto.OekotexUploadResponse;
 import com.dpp.document.entity.Document;
 import com.dpp.document.entity.DocumentLink;
 import com.dpp.document.entity.Dpp;
@@ -17,9 +17,13 @@ import com.dpp.document.repository.DocumentLinkRepository;
 import com.dpp.document.repository.DocumentRepository;
 import com.dpp.document.repository.DppRepository;
 import com.dpp.document.repository.ZkpProofRepository;
+import com.dpp.document.zkp.OekotexZkpMapper;
 import com.dpp.dpp.entity.DppFieldValue;
 import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
+import com.dpp.notify.entity.Notification;
+import com.dpp.notify.entity.NotificationCategory;
+import com.dpp.notify.repository.NotificationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,35 +35,41 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * REQ-DOCUMENT: CBAM(Q2_06) 탄소보고서 업로드 -> 파서 -> cbam-check ZKP -> (선택) 블록체인
- * 순으로 처리한다. DocumentIngestService(Mill Sheet)와 같은 패턴이지만 핵심 차이가 하나 있다:
+ * REQ-DOCUMENT: 업로드된 OEKO-TEX 라벨(Q3_10) 1건을 파서 -> ZKP(oekotex-check) -> (선택)
+ * 블록체인 순으로 넘긴다. CareLabelIngestService와 완전히 같은 구조 - 실측값이 pH 하나뿐이라
+ * material_composition 저장 단계가 없다는 점만 다르다.
  *
- * SteelMillCheck의 verdicts(적합/부적합)와 달리, CbamCheck의 출력(obligated)은 "적합
- * 여부"가 아니라 "연간 누적 수입량이 de minimis(50t) 기준을 초과해서 신고 의무가
- * 발생했는가"다 - true/false 둘 다 정상적인 결과라서 review_status(승인/반려)에 매핑하면
- * 안 된다. 그래서 문서 자체는 파싱+증명이 성공하면 항상 APPROVED로 두고, obligated
- * 값은 정보로서 CBAM_APPLICABLE 필드(requirement_field FIELD_VALUE)에 자동 반영만 한다 -
- * 사용자가 그 값을 또 수기로 체크할 필요가 없어진다.
+ * 이 문서는 responsible_role='TEST_LAB'(V16__seed_requirement_textile.sql) - 실제로는
+ * OEKO-TEX 인증기관이 발급하는 문서라 제3자 시험·인증기관 범주로 분류했다(V14__partner_role_
+ * split.sql과 동일한 기준). 그래서 DPP 소유 조직(제조사)이 아니라 초대받은 TEST_LAB 참여
+ * 협력사가 이 엔드포인트를 호출하는 게 정상 시나리오다 - 그런데 이 서비스는 Mill Sheet/CBAM과
+ * 마찬가지로 "이 계정 조직의 첫 번째 DPP"에 자동으로 붙이는 임시 패턴을 그대로 따른다
+ * (product/DPP 선택 화면이 아직 없어서, dppRepository.findFirstByOwnerOrgId 자체가 소유
+ * 조직 기준이라 - 참여 협력사가 이 엔드포인트를 실제로 호출하려면 향후 dppId를 직접 받는
+ * 방식으로 확장이 필요하다. 지금은 소유 조직이 스스로 발급받아 대신 업로드하는 경우도
+ * 흔하다고 보고 그대로 둔다).
  */
 @Service
-public class CbamIngestService {
+public class OekotexIngestService {
 
-    private static final Logger log = LoggerFactory.getLogger(CbamIngestService.class);
+    private static final Logger log = LoggerFactory.getLogger(OekotexIngestService.class);
 
-    private static final String REGISTRY_CODE = "Q2_06";
-    private static final String DOC_TYPE_CODE = "CBAM_REPORT";
-    private static final String CBAM_APPLICABLE_FIELD_CODE = "CBAM_APPLICABLE";
-    /** circuits.mjs/README의 de minimis 기준(50t) x10 스케일 - 소수 1자리까지 정수화. */
-    private static final long DE_MINIMIS_X10 = 500;
+    private static final String REGISTRY_CODE = "Q3_10";
+    private static final String DOC_TYPE_CODE = "OEKOTEX_LABEL";
+    private static final String CERT_NO_FIELD_CODE = "OEKOTEX_CERT_NO";
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     private final UserAccountRepository userAccountRepository;
@@ -75,20 +85,22 @@ public class CbamIngestService {
     private final Optional<BlockchainClient> blockchainClient;
     private final DocumentIntegrationProperties properties;
     private final ObjectMapper objectMapper;
+    private final NotificationRepository notificationRepository;
 
-    public CbamIngestService(UserAccountRepository userAccountRepository,
-                              DppRepository dppRepository,
-                              DocumentRepository documentRepository,
-                              DocumentLinkRepository documentLinkRepository,
-                              DppQueryRepository dppQueryRepository,
-                              ZkpProofRepository zkpProofRepository,
-                              DppFieldValueRepository dppFieldValueRepository,
-                              BlockchainAnchorRepository blockchainAnchorRepository,
-                              ParserClient parserClient,
-                              ZkpClient zkpClient,
-                              Optional<BlockchainClient> blockchainClient,
-                              DocumentIntegrationProperties properties,
-                              ObjectMapper objectMapper) {
+    public OekotexIngestService(UserAccountRepository userAccountRepository,
+                                 DppRepository dppRepository,
+                                 DocumentRepository documentRepository,
+                                 DocumentLinkRepository documentLinkRepository,
+                                 DppQueryRepository dppQueryRepository,
+                                 ZkpProofRepository zkpProofRepository,
+                                 DppFieldValueRepository dppFieldValueRepository,
+                                 BlockchainAnchorRepository blockchainAnchorRepository,
+                                 ParserClient parserClient,
+                                 ZkpClient zkpClient,
+                                 Optional<BlockchainClient> blockchainClient,
+                                 DocumentIntegrationProperties properties,
+                                 ObjectMapper objectMapper,
+                                 NotificationRepository notificationRepository) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.documentRepository = documentRepository;
@@ -102,10 +114,11 @@ public class CbamIngestService {
         this.blockchainClient = blockchainClient;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.notificationRepository = notificationRepository;
     }
 
     @Transactional
-    public CbamUploadResponse ingestCbamReport(Long userId, MultipartFile file) {
+    public OekotexUploadResponse ingestOekotexLabel(Long userId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "업로드된 파일이 없습니다.");
         }
@@ -114,13 +127,12 @@ public class CbamIngestService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 사용자입니다."));
         Long orgId = user.getOrgId();
         if (orgId == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이 계정에 연결된 조직(제조사)이 없습니다.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이 계정에 연결된 조직이 없습니다.");
         }
         Dpp dpp = dppRepository.findFirstByOwnerOrgId(orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "이 조직에 연결된 DPP가 없습니다. (테스트 시드가 적용됐는지 확인하세요)"));
 
-        // 1) 파서 호출
         Map<String, Object> parsed;
         try {
             parsed = parserClient.parse(file, REGISTRY_CODE);
@@ -133,20 +145,12 @@ public class CbamIngestService {
         }
 
         @SuppressWarnings("unchecked")
-        Map<String, Object> cbamValues = (Map<String, Object>) parsed.get("cbam_values");
+        Map<String, Object> oekotexValues = (Map<String, Object>) parsed.get("oekotex_values");
         String textSha256 = (String) parsed.get("text_sha256");
         if (textSha256 == null) {
             throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "파서가 문서 해시를 계산하지 못했습니다.");
         }
-        Object importQtyRaw = cbamValues == null ? null : cbamValues.get("import_quantity_t");
-        if (!(importQtyRaw instanceof Number importQtyNumber)) {
-            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    "CBAM 수입 수량을 문서에서 읽지 못했습니다.");
-        }
-        double importQuantityT = importQtyNumber.doubleValue();
 
-        // 1-1) 중복 업로드 방지 - DocumentIngestService(Mill Sheet)에서 발견된 패턴과 동일
-        // (ux_document_dedup 유니크 제약, 2026-08-15). ZKP 호출 전에 미리 걸러 낭비를 막는다.
         documentRepository.findByOwnerTypeAndOwnerIdAndDocTypeCodeAndContentHash(
                         "DPP", dpp.getDppId(), DOC_TYPE_CODE, textSha256)
                 .ifPresent(existing -> {
@@ -155,7 +159,14 @@ public class CbamIngestService {
                                     + ", 검토상태=" + existing.getReviewStatus() + ")");
                 });
 
-        // 2) 업로드 원본 파일 저장
+        OekotexZkpMapper.OekotexZkpInput zkpInput;
+        try {
+            zkpInput = OekotexZkpMapper.build(oekotexValues);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    "OEKO-TEX 라벨 필수 항목을 문서에서 읽지 못했습니다: " + e.getMessage(), e);
+        }
+
         String storedFileName = UUID.randomUUID() + ".pdf";
         Path uploadDir = Path.of(properties.getUploadDir());
         Path storedPath = uploadDir.resolve(storedFileName);
@@ -166,7 +177,6 @@ public class CbamIngestService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "업로드 파일 저장에 실패했습니다.", e);
         }
 
-        // 3) document 행 저장 - obligated 여부와 무관하게, 파싱+증명이 성공하면 즉시 APPROVED.
         Document document = new Document();
         document.setDocTypeCode(DOC_TYPE_CODE);
         document.setOwnerType("DPP");
@@ -179,51 +189,44 @@ public class CbamIngestService {
         document.setFileSize(file.getSize());
         document.setParsedAt(OffsetDateTime.now());
         document.setCreatedBy(userId);
-        document.setReviewStatus("APPROVED");
         document = documentRepository.save(document);
 
-        // 4) [블록체인] 문서 해시 앵커링
         String documentAnchorTxId = anchorDocumentHash(document, orgId);
 
-        // 5) zkp 서버 호출 - cbam-check(de minimis 초과 여부)
-        long qtyX10 = Math.round(importQuantityT * 10);
         Map<String, Object> zkpResult;
         try {
-            zkpResult = zkpClient.proveCbamCheck(DE_MINIMIS_X10, qtyX10);
+            zkpResult = zkpClient.proveOekotexCheck(zkpInput.lowX10(), zkpInput.highX10(), zkpInput.phX10());
         } catch (RestClientException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "ZKP 증명 서비스 호출에 실패했습니다: " + e.getMessage(), e);
         }
         boolean cryptoVerified = Boolean.TRUE.equals(zkpResult.get("verified"));
         if (!cryptoVerified) {
-            // 크립토 증명 자체가 깨진 건 정상적인 "미달" 케이스가 아니라 서비스 이상이다.
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "ZKP 증명 생성에 실패했습니다 (증명 검증 실패).");
         }
-        boolean obligated = Boolean.TRUE.equals(zkpResult.get("obligated"));
+        boolean specPassed = Boolean.TRUE.equals(zkpResult.get("passed"));
         Object proofData = zkpResult.get("proof");
 
-        // 6) zkp_proof 행 저장 - 실측 수입량(private input)은 저장하지 않는다.
-        // claim_type은 zkp_proof 테이블의 CHECK 제약(V1__schema.sql: ORIGIN/CERT_VALID/
-        // RECYCLED_RATE/CUSTOMS_FIT/CARBON_LIMIT 5개뿐)을 지켜야 한다 - CBAM은 EU 수입
-        // 통관 시 탄소국경조정 신고의무 발생 여부를 다루므로 'CUSTOMS_FIT'이 가장 근접하다.
-        // (2026-08-16 배터리 도메인 작업 중 발견: 원래 여기 있던 "CBAM_OBLIGATION"은 이
-        // 화이트리스트에 없는 값이라 실제 업로드 시 DB CHECK 제약 위반으로 500이 났을
-        // 잠재 버그였다 - 아직 실사용 테스트에서 걸리지 않았을 뿐.)
+        if (!specPassed) {
+            notifySpecFailure(orgId, document, zkpInput.ph());
+        }
+
         ZkpProof zkpProof = new ZkpProof();
         zkpProof.setDppId(dpp.getDppId());
         zkpProof.setDocumentId(document.getDocumentId());
-        zkpProof.setClaimType("CUSTOMS_FIT");
-        zkpProof.setCircuitName("cbam-check");
-        zkpProof.setStatus("VERIFIED");
+        zkpProof.setClaimType("CERT_VALID");
+        zkpProof.setCircuitName("oekotex-check");
+        zkpProof.setStatus(specPassed ? "VERIFIED" : "REJECTED");
         zkpProof.setVerifiedAt(OffsetDateTime.now());
         String proofDataJson;
         String publicSignalsJson;
         try {
             proofDataJson = objectMapper.writeValueAsString(proofData);
             publicSignalsJson = objectMapper.writeValueAsString(Map.of(
-                    "deMinimisT", DE_MINIMIS_X10 / 10.0,
-                    "obligated", obligated
+                    "lowX10", zkpInput.lowX10(),
+                    "highX10", zkpInput.highX10(),
+                    "specPassed", specPassed
             ));
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "증명 결과 직렬화에 실패했습니다.", e);
@@ -232,44 +235,56 @@ public class CbamIngestService {
         zkpProof.setPublicSignals(publicSignalsJson);
         zkpProof = zkpProofRepository.save(zkpProof);
 
-        // 7) [블록체인] 검증결과 앵커링
-        String zkpAnchorTxId = anchorZkpVerification(document, zkpProof, publicSignalsJson, orgId);
+        String zkpAnchorTxId = anchorZkpVerification(document, zkpProof, publicSignalsJson, specPassed, orgId);
 
-        // 8) document_link 연결 + 완성도 재계산
+        document.setReviewStatus(specPassed ? "APPROVED" : "REJECTED");
+        documentRepository.save(document);
+
         DocumentLink link = new DocumentLink();
         link.setDocumentId(document.getDocumentId());
         link.setDppId(dpp.getDppId());
         link.setLinkType("DIRECT");
         documentLinkRepository.save(link);
 
-        // 9) CBAM_APPLICABLE 필드 자동 채움 - obligated 결과를 requirement_field
-        // FIELD_VALUE로도 반영해서, 사용자가 같은 정보를 또 수기로 체크할 필요가 없게 한다.
-        DppFieldValue applicable = dppFieldValueRepository.findByDppIdAndFieldCode(dpp.getDppId(), CBAM_APPLICABLE_FIELD_CODE)
-                .orElseGet(() -> {
-                    DppFieldValue v = new DppFieldValue();
-                    v.setDppId(dpp.getDppId());
-                    v.setFieldCode(CBAM_APPLICABLE_FIELD_CODE);
-                    return v;
-                });
-        applicable.setValueText(String.valueOf(obligated));
-        applicable.setSubmittedByOrg(orgId);
-        applicable.setSubmittedByUser(userId);
-        applicable.setUpdatedAt(OffsetDateTime.now());
-        dppFieldValueRepository.save(applicable);
+        // 인증번호 자동 채움 - extractor.py의 문서번호 추출 패턴("인증(서)? 번호 ..." 포함)이
+        // 모든 문서 유형에 공통으로 시도되는 document_id를 그대로 쓴다. 이미 값이 있으면(수기
+        // 입력 포함) 덮어쓰지 않는다 - DocumentSlotService.fillIfEmpty와 동일한 원칙.
+        String documentId = (String) parsed.get("document_id");
+        if (documentId != null && !documentId.isBlank()) {
+            fillCertNoIfEmpty(dpp.getDppId(), orgId, userId, documentId);
+        }
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
 
-        return new CbamUploadResponse(
+        return new OekotexUploadResponse(
                 document.getDocumentId(),
                 zkpProof.getProofId(),
                 dpp.getDppId(),
                 dpp.getPublicUuid(),
-                obligated,
-                importQuantityT,
-                DE_MINIMIS_X10 / 10.0,
+                cryptoVerified,
+                specPassed,
+                zkpInput.ph(),
                 documentAnchorTxId,
                 zkpAnchorTxId
         );
+    }
+
+    private void fillCertNoIfEmpty(Long dppId, Long orgId, Long userId, String certNo) {
+        Optional<DppFieldValue> existing = dppFieldValueRepository.findByDppIdAndFieldCode(dppId, CERT_NO_FIELD_CODE);
+        if (existing.isPresent() && existing.get().getValueText() != null && !existing.get().getValueText().isBlank()) {
+            return;
+        }
+        DppFieldValue row = existing.orElseGet(() -> {
+            DppFieldValue v = new DppFieldValue();
+            v.setDppId(dppId);
+            v.setFieldCode(CERT_NO_FIELD_CODE);
+            return v;
+        });
+        row.setValueText(certNo);
+        row.setSubmittedByOrg(orgId);
+        row.setSubmittedByUser(userId);
+        row.setUpdatedAt(OffsetDateTime.now());
+        dppFieldValueRepository.save(row);
     }
 
     private String anchorDocumentHash(Document document, Long orgId) {
@@ -304,7 +319,8 @@ public class CbamIngestService {
         }
     }
 
-    private String anchorZkpVerification(Document document, ZkpProof zkpProof, String publicSignalsJson, Long orgId) {
+    private String anchorZkpVerification(Document document, ZkpProof zkpProof, String publicSignalsJson,
+                                          boolean verified, Long orgId) {
         if (blockchainClient.isEmpty()) {
             log.info("blockchain.enabled=false - proofId={} 검증결과 앵커링 생략", zkpProof.getProofId());
             return null;
@@ -312,7 +328,7 @@ public class CbamIngestService {
         BlockchainAnchor anchor = new BlockchainAnchor();
         anchor.setTargetType("EVENT");
         anchor.setTargetId(zkpProof.getProofId());
-        anchor.setContentHash(document.getContentHash());
+        anchor.setContentHash(sha256Hex(zkpProof.getProofData()));
         anchor.setChannelName("dppchannel");
         anchor.setChaincode("dpp-ledger-chaincode");
         try {
@@ -320,7 +336,7 @@ public class CbamIngestService {
                     document.getDocumentId().toString(),
                     zkpProof.getProofId().toString(),
                     publicSignalsJson,
-                    true,
+                    verified,
                     orgId.toString(),
                     OffsetDateTime.now().format(TIMESTAMP_FORMAT));
             anchor.setTxId(result.txId());
@@ -337,10 +353,32 @@ public class CbamIngestService {
         }
     }
 
+    private void notifySpecFailure(Long orgId, Document document, double ph) {
+        String body = document.getFileName() + " - pH " + ph + " (기준 4.0~7.5 범위 초과)";
+        for (UserAccount recipient : userAccountRepository.findByOrgId(orgId)) {
+            Notification notification = new Notification();
+            notification.setRecipientUserId(recipient.getUserId());
+            notification.setCategory(NotificationCategory.CERT);
+            notification.setTitle("OEKO-TEX 라벨 검증 실패");
+            notification.setBody(body);
+            notificationRepository.save(notification);
+        }
+    }
+
     private static String truncate(String s, int max) {
         if (s == null) {
             return null;
         }
         return s.length() <= max ? s : s.substring(0, max);
+    }
+
+    private static String sha256Hex(String text) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", e);
+        }
     }
 }

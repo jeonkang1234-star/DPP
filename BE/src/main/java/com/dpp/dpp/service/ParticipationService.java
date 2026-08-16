@@ -38,11 +38,15 @@ import java.util.stream.Collectors;
 @Service
 public class ParticipationService {
 
-    private static final String DOMAIN = "STEEL";
-    // FieldFormService.FIELD_DOMAINS와 동일한 이유로 COMMON도 같이 조회한다 - "내 담당
-    // 필드 몇 개 중 몇 개 채웠는지" 집계가 STEEL 필드만 세면 실제 완성도(fn_recalc_
-    // completeness는 COMMON도 포함)와 어긋난다(2026-08-14).
-    private static final List<String> FIELD_DOMAINS = List.of("COMMON", DOMAIN);
+    // FieldFormService.fieldDomains()와 동일한 이유로 COMMON도 같이 조회한다 - "내 담당
+    // 필드 몇 개 중 몇 개 채웠는지" 집계가 도메인 전용 필드만 세면 실제 완성도(fn_recalc_
+    // completeness는 COMMON도 포함)와 어긋난다(2026-08-14). 2026-08-16: 섬유 도메인 추가하며
+    // dpp.getDomain()을 그대로 써서 STEEL 하드코딩을 제거 - 참여 DPP는 이미 존재하는 dpp
+    // 행 기준이라 도메인을 항상 안전하게 읽을 수 있다(FieldFormService의 dppId!=null 분기와
+    // 동일한 근거).
+    private static List<String> fieldDomains(String domain) {
+        return List.of("COMMON", domain);
+    }
 
     private final UserAccountRepository userAccountRepository;
     private final DppParticipantRepository participantRepository;
@@ -100,9 +104,10 @@ public class ParticipationService {
                 .map(Organization::getOrgName)
                 .orElse("(알 수 없음)");
 
+        List<String> fieldDomains = fieldDomains(dpp.getDomain());
         List<RequirementField> myFields = requirementFieldRepository
                 .findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        FIELD_DOMAINS, "DATA", "FIELD_VALUE", participant.getRoleCode());
+                        fieldDomains, "DATA", "FIELD_VALUE", participant.getRoleCode());
         Map<String, String> existingValues = fieldValueRepository.findByDppId(dpp.getDppId()).stream()
                 .collect(Collectors.toMap(DppFieldValue::getFieldCode, DppFieldValue::getValueText, (a, b) -> b));
         long filled = myFields.stream()
@@ -116,7 +121,7 @@ public class ParticipationService {
         // "본인이 올려야 하는 사항"엔 FIELD_VALUE뿐 아니라 DOCUMENT도 포함되니(2026-08-15).
         List<RequirementField> myDocFields = requirementFieldRepository
                 .findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        FIELD_DOMAINS, "DOCUMENT", "DOCUMENT", participant.getRoleCode());
+                        fieldDomains, "DOCUMENT", "DOCUMENT", participant.getRoleCode());
         Set<String> uploadedDocTypes = documentRepository.findAllById(
                         documentLinkRepository.findByDppId(dpp.getDppId()).stream()
                                 .map(DocumentLink::getDocumentId)

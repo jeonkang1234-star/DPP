@@ -61,7 +61,18 @@ export default function AppView(v) {
     confirmTitle,
     disposalItems,
     doLogin,
-    doUpload,
+    hasMillSheetResult,
+    millSheetInputId,
+    millSheetStatusLabel,
+    millSheetStatusChip,
+    onMillSheetFileChange,
+    hasCbamResult,
+    cbamInputId,
+    uploadedCbamName,
+    cbamStatusLabel,
+    cbamStatusChip,
+    cbamImportQtyLabel,
+    onCbamFileChange,
     docPreviewChip,
     docPreviewMeta,
     docPreviewName,
@@ -95,6 +106,9 @@ export default function AppView(v) {
     fieldFilledCount,
     fieldTotalCount,
     fields,
+    documentSlots,
+    documentSlotsEmpty,
+    partnerDocumentSlots,
     formTitle,
     goApprove,
     goDocs,
@@ -109,6 +123,7 @@ export default function AppView(v) {
     inquiries,
     addInviteRow,
     inviteRows,
+    inviteRoleOptions,
     inviteSendLabel,
     invitePending,
     invitesEmpty,
@@ -934,12 +949,30 @@ export default function AppView(v) {
                   <span style={{ width: '44px', height: '44px', borderRadius: '999px', background: 'rgba(0,69,169,.10)', display: 'grid', placeItems: 'center' }}><span style={{ width: '14px', height: '14px', borderRadius: '3px', background: '#0045A9' }}></span></span>
                   <span style={{ fontSize: '14px', fontWeight: '600' }}>파일을 끌어다 놓거나 클릭해 업로드</span>
                   <span style={{ fontSize: '12px', color: '#6B7A93' }}>{uploadHint}</span>
-                  <button onClick={doUpload} style={{ marginTop: '4px', height: '38px', padding: '0 18px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '11px', background: '#fff', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>파일 선택</button>
+                  <label htmlFor={millSheetInputId} style={{ marginTop: '4px', height: '38px', padding: '0 18px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '11px', background: '#fff', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>파일 선택</label>
+                  <input id={millSheetInputId} type="file" accept="application/pdf" onChange={onMillSheetFileChange} style={{ display: 'none' }} />
                 </div>
+                {hasMillSheetResult ? (<>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 15px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '26px', height: '26px', borderRadius: '999px', background: 'rgba(18,161,80,.14)', display: 'grid', placeItems: 'center' }}><span style={{ width: '9px', height: '9px', borderRadius: '5px', background: '#12A150' }}></span></span><span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '12.5px', fontWeight: '600' }}>{uploadedName}</span><span style={{ fontSize: '11px', color: '#8494AC' }}>OCR 자동 추출 완료 · 필드 {ocrCount}개 매핑</span></span></span>
-                  <span style={tier2Chip}>검증 통과</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '26px', height: '26px', borderRadius: '999px', background: 'rgba(18,161,80,.14)', display: 'grid', placeItems: 'center' }}><span style={{ width: '9px', height: '9px', borderRadius: '5px', background: '#12A150' }}></span></span><span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '12.5px', fontWeight: '600' }}>{uploadedName}</span><span style={{ fontSize: '11px', color: '#8494AC' }}>화학성분·기계적성질 {ocrCount}개 항목 ZKP 검증</span></span></span>
+                  <span style={millSheetStatusChip}>{millSheetStatusLabel}</span>
                 </div>
+                </>) : null}
+              </div>
+
+              <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>CBAM 탄소보고서</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>연간 누적 수입량이 de minimis(50t) 기준을 넘는지 ZKP로 증명합니다 · EU 수입 실적이 없으면 생략 가능</span></span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <label htmlFor={cbamInputId} style={{ height: '38px', padding: '0 18px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '11px', background: '#fff', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>파일 선택</label>
+                  <input id={cbamInputId} type="file" accept="application/pdf" onChange={onCbamFileChange} style={{ display: 'none' }} />
+                  {!hasCbamResult ? <span style={{ fontSize: '12px', color: '#8494AC' }}>PDF · CBAM 탄소보고서(Q2_06)</span> : null}
+                </div>
+                {hasCbamResult ? (<>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 15px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)' }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '12.5px', fontWeight: '600' }}>{uploadedCbamName}</span><span style={{ fontSize: '11px', color: '#8494AC' }}>수입량 {cbamImportQtyLabel}</span></span>
+                  <span style={cbamStatusChip}>{cbamStatusLabel}</span>
+                </div>
+                </>) : null}
               </div>
 
               <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -963,6 +996,39 @@ export default function AppView(v) {
                   </div>
                 </div>
               </div>
+
+              {!documentSlotsEmpty ? (<>
+              <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <span style={{ fontSize: '15px', fontWeight: '600' }}>필수 문서</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {(documentSlots || []).map((d, $index) => (<React.Fragment key={$index}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '12px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: '500', color: '#8494AC' }}>{d.req}</span><span style={d.categoryChip}>{d.categoryLabel}</span></span>
+                        <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{d.fileName || '아직 업로드되지 않았습니다'}</span>
+                      </span>
+                      {d.uploadDisabled
+                        ? <span style={{ fontSize: '11px', color: '#8494AC', flex: 'none', whiteSpace: 'nowrap' }}>위 전용 박스 이용</span>
+                        : (<>
+                          <label htmlFor={d.inputId} style={{ height: '36px', padding: '0 14px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '10px', background: '#fff', color: '#0045A9', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>업로드</label>
+                          <input id={d.inputId} type="file" onChange={d.onFileChange} style={{ display: 'none' }} />
+                        </>)}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {(d.steps || []).map((s, $stepIndex) => (<React.Fragment key={s.key}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', fontWeight: '600', color: s.status === 'done' ? '#12A150' : s.status === 'active' ? '#E3A008' : s.status === 'failed' ? '#E03B3B' : '#B7C0D1' }}>
+                        <span style={{ width: '7px', height: '7px', borderRadius: '999px', flex: 'none', background: s.status === 'done' ? '#12A150' : s.status === 'active' ? '#E3A008' : s.status === 'failed' ? '#E03B3B' : '#D8DEE9' }}></span>
+                        {s.label}
+                      </span>
+                      {$stepIndex < d.steps.length - 1 ? <span style={{ width: '14px', height: '1px', background: '#E1E6EF', flex: 'none' }}></span> : null}
+                      </React.Fragment>))}
+                    </div>
+                  </div>
+                  </React.Fragment>))}
+                </div>
+              </div>
+              </>) : null}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1035,6 +1101,11 @@ export default function AppView(v) {
                 </div>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" value={row.orgName} onChange={row.onOrgName} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" value={row.email} onChange={row.onEmail} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>역할(제출 항목)</span>
+                  <select value={row.roleCode} onChange={row.onRoleCode} style={{ height: '44px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '13.5px', background: '#fff' }}>
+                    {(inviteRoleOptions || []).map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                  </select>
+                </label>
               </div>
               </React.Fragment>))}
               <button onClick={addInviteRow} style={{ height: '40px', border: '1px dashed rgba(0,69,169,.34)', borderRadius: '11px', background: 'rgba(0,69,169,.035)', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>+ 협력사 추가</button>
@@ -1051,15 +1122,16 @@ export default function AppView(v) {
                   <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>거절 {inviteRejected}</span>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr 70px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-                <span>협력사 / 이메일</span><span>발송일</span><span>상태</span><span></span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.6fr .95fr .85fr .85fr 70px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
+                <span>협력사 / 이메일</span><span>역할</span><span>발송일</span><span>상태</span><span></span>
               </div>
               {invitesEmpty ? (<>
               <div style={{ padding: '30px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>이 DPP에 보낸 초대가 없습니다.</div>
               </>) : null}
               {(invites || []).map((i, $index) => (<React.Fragment key={$index}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr 1fr 70px', gap: '12px', padding: '0 14px', height: '58px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.6fr .95fr .85fr .85fr 70px', gap: '12px', padding: '0 14px', height: '58px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
                 <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{i.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{i.email}</span></span>
+                <span style={{ fontSize: '12px', color: '#44546F' }}>{i.roleLabel}</span>
                 <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{i.at}</span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', width: 'fit-content', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={i.statusDot}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>{i.status}</span></span>
                 <button onClick={i.resend} style={i.resendStyle}>재발송</button>
@@ -1090,7 +1162,7 @@ export default function AppView(v) {
             </div>
             {(products || []).map((p, $index) => (<React.Fragment key={$index}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 1fr 1fr .9fr 1fr 116px', gap: '12px', padding: '0 14px', height: '60px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
-              <button onClick={p.open} style={{ border: '0', background: 'transparent', padding: '0', textAlign: 'left', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '3px' }}>{p.id}</button>
+              <button onClick={p.resume} title="이어서 작성" style={{ border: '0', background: 'transparent', padding: '0', textAlign: 'left', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '3px' }}>{p.id}</button>
               <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{p.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{p.spec}</span></span>
               <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{p.lot}</span>
               <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{p.at}</span>
@@ -1132,6 +1204,23 @@ export default function AppView(v) {
                 <button onClick={partnerSaveDraft} style={{ height: '48px', padding: '0 24px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>제출</button>
               </div>
             </div>
+            {(partnerDocumentSlots || []).length > 0 ? (<>
+            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <span style={{ fontSize: '15px', fontWeight: '600' }}>담당 문서</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {(partnerDocumentSlots || []).map((d, $index) => (<React.Fragment key={$index}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)' }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: '500', color: '#8494AC' }}>{d.req}</span></span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#8494AC' }}><span style={d.dot}></span>{d.statusLabel}{d.fileName ? (' · ' + d.fileName) : ''}</span>
+                  </span>
+                  <label htmlFor={d.inputId} style={{ height: '36px', padding: '0 14px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '10px', background: '#fff', color: '#0045A9', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>업로드</label>
+                  <input id={d.inputId} type="file" onChange={d.onFileChange} style={{ display: 'none' }} />
+                </div>
+                </React.Fragment>))}
+              </div>
+            </div>
+            </>) : null}
           </div>
           </>) : (<>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>

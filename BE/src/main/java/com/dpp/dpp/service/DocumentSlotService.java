@@ -61,7 +61,12 @@ public class DocumentSlotService {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentSlotService.class);
 
-    private static final List<String> FIELD_DOMAINS = List.of("COMMON", "STEEL");
+    /** dppId도 domain 파라미터도 없을 때만 쓰는 최후 기본값 - 기존 철강 FE 호출과의 하위 호환용. */
+    private static final String DEFAULT_DOMAIN = "STEEL";
+
+    private static List<String> fieldDomains(String domain) {
+        return List.of("COMMON", domain);
+    }
 
     /**
      * parser(FastAPI)의 registry_code(23종 문서 레지스트리)와 우리 document_type 9종의
@@ -82,7 +87,17 @@ public class DocumentSlotService {
             Map.entry("TEST_REPORT", "Q2_04"),
             Map.entry("COO", "Q1_01"),
             Map.entry("LABEL", "Q3_07"),
-            Map.entry("MANUAL", "Q4_06")
+            Map.entry("MANUAL", "Q4_06"),
+            // 섬유(TEXTILE) 도메인 - GRS/RCS 거래증명서(Q1_03)는 ZKP 대상이 아니라(judge.py에
+            // 판정 로직 없음) 이 일반 업로드 경로를 그대로 쓴다. 아래 autoFillFieldsFromParsedDocument
+            // 의 switch에 전용 매핑은 없지만(grs_boxes 필드가 문자열이라 신뢰도 있게 매핑할
+            // 대상이 마땅치 않음), GTIN/sustainability_metrics 공통 자동채움은 그대로 시도된다.
+            Map.entry("GRS_CERTIFICATE", "Q1_03"),
+            // 배터리(BATTERY) 도메인 - 공급망 실사 보고서(Q4_11)는 GRS_CERTIFICATE와 마찬가지로
+            // ZKP 회로가 없어(judge.py 판정 로직 대상 아님) 이 일반 업로드 경로를 그대로 쓴다
+            // (2026-08-16). BATTERY_CARBON_REPORT/RECYCLING_REPORT는 is_zkp_target=TRUE라
+            // 여기 안 올라온다 - 전용 엔드포인트(/document/upload/battery-carbon, /recycling-report)로만 받는다.
+            Map.entry("DUE_DILIGENCE_REPORT", "Q4_11")
     );
 
     private final UserAccountRepository userAccountRepository;
@@ -123,6 +138,11 @@ public class DocumentSlotService {
 
     @Transactional(readOnly = true)
     public DocumentFormResponse getForm(Long userId, Long dppId) {
+        return getForm(userId, dppId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public DocumentFormResponse getForm(Long userId, Long dppId, String requestedDomain) {
         Long orgId = resolveOrgId(userId);
 
         // dppId 없이 부르는 경우 - 아직 임시저장으로 DPP가 만들어지기 전에도 "이 도메인에서
@@ -131,8 +151,11 @@ public class DocumentSlotService {
         // 같은 패턴). dpp 행이 없으니 참여 협력사 구분도, 업로드 상태도 없다 - 소유 조직
         // 기준으로 전부 NOT_UPLOADED로 내려준다. 실제 업로드는 여전히 dppId가 있어야
         // 가능하다(DocumentSlotService.upload, document.owner_id가 dpp_id를 가리켜야 함).
+        // 어느 도메인 체크리스트인지는 요청 파라미터로만 알 수 있다 - 안 주면(기존 철강 FE
+        // 호출) STEEL로 폴백.
         if (dppId == null) {
-            List<RequirementField> draftFields = fieldsFor(null);
+            String domain = (requestedDomain == null || requestedDomain.isBlank()) ? DEFAULT_DOMAIN : requestedDomain;
+            List<RequirementField> draftFields = fieldsFor(fieldDomains(domain), null);
             Map<String, Boolean> draftZkpTargetByDocType = zkpTargetByDocType(draftFields);
             List<DocumentSlotDto> draftSlots = draftFields.stream()
                     .map(f -> new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.isRequired(),
@@ -145,6 +168,9 @@ public class DocumentSlotService {
         Dpp dpp = dppRepository.findById(dppId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DPP를 찾을 수 없습니다."));
         Access access = resolveAccess(orgId, dpp);
+        // 이미 존재하는 DPP는 dpp.domain(DB에 저장된 실제 값)을 믿는다 - FieldFormService와
+        // 동일한 이유(요청 조작으로 다른 도메인 문서함을 보는 것 방지).
+        List<String> domains = fieldDomains(dpp.getDomain());
 
         // dpp_id로 이미 연결된 document_link -> document를 doc_type_code 기준으로 묶어서,
         // 같은 유형이 여러 번 업로드됐으면(재제출) document_id가 가장 큰(=가장 최근) 것만 쓴다.
@@ -155,7 +181,7 @@ public class DocumentSlotService {
                 .collect(Collectors.toMap(Document::getDocTypeCode, d -> d,
                         (a, b) -> a.getDocumentId() > b.getDocumentId() ? a : b));
 
-        List<RequirementField> fields = fieldsFor(access.participantRoleCode());
+        List<RequirementField> fields = fieldsFor(domains, access.participantRoleCode());
         Map<String, Boolean> zkpTargetByDocType = zkpTargetByDocType(fields);
 
         List<DocumentSlotDto> slots = fields.stream()
@@ -182,7 +208,7 @@ public class DocumentSlotService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DPP를 찾을 수 없습니다."));
         Access access = resolveAccess(orgId, dpp);
 
-        Set<String> allowedDocTypes = fieldsFor(access.participantRoleCode()).stream()
+        Set<String> allowedDocTypes = fieldsFor(fieldDomains(dpp.getDomain()), access.participantRoleCode()).stream()
                 .map(RequirementField::getLinkedDocType)
                 .collect(Collectors.toSet());
         if (!allowedDocTypes.contains(docTypeCode)) {
@@ -349,12 +375,12 @@ public class DocumentSlotService {
         return new Access(false, participant.getRoleCode());
     }
 
-    private List<RequirementField> fieldsFor(String participantRoleCode) {
+    private List<RequirementField> fieldsFor(List<String> domains, String participantRoleCode) {
         return participantRoleCode == null
                 ? requirementFieldRepository.findByDomainInAndFieldKindAndStorageTargetAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        FIELD_DOMAINS, "DOCUMENT", "DOCUMENT")
+                        domains, "DOCUMENT", "DOCUMENT")
                 : requirementFieldRepository.findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        FIELD_DOMAINS, "DOCUMENT", "DOCUMENT", participantRoleCode);
+                        domains, "DOCUMENT", "DOCUMENT", participantRoleCode);
     }
 
     /**
