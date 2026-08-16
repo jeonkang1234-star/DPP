@@ -4,10 +4,14 @@ import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.mypage.dto.OrganizationResponse;
 import com.dpp.mypage.dto.OrganizationUpdateRequest;
+import com.dpp.mypage.entity.OrgApprovalStatus;
 import com.dpp.mypage.entity.OrgProfileStatus;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
 import com.dpp.mypage.repository.RoleRepository;
+import com.dpp.mypage.util.KoreanBizRegNoValidator;
+
+import java.time.OffsetDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -26,8 +30,11 @@ import java.util.Set;
  *  2) get/updateMyOrganization - 로그인한 사용자가 마이페이지에서 자기 조직 프로필을
  *     조회/보완. org_type(가입 시엔 NULL)·주소·담당자 정보는 여기서 채운다.
  *
- * approval_status(관리자 승인)는 이 서비스에서 건드리지 않는다 - RBAC/권한 체크 인프라가
- * 아직 없어서 admin 전용 승인 API는 별도 작업으로 남겨둔다.
+ * approval_status(관리자 승인)는 두 경로로만 바뀐다: (1) 이 서비스의 신규 가입 시점
+ * 자동 심사(국내 사업자등록번호 체크섬 통과 시 즉시 ACTIVE, 그 외엔 PENDING으로 남겨
+ * 관리자 수동 심사 대기 - 2026-08-16), (2) AdminOrgApprovalService의 관리자 승인/반려
+ * API. 여기 findOrCreateForSignup 이외의 메서드(마이페이지 프로필 CRUD)는 여전히
+ * approval_status를 건드리지 않는다.
  */
 @Service
 public class OrganizationService {
@@ -74,8 +81,23 @@ public class OrganizationService {
         org.setBizRegNo(bizRegNo);
         org.setDomain(domain);
         // org_type은 일부러 비워둔다 - "가입 직후에는 NULL, 마이페이지에서 확정" (V1 스키마 주석).
+
+        // 자동 심사: 국세청/EU VIES 실시간 조회 API는 이 프로토타입 범위 밖이라(자격/계약
+        // 필요), 국내(KR) 사업자등록번호는 공개 체크섬 알고리즘만으로 형식 유효성을 확인해
+        // 즉시 승인한다(KoreanBizRegNoValidator). 그 외(체크섬 불일치 KR, 국내 밖 모든
+        // 국가)는 organization.approval_status 기본값(PENDING)을 그대로 두고 관리자 수동
+        // 심사로 보낸다 - AdminOrgApprovalService가 그 큐를 다룬다(2026-08-16).
+        if ("KR".equals(countryCode) && KoreanBizRegNoValidator.isValid(bizRegNo)) {
+            org.setApprovalStatus(OrgApprovalStatus.ACTIVE);
+            org.setApprovedAt(OffsetDateTime.now());
+            // approvedBy는 비워둔다 - NULL이 "관리자가 아니라 자동 심사로 승인됨"의 표식
+            // (AdminOrgApprovalService가 목록 응답에서 이 값으로 자동/수동을 구분한다).
+            log.info("자동 승인: countryCode={}, bizRegNo={} 체크섬 통과", countryCode, bizRegNo);
+        }
+
         Organization saved = organizationRepository.save(org);
-        log.info("신규 조직 생성: org_id={}, countryCode={}, bizRegNo={}", saved.getOrgId(), countryCode, bizRegNo);
+        log.info("신규 조직 생성: org_id={}, countryCode={}, bizRegNo={}, approvalStatus={}",
+                saved.getOrgId(), countryCode, bizRegNo, saved.getApprovalStatus());
         return saved;
     }
 

@@ -14,7 +14,9 @@
     "partner-test@cheongwoo.test": "partner",
     "testlab-test@krbattery.test": "partner",
     "recycler-test@greenloop.test": "partner",
-    "supplier-test@coreminerals.test": "partner"
+    "supplier-test@coreminerals.test": "partner",
+    "pending-kr@sinheung-steel.test": "steel",
+    "pending-de@nordstahl.test": "steel"
   },
   "products": {
     "steel": [

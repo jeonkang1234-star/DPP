@@ -11,7 +11,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -93,6 +93,8 @@ export function useAppLogic(userProps) {
   const [meData, setMeData] = useState(null);
   const [orgData, setOrgData] = useState(null);
   const [dashboardData, setDashboardData] = useState(null);
+  // 관리자 가입승인 화면 전용 - ADMIN 계정이 아니면 fetchOrgApprovals가 403을 던지고 null로 남는다.
+  const [orgApprovalsData, setOrgApprovalsData] = useState(null);
   // "강재 기본 정보" 입력 폼(GET/POST /me/field-form*). requirement_field 시딩이 STEEL
   // 도메인만 있어서(V4__seed_requirement_steel.sql - battery/textile 시딩 없음) 철강
   // 역할에서만 실데이터로 불러온다 - 그 외 역할은 기존 목데이터 폼 그대로 유지.
@@ -190,9 +192,16 @@ export function useAppLogic(userProps) {
     fetchParticipations().then((res) => { if (alive) setParticipationsData(res || []); }).catch(() => {});
     fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
+    // ADMIN 계정이 아니면 403 - 그 외 화면엔 영향 없이 조용히 무시(다른 fetch들과 동일한 패턴).
+    fetchOrgApprovals().then((res) => { if (alive) setOrgApprovalsData(res || []); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
+
+  /** 가입승인 화면(approvalVals.js)의 승인/반려 버튼이 처리 후 목록을 새로 불러올 때 씀. */
+  const refetchOrgApprovals = useCallback(() => {
+    fetchOrgApprovals().then((res) => setOrgApprovalsData(res || [])).catch(() => {});
+  }, []);
 
   /**
    * "강재 기본 정보" 입력 폼 - 두 가지 진입점이 같은 폼을 공유한다: (1) 철강 소유 조직이
@@ -519,7 +528,6 @@ export function useAppLogic(userProps) {
       goApprove: () => setState({ tab: 'approve' }),
       goTier: () => setState({ tab: 'tier' }),
       goDocs: () => setState({ tab: 'docs' }),
-      bulkApprove: () => say('선택한 기업의 가입을 승인했습니다.'),
       ...approvalVals(ctx),
       tier1Chip: chip('rgba(16,32,64,.07)', '#44546F'),
       tier2Chip: chip('rgba(0,69,169,.10)', '#0045A9'),
@@ -757,6 +765,7 @@ export function useAppLogic(userProps) {
     state, setState, props,
     data,
     meData, orgData, setOrgData, dashboardData, scansData, notifCatsData, notifsData, fmtRelative,
+    orgApprovalsData, refetchOrgApprovals,
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp,
     documentFormData, setDocumentFormData, uploadDocument,

@@ -11,11 +11,11 @@ export default function AppView(v) {
   const {
     anchorBars,
     apTabs,
+    apEmpty,
     approvals,
     auditLog,
     backToScans,
     batchBtn,
-    bulkApprove,
     cCeFail,
     cCeNote,
     cCeOk,
@@ -700,10 +700,9 @@ export default function AppView(v) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '20px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>한국 국세청 API · EU VIES API 자동 검증 · 그 외 국가 수동 심사</span>
+              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>국내(KR) 사업자등록번호 체크섬 자동 검증 · 그 외 국가는 관리자 수동 심사</span>
               <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>가입 승인 관리</h1>
             </div>
-            <button onClick={bulkApprove} style={{ height: '42px', padding: '0 18px', border: '0', borderRadius: '12px', background: '#0045A9', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,69,169,.24)' }}>선택 항목 일괄 승인</button>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '999px', width: 'fit-content', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
@@ -713,32 +712,37 @@ export default function AppView(v) {
           </div>
 
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '16px 1.5fr 1fr 1.5fr 1.1fr 1.1fr 1.4fr', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-              <span></span><span>회사명</span><span>국가</span><span>사업자등록번호</span><span>신청일시</span><span>검증 경로</span><span style={{ textAlign: 'right' }}>심사</span>
+            {apEmpty ? (<>
+            <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>가입 신청 내역이 없습니다.</div>
+            </>) : (<>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1.5fr 1.1fr 1.1fr 1.4fr', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
+              <span>회사명</span><span>국가</span><span>사업자등록번호</span><span>신청일시</span><span>검증 경로</span><span style={{ textAlign: 'right' }}>심사</span>
             </div>
             {(approvals || []).map((a, $index) => (<React.Fragment key={$index}>
-            <div style={{ display: 'grid', gridTemplateColumns: '16px 1.5fr 1fr 1.5fr 1.1fr 1.1fr 1.4fr', gap: '12px', padding: '13px 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
-              <input type="checkbox" style={{ width: '16px', height: '16px', accentColor: '#0045A9' }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1.5fr 1.1fr 1.1fr 1.4fr', gap: '12px', padding: '13px 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
               <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600', lineHeight: '1.3' }}>{a.name}</span><span style={{ fontSize: '11px', color: '#8494AC', lineHeight: '1.3' }}>{a.doc}</span></span>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><span style={a.ccStyle}>{a.cc}</span><span style={{ fontSize: '13px', color: '#44546F' }}>{a.country}</span></span>
               <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{a.biz}</span>
               <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{a.at}</span>
               <span style={{ display: 'flex', alignItems: 'center' }}>
-                {a.isAuto ? (<><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#2A3A55' }}>{a.route}</span></>) : null}
-                {a.isManual ? (<><span style={{ fontSize: '12.5px', fontWeight: '700', color: '#E03B3B' }}>{a.route}</span></>) : null}
+                <span style={a.routeStyle}>{a.route}</span>
               </span>
               <span style={{ display: 'flex', gap: '7px', justifyContent: 'flex-end' }}>
                 {a.isAuto ? (<>
                 <span style={{ fontSize: '12.5px', color: '#8494AC' }}>자동 승인 처리됨</span>
                 </>) : null}
+                {a.isRejected ? (<>
+                <span style={{ fontSize: '12.5px', color: '#8494AC' }}>반려 처리됨</span>
+                </>) : null}
                 {a.isManual ? (<>
-                <button onClick={a.detail} style={{ height: '34px', padding: '0 13px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', color: '#44546F', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }} className="hv14">서류 확인</button>
+                <button onClick={a.detail} style={{ height: '34px', padding: '0 13px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', color: '#44546F', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }} className="hv14">상세 정보</button>
                 <button onClick={a.approve} style={{ height: '34px', padding: '0 14px', border: '0', borderRadius: '10px', background: 'rgba(0,69,169,.10)', color: '#0045A9', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }} className="hv15">승인</button>
                 <button onClick={a.reject} style={{ height: '34px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', color: '#6B7A93', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }} className="hv16">반려</button>
                 </>) : null}
               </span>
             </div>
             </React.Fragment>))}
+            </>)}
           </div>
         </div>
         </>) : null}

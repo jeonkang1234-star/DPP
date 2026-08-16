@@ -19,6 +19,14 @@ export default defineConfig({
                 target: "http://localhost:".concat(backendPort),
                 changeOrigin: true,
             },
+            // com.dpp.mypage.controller.AdminOrganizationController - 관리자 가입승인
+            // (2026-08-16). 참고: /me, /document, /notifications는 이 dev proxy에 원래부터
+            // 없었다(운영은 nginx.conf가 대신 프록시) - 기존 범위 밖이라 같이 안 건드림, dev
+            // 서버로 관리자 화면을 테스트하려면 이것도 추가해야 함을 기록.
+            "/admin": {
+                target: "http://localhost:".concat(backendPort),
+                changeOrigin: true,
+            },
         },
     },
 });
