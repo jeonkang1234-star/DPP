@@ -28,22 +28,34 @@ export function makerVals(ctx) {
     : ctx.compData().map(([id, name, done, prog, none]) => [id, id, name, done, prog, none]);
   const inputMeta = data.makerInputMeta[r] || {};
   const fieldSets = data.makerFieldSets[r] || [];
-  const isBatch = state.issueMode === 'batch';
-  // "강재 기본 정보" 입력 폼 실데이터 - requirement_field 시딩이 STEEL 도메인만 있어서
-  // (battery/textile은 seed 자체가 없음) 철강 역할에서만 GET /me/field-form로 대체한다.
-  // 그 외 역할은 여전히 기존 목데이터 폼("SPHC" 같은 예시값 포함) - 실 규정 필드가
-  // 시딩되기 전까지는 정직하게 흉내낼 수도, 비워둘 수도 없어 손대지 않았다.
-  const ff = (r === 'steel') ? ctx.fieldFormData : null;
+  // 배치 대량 발급은 철강 전용(강 지시, 2026-08-16: "이거는 철강 말고는 필요없는 것 같으니까
+  // 섬유에는 적용시키지 말자") - 다른 도메인에서 issueMode가 어쩌다 'batch'로 남아있어도
+  // (예: 역할 전환 전 상태 잔존) isBatch는 강제로 false, 토글 버튼 자체도 안 보여준다.
+  const batchIssueEnabled = r === 'steel';
+  const isBatch = batchIssueEnabled && state.issueMode === 'batch';
+  // "기본 정보 입력" 폼 실데이터 - requirement_field 시딩이 STEEL/TEXTILE/BATTERY 도메인에
+  // 있는 역할만 GET /me/field-form로 대체한다. 그 외 역할은 여전히 기존 목데이터 폼("SPHC"
+  // 같은 예시값 포함) - 실 규정 필드가 시딩되기 전까지는 정직하게 흉내낼 수도, 비워둘
+  // 수도 없어 손대지 않았다.
+  const hasRealFieldForm = r === 'steel' || r === 'textile' || r === 'battery';
+  const ff = hasRealFieldForm ? ctx.fieldFormData : null;
   const ffInputs = ctx.fieldFormInputs || {};
   const ffFilledCount = ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0;
-  // "필수 문서" 업로드 실데이터(GET /me/documents) - ff와 마찬가지로 철강 역할, 그리고
-  // dppId가 이미 있을 때만(초안조차 없으면 문서를 붙일 곳이 없음).
-  const df = (r === 'steel') ? ctx.documentFormData : null;
-  // Mill Sheet 업로드 결과 실데이터 - 예전엔 이 카드 전체가 목데이터였다(버튼 눌러도 실제
-  // 파일선택창 자체가 안 뜨고 가짜 토스트만 나옴, 2026-08-14 사용자 리포트로 발견).
+  // "필수 문서" 업로드 실데이터(GET /me/documents) - ff와 마찬가지로 실데이터가 있는 역할,
+  // 그리고 dppId가 이미 있을 때만(초안조차 없으면 문서를 붙일 곳이 없음).
+  const df = hasRealFieldForm ? ctx.documentFormData : null;
+  // 철강 - Mill Sheet/CBAM 업로드 결과 실데이터. 예전엔 이 카드 전체가 목데이터였다(버튼
+  // 눌러도 실제 파일선택창 자체가 안 뜨고 가짜 토스트만 나옴, 2026-08-14 사용자 리포트로 발견).
   const msr = (r === 'steel') ? ctx.millSheetResult : null;
-  // CBAM 업로드 결과 실데이터 - Mill Sheet와 같은 패턴(2026-08-15).
   const cbr = (r === 'steel') ? ctx.cbamResult : null;
+  // 섬유 - 섬유 케어라벨/OEKO-TEX 업로드 결과 실데이터. Mill Sheet/CBAM과 같은 패턴
+  // (2026-08-16).
+  const clr = (r === 'textile') ? ctx.careLabelResult : null;
+  const oer = (r === 'textile') ? ctx.oekotexResult : null;
+  // 배터리 - 배터리 탄소발자국 선언/재활용 처리 결과 보고서 업로드 결과 실데이터. 같은 패턴
+  // (2026-08-16).
+  const bcr = (r === 'battery') ? ctx.batteryCarbonResult : null;
+  const rcr = (r === 'battery') ? ctx.recyclingResult : null;
   const DOC_STATUS_LABEL = { NOT_UPLOADED: '미제출', PENDING: '검토 중', APPROVED: '제출 완료', REJECTED: '반려됨', EXPIRED: '만료됨' };
   const DOC_STATUS_COLOR = { NOT_UPLOADED: '#9AA8BE', PENDING: '#E3A008', APPROVED: '#12A150', REJECTED: '#E03B3B', EXPIRED: '#C22B2B' };
   return {
@@ -73,6 +85,10 @@ export function makerVals(ctx) {
     goInput: () => {
       ctx.setMillSheetResult(null);
       ctx.setCbamResult(null);
+      ctx.setCareLabelResult(null);
+      ctx.setOekotexResult(null);
+      ctx.setBatteryCarbonResult(null);
+      ctx.setRecyclingResult(null);
       ctx.setFieldFormInputs({});
       ctx.setDocumentFormData(null);
       setState({ tab: 'input', fieldFormDppId: null });
@@ -88,78 +104,21 @@ export function makerVals(ctx) {
       segs: [{ key: 'a', style: ctx.segStyle(done, '#12A150') }, { key: 'b', style: ctx.segStyle(prog, '#E3A008') }, { key: 'c', style: ctx.segStyle(none, '#E03B3B') }],
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
-    inputTitle: inputMeta.title, uploadTitle: inputMeta.upload, uploadHint: inputMeta.hint,
-    // msr(실제 업로드 결과)이 있으면 그걸, 없으면 아직 아무것도 업로드 안 한 상태 -
-    // 예전엔 항상 mock 파일명/건수가 떠있어서 마치 이미 업로드된 것처럼 보였다.
-    uploadedName: msr ? msr.fileName : '',
-    ocrCount: msr ? Object.keys(msr.verdicts || {}).length : 0,
-    hasMillSheetResult: !!msr,
-    millSheetInputId: 'mill-sheet-upload',
-    // specPassed(12개 항목 전부 규격 충족)를 봐야 한다 - cryptoVerified는 증명 자체의
-    // 크립토 유효성일 뿐이라 규격 미달이어도 거의 항상 true다(2026-08-15 수정, 강 리포트).
-    millSheetStatusLabel: msr ? (msr.specPassed ? '검증 통과' : '검증 실패') : '',
-    millSheetStatusChip: msr
-      ? (msr.specPassed ? ctx.chip('rgba(18,161,80,.10)', '#12A150') : ctx.chip('rgba(224,59,59,.10)', '#E03B3B'))
-      : ctx.tier2Chip,
+    inputTitle: inputMeta.title,
     formTitle: inputMeta.form,
     fieldCount: ff ? ff.fields.filter(f => f.required).length : inputMeta.count,
     isBatch,
+    batchIssueEnabled,
     singleBtn: ctx.pill(!isBatch), batchBtn: ctx.pill(isBatch),
     setSingle: () => setState({ issueMode: 'single' }),
     setBatch: () => setState({ issueMode: 'batch' }),
     issueLabel: isBatch ? '배치 240건 발급' : 'DPP 발급',
-    // 예전엔 이 버튼이 실제 파일선택창도 안 띄우고 가짜 토스트만 보여줬다 - 이제
-    // AppView의 숨겨진 <input type="file" id={millSheetInputId}>를 라벨로 트리거해서
-    // 실제 /document/upload/steel-mill(파서 -> ZKP -> 블록체인)로 올린다.
-    onMillSheetFileChange: async (e) => {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = '';
-      if (!file) return;
-      ctx.say('업로드 중 · 화학성분/기계적성질 검증에는 수십 초가 걸릴 수 있습니다.');
-      try {
-        const result = await ctx.uploadSteelMillSheet(file);
-        ctx.setMillSheetResult({ ...result, fileName: file.name });
-        if (result.dppId) {
-          setState({ fieldFormDppId: result.dppId });
-          ctx.refreshFieldForm(result.dppId);
-          ctx.refreshDocumentForm(result.dppId);
-        }
-        ctx.say(result.specPassed ? '제강 성적서 검증을 통과했습니다.' : '제강 성적서 검증에 실패했습니다 - 규격 미달 항목이 있습니다.');
-      } catch (err) {
-        ctx.say(err.message || '문서 업로드에 실패했습니다.');
-      }
-    },
-    // CBAM(Q2_06) 탄소보고서 업로드 - obligated는 "적합/부적합"이 아니라 "de minimis
-    // 수입량(50t) 초과로 신고 의무가 발생했는가"라서 true/false 둘 다 정상 결과다. 그래서
-    // Mill Sheet처럼 "검증 통과/실패"라고 하면 안 되고 "신고 의무 있음/없음"으로 표시한다.
-    uploadedCbamName: cbr ? cbr.fileName : '',
-    hasCbamResult: !!cbr,
-    cbamInputId: 'cbam-upload',
-    cbamStatusLabel: cbr ? (cbr.obligated ? 'CBAM 신고 의무 있음' : 'CBAM 신고 의무 없음(de minimis 이하)') : '',
-    cbamStatusChip: cbr
-      ? (cbr.obligated ? ctx.chip('rgba(227,160,8,.10)', '#E3A008') : ctx.chip('rgba(18,161,80,.10)', '#12A150'))
-      : ctx.tier2Chip,
-    cbamImportQtyLabel: cbr ? (cbr.importQuantityT + 't (기준 ' + cbr.deMinimisT + 't)') : '',
-    onCbamFileChange: async (e) => {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = '';
-      if (!file) return;
-      ctx.say('업로드 중 · 수입량 검증에 시간이 걸릴 수 있습니다.');
-      try {
-        const result = await ctx.uploadCbamReport(file);
-        ctx.setCbamResult({ ...result, fileName: file.name });
-        if (result.dppId) {
-          setState({ fieldFormDppId: result.dppId });
-          ctx.refreshFieldForm(result.dppId);
-          ctx.refreshDocumentForm(result.dppId);
-        }
-        ctx.say(result.obligated
-          ? 'CBAM 신고 의무가 있습니다 (수입량이 de minimis 기준을 초과).'
-          : 'CBAM 신고 의무가 없습니다 (수입량이 de minimis 기준 이하).');
-      } catch (err) {
-        ctx.say(err.message || '문서 업로드에 실패했습니다.');
-      }
-    },
+    // "기본 정보 입력" 카드를 토글로 열고 닫을 수 있게(2026-08-16 사용자 피드백: "소재 기본
+    // 정보를 토글로 열고 닫을 수 있게 하는게 더 보기 좋을 것 같음"). 기본값은 열림 -
+    // state.fieldFormOpen이 아직 세팅 전(undefined)이어도 열려 보여야 하므로 `!== false`로
+    // 판정한다.
+    fieldFormOpen: state.fieldFormOpen !== false,
+    toggleFieldForm: () => setState(s => ({ fieldFormOpen: !(s.fieldFormOpen !== false) })),
     // ff(실 폼)가 있으면 실제로 저장한다 - 없으면(battery/textile, 아직 시딩 없음) 기존
     // 목데이터 토스트만 보여준다.
     saveDraft: async () => {
@@ -235,9 +194,11 @@ export function makerVals(ctx) {
     // 업로드 요청이 아직 응답을 안 받은 동안(uploadingDocTypes)도 표시한다 - 지금은 문서
     // 9종이 업로드 즉시 동기 응답(APPROVED)이라 PENDING 상태가 서버에 실제로 존재하지
     // 않고, Mill Sheet만 파서+ZKP로 수십 초가 걸려서 이 클라이언트 쪽 표시가 사실상
-    // 유일한 "검증 중" 시각화다.
+    // 유일한 "검증 중" 시각화다. 필수 문서를 먼저 보여달라는 요청(2026-08-16)으로
+    // required 내림차순 정렬(true 먼저) - Array.sort는 안정 정렬이라 같은 필수여부 안에서는
+    // 서버가 내려준 원래 순서를 그대로 유지한다.
     documentSlots: df
-      ? df.documents.map(d => {
+      ? [...df.documents].sort((a, b) => (b.required - a.required)).map(d => {
           const uploading = (state.uploadingDocTypes || []).includes(d.docTypeCode);
           const failed = !uploading && (d.status === 'REJECTED' || d.status === 'EXPIRED');
           const stageIdx = uploading || d.status === 'PENDING' ? 1
@@ -250,6 +211,36 @@ export function makerVals(ctx) {
           // 그 단계 자체를 done으로 표시해야 한다 - "검증 중"(stageIdx===1)일 때만 진짜
           // active(진행 중)로 남겨둔다.
           const success = stageIdx === 2 && !failed;
+          // 마지막 단계 라벨 - 예전엔 반려/만료돼도 항상 "제출 완료"가 빨간색으로만 칠해져
+          // 있어서 헷갈렸다(2026-08-16 사용자 피드백: "제출 완료에 빨간색만 있는게 아니라").
+          // 실패 상태면 실제 사유("반려됨"/"만료됨")로 라벨 자체를 바꾼다.
+          const finalLabel = failed ? (DOC_STATUS_LABEL[d.status] || '반려됨') : '제출 완료';
+          // ZKP 대상 문서(Mill Sheet/CBAM/케어라벨/OEKO-TEX)는 이 일반 업로드 버튼(→
+          // ctx.uploadDocument)이 아니라 전용 파서+ZKP 엔드포인트로 올려야 한다 - 서버가
+          // DocumentSlotService.upload()에서 zkp 대상 docTypeCode를 이미 거부한다. 예전엔
+          // 이 4종만 화면 위쪽에 별도 대형 박스로 떼어 보여줬는데, 사용자가 "다 문서 업로드
+          // 하는 애들은 뭉쳐놓는게 나을듯"이라고 피드백을 줘서(2026-08-16) 이 그리드 하나로
+          // 통합했다 - 타일의 겉모습은 똑같고 onFileChange 내부에서만 docTypeCode를 보고
+          // 올바른 엔드포인트로 분기한다.
+          const zkpUploader = {
+            MILL_SHEET: { call: ctx.uploadSteelMillSheet, setResult: ctx.setMillSheetResult, waitMsg: '업로드 중 · 화학성분/기계적성질 검증에는 수십 초가 걸릴 수 있습니다.', okMsg: r2 => r2.specPassed ? '제강 성적서 검증을 통과했습니다.' : '제강 성적서 검증에 실패했습니다 - 규격 미달 항목이 있습니다.' },
+            CBAM_REPORT: { call: ctx.uploadCbamReport, setResult: ctx.setCbamResult, waitMsg: '업로드 중 · 수입량 검증에 시간이 걸릴 수 있습니다.', okMsg: r2 => r2.obligated ? 'CBAM 신고 의무가 있습니다 (수입량이 de minimis 기준을 초과).' : 'CBAM 신고 의무가 없습니다 (수입량이 de minimis 기준 이하).' },
+            CARE_LABEL: { call: ctx.uploadCareLabel, setResult: ctx.setCareLabelResult, waitMsg: '업로드 중 · 섬유 혼용률 검증에는 수십 초가 걸릴 수 있습니다.', okMsg: r2 => r2.specPassed ? '섬유 케어라벨 검증을 통과했습니다.' : '섬유 케어라벨 검증에 실패했습니다 - 혼용률 합계가 기준을 벗어났습니다.' },
+            OEKOTEX_LABEL: { call: ctx.uploadOekotexLabel, setResult: ctx.setOekotexResult, waitMsg: '업로드 중 · pH 검증에 시간이 걸릴 수 있습니다.', okMsg: r2 => r2.specPassed ? 'OEKO-TEX 라벨 검증을 통과했습니다.' : 'OEKO-TEX 라벨 검증에 실패했습니다 - pH가 기준 범위를 벗어났습니다.' },
+            BATTERY_CARBON_REPORT: { call: ctx.uploadBatteryCarbonReport, setResult: ctx.setBatteryCarbonResult, waitMsg: '업로드 중 · 재생원료 함유율 검증에는 수십 초가 걸릴 수 있습니다.', okMsg: r2 => r2.specPassed ? '배터리 탄소발자국 선언 검증을 통과했습니다.' : '배터리 탄소발자국 선언 검증에 실패했습니다 - 재생원료 함유율이 기준에 미달합니다.' },
+            RECYCLING_REPORT: { call: ctx.uploadRecyclingReport, setResult: ctx.setRecyclingResult, waitMsg: '업로드 중 · 물질회수율 검증에는 수십 초가 걸릴 수 있습니다.', okMsg: r2 => r2.specPassed ? '재활용 처리 결과 검증을 통과했습니다.' : '재활용 처리 결과 검증에 실패했습니다 - 물질회수율이 기준에 미달합니다.' }
+          }[d.docTypeCode];
+          // detailLabel - ZKP 검증 결과가 있으면 어떤 실측값을 근거로 판정했는지 한 줄로
+          // 보여준다(예전 대형 박스 부제목을 이 한 줄이 대신한다).
+          const detailLabel = (() => {
+            if (d.docTypeCode === 'MILL_SHEET' && msr) return (msr.specPassed ? '검증 통과' : '검증 실패') + ' · 화학성분·기계적성질 ' + Object.keys(msr.verdicts || {}).length + '개 항목';
+            if (d.docTypeCode === 'CBAM_REPORT' && cbr) return (cbr.obligated ? 'CBAM 신고 의무 있음' : 'CBAM 신고 의무 없음') + ' · 수입량 ' + cbr.importQuantityT + 't (기준 ' + cbr.deMinimisT + 't)';
+            if (d.docTypeCode === 'CARE_LABEL' && clr) return (clr.specPassed ? '검증 통과' : '검증 실패') + ' · 섬유 혼용률 합계 ' + clr.totalPercent + '%';
+            if (d.docTypeCode === 'OEKOTEX_LABEL' && oer) return (oer.specPassed ? '검증 통과' : '검증 실패') + ' · pH ' + oer.ph + ' (기준 4.0–7.5)';
+            if (d.docTypeCode === 'BATTERY_CARBON_REPORT' && bcr) return (bcr.specPassed ? '검증 통과' : '검증 실패') + ' · 재생원료 Co ' + bcr.recycledCobaltPercent + '% · Li ' + bcr.recycledLithiumPercent + '% · Ni ' + bcr.recycledNickelPercent + '%';
+            if (d.docTypeCode === 'RECYCLING_REPORT' && rcr) return (rcr.specPassed ? '검증 통과' : '검증 실패') + ' · 물질회수율 Cu ' + rcr.copperRecoveryPercent + '% · Li ' + rcr.lithiumRecoveryPercent + '% · Co ' + rcr.cobaltRecoveryPercent + '%';
+            return '';
+          })();
           return {
             key: d.fieldCode, label: d.labelKo, req: d.required ? '필수' : '선택',
             fileName: d.fileName || '',
@@ -257,23 +248,44 @@ export function makerVals(ctx) {
             dot: ctx.pillDot(uploading ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
             categoryLabel: d.zkpTarget ? '데이터 검증' : '형식 확인',
             categoryChip: d.zkpTarget ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#6B7A93'),
-            steps: ['미제출', '검증 중', '제출 완료'].map((label, i) => ({
-              key: label, label,
+            detailLabel,
+            // 스피너(active)는 "검증 중"(stageIdx===1) 단계에서만 돈다 - 예전엔
+            // i===stageIdx 조건만 봐서 아직 업로드 전(stageIdx===0, "미제출")에도 그
+            // 단계가 계속 돌아가는 것처럼 보이는 버그가 있었다(2026-08-16 사용자 피드백:
+            // "미제출, 제출 완료일 때는 그냥 가만히 있어도 되고 검증 중일 때만 돌아가게").
+            // "미제출"은 그냥 아직 도달 안 한 단계와 똑같이 정적으로(upcoming) 보여준다.
+            steps: ['미제출', '검증 중', finalLabel].map((label, i) => ({
+              key: i,
+              label,
               status: (i < stageIdx || (i === stageIdx && success)) ? 'done'
-                : i === stageIdx ? (failed ? 'failed' : 'active')
+                : (i === stageIdx && failed) ? 'failed'
+                : (i === stageIdx && stageIdx === 1) ? 'active'
                 : 'upcoming'
             })),
-            // 데이터 검증(ZKP) 대상 문서(Mill Sheet, CBAM 등)는 이 일반 업로드 버튼으로
-            // 못 올린다 - 서버가 이제 막고 있고(DocumentSlotService.upload), 애초에 파서+
-            // ZKP를 안 거치는 이 경로로 올리면 증명 없이 승인된 것처럼 보이는 구멍이었다
-            // (2026-08-15). 대신 화면 위쪽 전용 업로드 박스를 쓰라고 안내만 한다.
-            uploadDisabled: d.zkpTarget,
             inputId: 'doc-upload-' + d.fieldCode,
             onFileChange: async (e) => {
               const file = e.target.files && e.target.files[0];
               e.target.value = '';
               if (!file) return;
-              if (d.zkpTarget) { ctx.say(d.labelKo + '는 위쪽 전용 업로드 박스를 이용해 주세요.'); return; }
+              if (zkpUploader) {
+                ctx.say(zkpUploader.waitMsg);
+                setState({ uploadingDocTypes: [...(state.uploadingDocTypes || []), d.docTypeCode] });
+                try {
+                  const result = await zkpUploader.call(file);
+                  zkpUploader.setResult({ ...result, fileName: file.name });
+                  if (result.dppId) {
+                    setState({ fieldFormDppId: result.dppId });
+                    ctx.refreshFieldForm(result.dppId);
+                    ctx.refreshDocumentForm(result.dppId);
+                  }
+                  ctx.say(zkpUploader.okMsg(result));
+                } catch (err) {
+                  ctx.say(err.message || '문서 업로드에 실패했습니다.');
+                } finally {
+                  setState({ uploadingDocTypes: (state.uploadingDocTypes || []).filter(c => c !== d.docTypeCode) });
+                }
+                return;
+              }
               if (!state.fieldFormDppId) { ctx.say('먼저 임시저장으로 DPP를 만든 뒤 문서를 올려 주세요.'); return; }
               setState({ uploadingDocTypes: [...(state.uploadingDocTypes || []), d.docTypeCode] });
               try {
@@ -339,7 +351,7 @@ export function makerVals(ctx) {
     invites: (ctx.invitesData || []).filter(i => i.dppId === state.partnersDppId).map((i) => {
       const label = { SENT: '대기', ACCEPTED: '수락', REJECTED: '거절', EXPIRED: '만료', REVOKED: '취소' }[i.status] || i.status;
       const color = i.status === 'ACCEPTED' ? '#12A150' : i.status === 'SENT' ? '#E3A008' : '#E03B3B';
-      const roleLabel = { RAW_SUPPLIER: '원자재·화학 공급사', TEST_LAB: '시험·인증기관' }[i.roleCode] || i.roleCode;
+      const roleLabel = { RAW_SUPPLIER: '원자재·화학 공급사', TEST_LAB: '시험·인증기관', RECYCLER: '재활용 처리업체' }[i.roleCode] || i.roleCode;
       return {
         key: i.invitationId, name: i.orgName, email: i.email, at: i.sentAt, status: label, roleLabel,
         statusDot: ctx.pillDot(color),
@@ -368,9 +380,13 @@ export function makerVals(ctx) {
     // 반복 호출한다.
     // 역할 선택지 - 초대 대상 협력사가 실제로 뭘 제출하게 되는지 미리 보여준다(2026-08-15,
     // requirement_field.responsible_role이 RAW_SUPPLIER/TEST_LAB 둘로 나뉘면서 추가).
+    // RECYCLER는 role 테이블엔 처음부터 있었지만 담당 필드가 없어 빠져 있다가, 배터리
+    // 도메인의 재활용 처리 결과 보고서(Q4_15)가 처음 실사용하면서 추가됐다(2026-08-16,
+    // BE InvitationService.ALLOWED_ROLE_CODES도 같이 확장).
     inviteRoleOptions: [
       { value: 'RAW_SUPPLIER', label: '원자재·화학 공급사 (스크랩 매입증빙, SDS 등)' },
-      { value: 'TEST_LAB', label: '시험·인증기관 (시험성적서, LCA/EPD, 탄소보고서)' }
+      { value: 'TEST_LAB', label: '시험·인증기관 (시험성적서, LCA/EPD, 탄소보고서)' },
+      { value: 'RECYCLER', label: '재활용 처리업체 (재활용 처리 결과 보고서)' }
     ],
     inviteRows: (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((row, idx, arr) => ({
       key: idx, orgName: row.orgName, email: row.email, roleCode: row.roleCode || 'RAW_SUPPLIER', canRemove: arr.length > 1,

@@ -10,7 +10,11 @@
     "audit@zoll.de": "eu",
     "steel-test@daesungsteel.test": "steel",
     "partner-test@woojinmetal.test": "partner",
-    "testlab-test@krtest.test": "partner"
+    "testlab-test@krtest.test": "partner",
+    "partner-test@cheongwoo.test": "partner",
+    "testlab-test@krbattery.test": "partner",
+    "recycler-test@greenloop.test": "partner",
+    "supplier-test@coreminerals.test": "partner"
   },
   "products": {
     "steel": [

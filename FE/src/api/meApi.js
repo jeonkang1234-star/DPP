@@ -106,18 +106,21 @@ export function fetchDashboard() {
 }
 
 /**
- * "강재 기본 정보" 입력 폼 - requirement_field 기준정보 + 저장된 값(dpp_field_value).
- * dppId를 안 주면 아직 저장 전인 새 폼(fields[].value가 전부 null)이 온다.
+ * "기본 정보 입력" 폼 - requirement_field 기준정보 + 저장된 값(dpp_field_value).
+ * dppId를 안 주면 아직 저장 전인 새 폼(fields[].value가 전부 null)이 온다 - 이때는 domain을
+ * 꼭 같이 줘야 어느 도메인(STEEL/TEXTILE) 체크리스트인지 서버가 알 수 있다(안 주면 STEEL
+ * 폴백). dppId가 있으면 서버가 dpp.domain을 그대로 신뢰하므로 domain은 무시된다.
  */
-export function fetchFieldForm(dppId) {
-  return authedFetch(dppId ? `/me/field-form?dppId=${dppId}` : '/me/field-form');
+export function fetchFieldForm(dppId, domain) {
+  if (dppId) return authedFetch(`/me/field-form?dppId=${dppId}`);
+  return authedFetch(domain ? `/me/field-form?domain=${domain}` : '/me/field-form');
 }
 
 /** 임시저장 - dppId가 없으면(첫 저장) 서버가 새 product_model/dpp를 만들고 dppId를 내려준다. */
-export function saveFieldFormDraft(dppId, values) {
+export function saveFieldFormDraft(dppId, domain, values) {
   return authedFetch('/me/field-form/draft', {
     method: 'POST',
-    body: JSON.stringify({ dppId: dppId || null, domain: 'STEEL', values }),
+    body: JSON.stringify({ dppId: dppId || null, domain: domain || 'STEEL', values }),
   });
 }
 
@@ -127,11 +130,13 @@ export function issueFieldFormDpp(dppId) {
 }
 
 /**
- * 필수 문서 업로드 화면(제강 성적서 제외 9종 - Mill Sheet는 uploadSteelMillSheet 별도 사용).
- * status: NOT_UPLOADED/PENDING/APPROVED/REJECTED/EXPIRED.
+ * 필수 문서 업로드 화면(ZKP 전용 엔드포인트로 처리하는 유형 제외 - Mill Sheet/CBAM/섬유
+ * 케어라벨/OEKO-TEX는 각각 별도 엔드포인트 사용). status: NOT_UPLOADED/PENDING/APPROVED/
+ * REJECTED/EXPIRED. dppId가 없으면 fetchFieldForm과 동일하게 domain을 같이 줘야 한다.
  */
-export function fetchDocumentForm(dppId) {
-  return authedFetch(dppId ? `/me/documents?dppId=${dppId}` : '/me/documents');
+export function fetchDocumentForm(dppId, domain) {
+  if (dppId) return authedFetch(`/me/documents?dppId=${dppId}`);
+  return authedFetch(domain ? `/me/documents?domain=${domain}` : '/me/documents');
 }
 
 /** 문서 1건 업로드 - 업로드 즉시 승인 처리되고(관리자 검수 화면 아직 없음) 완성도가 재계산된다. */
@@ -165,6 +170,51 @@ export function uploadCbamReport(file) {
   const formData = new FormData();
   formData.append('file', file);
   return authedFetch('/document/upload/cbam', { method: 'POST', body: formData });
+}
+
+/**
+ * 섬유 케어라벨(Q1_04) 업로드 - 파서(섬유 혼용률표) -> fiber-sum-check ZKP(합계 ≈100% 여부)
+ * -> (blockchain.enabled=true인 환경만) 블록체인 앵커링. Mill Sheet와 같은 패턴으로 dppId를
+ * 안 받고 "이 계정 조직의 첫 번째 DPP"에 자동으로 붙는다(com.dpp.document.service.
+ * CareLabelIngestService).
+ */
+export function uploadCareLabel(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedFetch('/document/upload/textile-care-label', { method: 'POST', body: formData });
+}
+
+/**
+ * OEKO-TEX 라벨(Q3_10) 업로드 - 파서(pH) -> oekotex-check ZKP(4.0~7.5 범위 여부) ->
+ * (blockchain.enabled=true인 환경만) 블록체인 앵커링(com.dpp.document.service.OekotexIngestService).
+ */
+export function uploadOekotexLabel(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedFetch('/document/upload/oekotex', { method: 'POST', body: formData });
+}
+
+/**
+ * 배터리 탄소발자국 선언(Q2_07) 업로드 - 파서(재생원료 Co/Li/Ni/Pb + 정격용량) ->
+ * battery-check ZKP(각 임계값 충족 여부) -> (blockchain.enabled=true인 환경만) 블록체인
+ * 앵커링. Mill Sheet와 같은 패턴으로 dppId를 안 받고 "이 계정 조직의 첫 번째 DPP"에
+ * 자동으로 붙는다(com.dpp.document.service.BatteryCarbonIngestService).
+ */
+export function uploadBatteryCarbonReport(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedFetch('/document/upload/battery-carbon', { method: 'POST', body: formData });
+}
+
+/**
+ * 재활용 처리 결과 보고서(Q4_15) 업로드 - 파서(물질별 회수 실적표) -> recycling-check
+ * ZKP(구리/리튬·코발트 물질회수율 기준 충족 여부) -> (blockchain.enabled=true인 환경만)
+ * 블록체인 앵커링(com.dpp.document.service.RecyclingIngestService).
+ */
+export function uploadRecyclingReport(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedFetch('/document/upload/recycling-report', { method: 'POST', body: formData });
 }
 
 /** 협력사 초대 이력. status는 SENT/ACCEPTED/EXPIRED/REVOKED/REJECTED 원문 그대로 온다. */
