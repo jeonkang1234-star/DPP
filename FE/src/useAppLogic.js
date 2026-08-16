@@ -11,7 +11,16 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport } from './api/meApi.js';
+
+/** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
+ * 불러온다(STEEL/TEXTILE/BATTERY). */
+function domainForRole(role) {
+  if (role === 'steel') return 'STEEL';
+  if (role === 'textile') return 'TEXTILE';
+  if (role === 'battery') return 'BATTERY';
+  return null;
+}
 import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
 import { partnerVals } from './viewModels/partnerVals.js';
@@ -99,6 +108,14 @@ export function useAppLogic(userProps) {
   // CBAM(Q2_06) 업로드 결과 - Mill Sheet와 같은 패턴. obligated는 "적합/부적합"이 아니라
   // "de minimis 수입량 초과로 신고 의무가 발생했는가"라서 true/false 둘 다 정상 결과다.
   const [cbamResult, setCbamResult] = useState(null);
+  // 섬유 케어라벨(Q1_04)/OEKO-TEX(Q3_10) 업로드 결과 - Mill Sheet/CBAM과 같은 패턴
+  // (2026-08-16, 섬유 도메인 실연동).
+  const [careLabelResult, setCareLabelResult] = useState(null);
+  const [oekotexResult, setOekotexResult] = useState(null);
+  // 배터리 탄소발자국 선언(Q2_07)/재활용 처리 결과 보고서(Q4_15) 업로드 결과 - Mill Sheet/
+  // CBAM/섬유와 같은 패턴(2026-08-16, 배터리 도메인 실연동).
+  const [batteryCarbonResult, setBatteryCarbonResult] = useState(null);
+  const [recyclingResult, setRecyclingResult] = useState(null);
   const [scansData, setScansData] = useState([]);
   const [invitesData, setInvitesData] = useState([]);
   const [participationsData, setParticipationsData] = useState([]);
@@ -187,19 +204,20 @@ export function useAppLogic(userProps) {
    */
   useEffect(() => {
     if (state.view !== 'app') return;
-    const isSteelInput = state.role === 'steel' && state.tab === 'input';
+    const domain = domainForRole(state.role);
+    const isDomainInput = !!domain && state.tab === 'input';
     const isPartnerAssigned = state.role === 'partner' && state.tab === 'assigned' && !!state.partnerAssignedDppId;
-    if (!isSteelInput && !isPartnerAssigned) return;
+    if (!isDomainInput && !isPartnerAssigned) return;
     const session = loadSession();
     if (!session?.accessToken) return;
-    const dppId = isSteelInput ? state.fieldFormDppId : state.partnerAssignedDppId;
+    const dppId = isDomainInput ? state.fieldFormDppId : state.partnerAssignedDppId;
     let alive = true;
-    fetchFieldForm(dppId || undefined)
+    fetchFieldForm(dppId || undefined, domain || undefined)
       .then((res) => {
         if (!alive) return;
         setFieldFormData(res);
         setFieldFormInputs(Object.fromEntries((res.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        if (isSteelInput && res.dppId && res.dppId !== state.fieldFormDppId) setState({ fieldFormDppId: res.dppId });
+        if (isDomainInput && res.dppId && res.dppId !== state.fieldFormDppId) setState({ fieldFormDppId: res.dppId });
       })
       .catch(() => {});
     return () => { alive = false; };
@@ -250,15 +268,16 @@ export function useAppLogic(userProps) {
    */
   useEffect(() => {
     if (state.view !== 'app') return;
-    const isSteelInput = state.role === 'steel' && state.tab === 'input';
+    const domain = domainForRole(state.role);
+    const isDomainInput = !!domain && state.tab === 'input';
     const isPartnerAssigned = state.role === 'partner' && state.tab === 'assigned' && !!state.partnerAssignedDppId;
-    if (!isSteelInput && !isPartnerAssigned) { setDocumentFormData(null); return; }
-    const dppId = isSteelInput ? state.fieldFormDppId : state.partnerAssignedDppId;
+    if (!isDomainInput && !isPartnerAssigned) { setDocumentFormData(null); return; }
+    const dppId = isDomainInput ? state.fieldFormDppId : state.partnerAssignedDppId;
     if (isPartnerAssigned && !dppId) { setDocumentFormData(null); return; }
     const session = loadSession();
     if (!session?.accessToken) return;
     let alive = true;
-    fetchDocumentForm(dppId || undefined).then((res) => { if (alive) setDocumentFormData(res); }).catch(() => {});
+    fetchDocumentForm(dppId || undefined, domain || undefined).then((res) => { if (alive) setDocumentFormData(res); }).catch(() => {});
     return () => { alive = false; };
   }, [state.view, state.role, state.tab, state.fieldFormDppId, state.partnerAssignedDppId]);
 
@@ -413,7 +432,36 @@ export function useAppLogic(userProps) {
       meEmail: meData?.email || '',
       meConnectedAccounts: (meData?.connectedAccounts || []).map(a => ({ provider: a.provider, email: a.email, nickname: a.nickname })),
       showTabs: tabList().length > 1,
-      tabs: tabList().map(([k, label]) => ({ key: k, label, style: tabStyle(s.tab === k), go: () => setState(k === 'clearance' ? { tab: k, customsSearched: false, customsQuery: '' } : { tab: k }) })),
+      tabs: tabList().map(([k, label]) => ({
+        key: k, label, style: tabStyle(s.tab === k),
+        go: () => {
+          if (k === 'clearance') { setState({ tab: k, customsSearched: false, customsQuery: '' }); return; }
+          if (k === 'input') {
+            // 사이드바에서 "OO 데이터 입력" 탭을 직접 클릭했을 때는 이전에 열어봤던 특정
+            // DPP의 초안이 그대로 남아 보이면 안 된다 - 그 초안은 "제품조회 > DPP 식별자
+            // 클릭"으로 이어서 작성할 때만 나와야 한다(2026-08-16, 강 리포트: "배터리
+            // 데이터 입력에 들어가면 작성하던게 그대로 들어있는데 이거 작성하던 내용은
+            // 제품조회 > DPP식별자 ID 클릭했을 때 나와야하고 그냥은 비워둬야지"). 새로고침
+            // 복원용 localStorage(fieldFormDppId)가 role+계정별로 남아있어서, 사이드바
+            // 탭 클릭처럼 "이어서 작성" 의도가 아닌 진입에서도 계속 예전 DPP를 물고
+            // 있었던 게 원인 - goInput()(makerVals.js, "+ 새 DPP 발급" 버튼)과 동일하게
+            // fieldFormDppId를 비워서 진짜 빈 초안을 새로 받아오게 한다. "이어서 작성"
+            // 진입점(제품조회/완성도 목록의 open 핸들러)은 fieldFormDppId를 그 DPP id로
+            // 명시적으로 같이 넘기므로 이 리셋과 겹치지 않는다.
+            setMillSheetResult(null);
+            setCbamResult(null);
+            setCareLabelResult(null);
+            setOekotexResult(null);
+            setBatteryCarbonResult(null);
+            setRecyclingResult(null);
+            setFieldFormInputs({});
+            setDocumentFormData(null);
+            setState({ tab: 'input', fieldFormDppId: null });
+            return;
+          }
+          setState({ tab: k });
+        }
+      })),
       openNotif: () => setState({ notifOpen: true }),
       isMaker,
       scAdminDash: s.role === 'admin' && s.tab === 'dash',
@@ -619,15 +667,19 @@ export function useAppLogic(userProps) {
 
       goSignup: () => setState({ view: 'signup' }),
       goLogin: () => setState({ view: 'login' }),
-      loginEmail: s.loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : s.loginEmail,
+      // 로그인 폼 이메일 기본값 - 예전엔 철강 테스트 계정(dh.kim@daesungsteel.co.kr)이
+      // 하드코딩되어 있었다(2026-08-16, 강 리포트: "로그인 할 때 ID가 적혀져있는데 이거
+      // 없애"). 빈 문자열로 시작해서 사용자가 직접 입력하게 한다.
+      loginEmail: s.loginEmail || '',
       onLoginEmail: e => setState({ loginEmail: e.target.value }),
       loginPassword: s.loginPassword || '',
       onLoginPassword: e => setState({ loginPassword: e.target.value }),
       loginRoleShow: !!state.loginRoleLabel,
       loginRoleLabel: state.loginRoleLabel || '',
       doLogin: async () => {
-        const email = (s.loginEmail === undefined ? 'dh.kim@daesungsteel.co.kr' : s.loginEmail).trim();
+        const email = (s.loginEmail || '').trim();
         const password = s.loginPassword || '';
+        if (!email) { say('이메일을 입력해 주세요.'); return; }
         if (!password) { say('비밀번호를 입력해 주세요.'); return; }
         try {
           const res = await login(email, password);
@@ -694,15 +746,26 @@ export function useAppLogic(userProps) {
     };
   }
 
+  // saveFieldFormDraft(dppId, domain, values) 대신 (dppId, values)로 부르는 기존 호출부
+  // (makerVals.js)를 그대로 두기 위한 래퍼 - 현재 화면의 role에서 도메인을 자동으로
+  // 채워 넣는다(2026-08-16, 섬유 도메인 추가하며 domain 파라미터가 새로 생김).
+  const saveFieldFormDraftForRole = useCallback((dppId, values) => {
+    return saveFieldFormDraft(dppId, domainForRole(state.role), values);
+  }, [state.role]);
+
   const ctx = {
     state, setState, props,
     data,
     meData, orgData, setOrgData, dashboardData, scansData, notifCatsData, notifsData, fmtRelative,
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
-    saveFieldFormDraft, issueFieldFormDpp,
+    saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp,
     documentFormData, setDocumentFormData, uploadDocument,
     millSheetResult, setMillSheetResult, uploadSteelMillSheet, refreshFieldForm, refreshDocumentForm,
     cbamResult, setCbamResult, uploadCbamReport,
+    careLabelResult, setCareLabelResult, uploadCareLabel,
+    oekotexResult, setOekotexResult, uploadOekotexLabel,
+    batteryCarbonResult, setBatteryCarbonResult, uploadBatteryCarbonReport,
+    recyclingResult, setRecyclingResult, uploadRecyclingReport,
     invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate,
     participationsData,
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
