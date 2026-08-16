@@ -63,12 +63,19 @@ public class FieldFormService {
     private static final Logger log = LoggerFactory.getLogger(FieldFormService.class);
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
-    private static final String DOMAIN = "STEEL";
-    // "강재 기본 정보" 화면이 다루는 requirement_field.domain 범위. 원래 STEEL만 조회했는데
+    /** dppId도 request.domain()도 없을 때만 쓰는 최후 기본값 - 기존 철강 FE 호출과의 하위 호환용. */
+    private static final String DEFAULT_DOMAIN = "STEEL";
+    // "기본 정보 입력" 화면이 다루는 requirement_field.domain 범위. 원래 STEEL 하드코딩이었는데
     // fn_recalc_completeness/v_dpp_missing_field(V2__functions.sql)는 처음부터
     // "rf.domain IN ('COMMON', d.domain)"으로 완성도를 매겨왔다 - 즉 COMMON 필드가 항상
     // 분모에 포함돼 있었는데 입력할 화면만 없었다(2026-08-14 확인 후 여기서 따라잡음).
-    private static final List<String> FIELD_DOMAINS = List.of("COMMON", DOMAIN);
+    // 2026-08-16: 섬유(TEXTILE) 도메인 추가하면서 도메인을 파라미터화 - 이미 존재하는 DPP는
+    // dpp.domain 컬럼을 그대로 신뢰하고(더 안전 - 요청이 조작돼도 실제 저장된 도메인을 벗어난
+    // 필드를 못 봄), 아직 dpp 행이 없는 새 초안 화면만 domain 파라미터(SaveFieldFormRequest.
+    // domain, GET 쿼리파라미터)로 어떤 화면인지 판단한다.
+    private static List<String> fieldDomains(String domain) {
+        return List.of("COMMON", domain);
+    }
 
     private final UserAccountRepository userAccountRepository;
     private final ProductModelRepository productModelRepository;
@@ -102,26 +109,37 @@ public class FieldFormService {
 
     @Transactional(readOnly = true)
     public FieldFormResponse getForm(Long userId, Long dppId) {
+        return getForm(userId, dppId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public FieldFormResponse getForm(Long userId, Long dppId, String requestedDomain) {
         Long orgId = resolveOrgId(userId);
 
         if (dppId == null) {
             // 새 DPP 초안 - 아직 dpp 행이 없으니 참여 협력사 개념 자체가 성립하지 않는다.
             // OWNER가 처음 폼을 여는 경우만 여기로 들어온다. 값은 아직 하나도 없으니 전부 null.
-            List<FieldFormItemDto> allFields = fieldsFor(null).stream()
+            // 어느 도메인 화면인지는 요청 파라미터로만 알 수 있다 - 안 주면(기존 철강 FE 호출)
+            // STEEL로 폴백.
+            String domain = (requestedDomain == null || requestedDomain.isBlank()) ? DEFAULT_DOMAIN : requestedDomain;
+            List<FieldFormItemDto> allFields = fieldsFor(fieldDomains(domain), null).stream()
                     .map(f -> new FieldFormItemDto(f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getUnit(),
                             f.getHelpText(), f.isRequired(), null))
                     .toList();
-            return new FieldFormResponse(null, DOMAIN, "DRAFT", 0.0, 0, 0, allFields);
+            return new FieldFormResponse(null, domain, "DRAFT", 0.0, 0, 0, allFields);
         }
 
         Dpp dpp = dppRepository.findById(dppId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DPP를 찾을 수 없습니다."));
         Access access = resolveAccess(orgId, dpp);
+        // 이미 존재하는 DPP는 요청 파라미터가 아니라 dpp.domain(DB에 저장된 실제 값)을 믿는다 -
+        // 요청을 조작해서 다른 도메인 필드를 끼워 보는 걸 막는다.
+        String domain = dpp.getDomain();
 
         Map<String, String> existingValues = fieldValueRepository.findByDppId(dpp.getDppId()).stream()
                 .collect(Collectors.toMap(DppFieldValue::getFieldCode, DppFieldValue::getValueText, (a, b) -> b));
 
-        List<FieldFormItemDto> fields = fieldsFor(access.participantRoleCode()).stream()
+        List<FieldFormItemDto> fields = fieldsFor(fieldDomains(domain), access.participantRoleCode()).stream()
                 .map(f -> new FieldFormItemDto(f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getUnit(), f.getHelpText(),
                         f.isRequired(), existingValues.get(f.getFieldCode())))
                 .toList();
@@ -158,7 +176,7 @@ public class FieldFormService {
             completeness = myRequired > 0 ? (myFilled * 100.0 / myRequired) : 0.0;
         }
 
-        return new FieldFormResponse(dpp.getDppId(), DOMAIN, status, completeness, filled, required, fields);
+        return new FieldFormResponse(dpp.getDppId(), domain, status, completeness, filled, required, fields);
     }
 
     @Transactional
@@ -171,11 +189,11 @@ public class FieldFormService {
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DPP를 찾을 수 없습니다."));
             access = resolveAccess(orgId, dpp);
         } else {
-            dpp = createDraftDpp(orgId, request.values());
+            dpp = createDraftDpp(orgId, request.domain(), request.values());
             access = Access.forOwner();
         }
 
-        upsertValues(dpp.getDppId(), orgId, userId, request.values(), access.participantRoleCode());
+        upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode());
         recalc(dpp.getDppId());
         if (!access.owner()) {
             participantSubmitStatusService.refresh(dpp, orgId, access.participantRoleCode());
@@ -284,12 +302,12 @@ public class FieldFormService {
         return new Access(false, participant.getRoleCode());
     }
 
-    private List<RequirementField> fieldsFor(String participantRoleCode) {
+    private List<RequirementField> fieldsFor(List<String> domains, String participantRoleCode) {
         return participantRoleCode == null
                 ? requirementFieldRepository.findByDomainInAndFieldKindAndStorageTargetAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        FIELD_DOMAINS, "DATA", "FIELD_VALUE")
+                        domains, "DATA", "FIELD_VALUE")
                 : requirementFieldRepository.findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        FIELD_DOMAINS, "DATA", "FIELD_VALUE", participantRoleCode);
+                        domains, "DATA", "FIELD_VALUE", participantRoleCode);
     }
 
     private Long resolveOrgId(Long userId) {
@@ -302,17 +320,29 @@ public class FieldFormService {
     }
 
     // 새 DPP 발급 화면은 기존 제품(product_model)을 고르는 UI가 아직 없어서, 첫 임시저장
-    // 시점에 product_model 1건 + dpp 1건을 함께 만든다. model_name은 이 화면이 수집하는
-    // 값 중 제품명에 가장 가까운 STEEL_GRADE(강종)로 채우고, 없으면 자리표시자를 쓴다 -
-    // 나중에 "제품 선택/등록" 화면이 생기면 이 자동 생성 로직은 걷어낼 것.
-    private Dpp createDraftDpp(Long orgId, Map<String, String> values) {
-        String grade = values != null ? values.get("STEEL_GRADE") : null;
+    // 시점에 product_model 1건 + dpp 1건을 함께 만든다. model_name은 도메인별로 가장 제품명에
+    // 가까운 필드(철강=STEEL_GRADE, 섬유=FABRIC_TYPE, 배터리=BATTERY_MODEL_NO)로 채우고,
+    // 없으면 자리표시자를 쓴다 - 나중에 "제품 선택/등록" 화면이 생기면 이 자동 생성 로직은
+    // 걷어낼 것.
+    private Dpp createDraftDpp(Long orgId, String requestedDomain, Map<String, String> values) {
+        String domain = (requestedDomain == null || requestedDomain.isBlank()) ? DEFAULT_DOMAIN : requestedDomain;
+        String nameFieldCode = switch (domain) {
+            case "TEXTILE" -> "FABRIC_TYPE";
+            case "BATTERY" -> "BATTERY_MODEL_NO";
+            default -> "STEEL_GRADE";
+        };
+        String placeholder = switch (domain) {
+            case "TEXTILE" -> "미입력 섬유 제품";
+            case "BATTERY" -> "미입력 배터리 제품";
+            default -> "미입력 철강 제품";
+        };
+        String nameValue = values != null ? values.get(nameFieldCode) : null;
 
         ProductModel model = new ProductModel();
         model.setOrgId(orgId);
-        model.setInternalSku(DOMAIN + "-" + orgId + "-" + System.currentTimeMillis());
-        model.setModelName((grade == null || grade.isBlank()) ? "미입력 철강 제품" : grade);
-        model.setDomain(DOMAIN);
+        model.setInternalSku(domain + "-" + orgId + "-" + System.currentTimeMillis());
+        model.setModelName((nameValue == null || nameValue.isBlank()) ? placeholder : nameValue);
+        model.setDomain(domain);
         model.setStatus("DRAFT");
         model = productModelRepository.save(model);
 
@@ -324,12 +354,13 @@ public class FieldFormService {
         dpp.setPublicUuid(UUID.randomUUID());
         dpp.setModelId(model.getModelId());
         dpp.setOwnerOrgId(orgId);
-        dpp.setDomain(DOMAIN);
+        dpp.setDomain(domain);
         dpp.setStatus("DRAFT");
         return dppRepository.save(dpp);
     }
 
-    private void upsertValues(Long dppId, Long orgId, Long userId, Map<String, String> values, String participantRoleCode) {
+    private void upsertValues(Long dppId, String domain, Long orgId, Long userId, Map<String, String> values,
+                               String participantRoleCode) {
         if (values == null) {
             return;
         }
@@ -338,7 +369,8 @@ public class FieldFormService {
         // 끼워 보내는 경우 방지).
         Set<String> allowedFieldCodes = participantRoleCode == null
                 ? null
-                : fieldsFor(participantRoleCode).stream().map(RequirementField::getFieldCode).collect(Collectors.toSet());
+                : fieldsFor(fieldDomains(domain), participantRoleCode).stream()
+                        .map(RequirementField::getFieldCode).collect(Collectors.toSet());
 
         for (Map.Entry<String, String> entry : values.entrySet()) {
             String text = entry.getValue();

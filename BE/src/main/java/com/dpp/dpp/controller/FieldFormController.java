@@ -29,8 +29,9 @@ public class FieldFormController {
 
     @GetMapping("/me/field-form")
     public ResponseEntity<FieldFormResponse> getForm(Authentication authentication,
-                                                       @RequestParam(required = false) Long dppId) {
-        return ResponseEntity.ok(fieldFormService.getForm(parseUserId(authentication), dppId));
+                                                       @RequestParam(required = false) Long dppId,
+                                                       @RequestParam(required = false) String domain) {
+        return ResponseEntity.ok(fieldFormService.getForm(parseUserId(authentication), dppId, domain));
     }
 
     @PostMapping("/me/field-form/draft")

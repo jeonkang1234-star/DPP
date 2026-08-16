@@ -41,7 +41,12 @@ import java.util.stream.Collectors;
 @Service
 public class ParticipantSubmitStatusService {
 
-    private static final List<String> FIELD_DOMAINS = List.of("COMMON", "STEEL");
+    // 2026-08-16: 섬유 도메인 추가하며 STEEL 하드코딩 제거 - refresh()가 항상 실제 dpp 행을
+    // 받으므로 dpp.getDomain()을 그대로 신뢰할 수 있다(FieldFormService/ParticipationService와
+    // 동일한 근거).
+    private static List<String> fieldDomains(String domain) {
+        return List.of("COMMON", domain);
+    }
 
     private final DppParticipantRepository participantRepository;
     private final RequirementFieldRepository requirementFieldRepository;
@@ -85,9 +90,10 @@ public class ParticipantSubmitStatusService {
         boolean wasSubmitted = "SUBMITTED".equals(participant.getSubmitStatus())
                 || "COMPLETED".equals(participant.getSubmitStatus());
 
+        List<String> fieldDomains = fieldDomains(dpp.getDomain());
         List<RequirementField> myFieldValueFields = requirementFieldRepository
                 .findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        FIELD_DOMAINS, "DATA", "FIELD_VALUE", roleCode);
+                        fieldDomains, "DATA", "FIELD_VALUE", roleCode);
         Map<String, String> existingValues = fieldValueRepository.findByDppId(dpp.getDppId()).stream()
                 .collect(Collectors.toMap(DppFieldValue::getFieldCode, DppFieldValue::getValueText, (a, b) -> b));
         boolean fieldsFilled = myFieldValueFields.stream().allMatch(f -> {
@@ -97,7 +103,7 @@ public class ParticipantSubmitStatusService {
 
         List<RequirementField> myDocFields = requirementFieldRepository
                 .findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        FIELD_DOMAINS, "DOCUMENT", "DOCUMENT", roleCode);
+                        fieldDomains, "DOCUMENT", "DOCUMENT", roleCode);
         Set<String> uploadedDocTypes = documentRepository.findAllById(
                         documentLinkRepository.findByDppId(dpp.getDppId()).stream()
                                 .map(DocumentLink::getDocumentId)
