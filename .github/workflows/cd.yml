@@ -61,7 +61,15 @@ jobs:
             docker compose $COMPOSE_FILES down --remove-orphans || true
             docker compose $COMPOSE_FILES pull || true
             docker compose $COMPOSE_FILES build
-            docker compose $COMPOSE_FILES up -d --remove-orphans
+
+            # down 직후 바로 up으로 재생성하면 compose v2가 방금 내린 컨테이너의 ID를
+            # 여전히 내부 캐시에 들고 있다가 "No such container: <옛 ID>"로 죽는 레이스가
+            # 있다(2026-08-16, PR #41 재배포 중 dpp-parser에서 실제 발생 - down/up
+            # 자체는 정상 동작했고 orphan 충돌도 없었는데 이 레이스만 새로 나옴). 거의
+            # 항상 한 번 더 돌리면 통과하는 일시적 상태라 짧게 쉬고 재시도한다.
+            docker compose $COMPOSE_FILES up -d --remove-orphans \
+              || (echo "up 1차 실패 - 5초 대기 후 재시도" && sleep 5 \
+                  && docker compose $COMPOSE_FILES up -d --remove-orphans)
             docker image prune -f
 
       - name: Health check
