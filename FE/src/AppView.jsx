@@ -265,6 +265,8 @@ export default function AppView(v) {
     queue,
     refreshCaptcha,
     registry,
+    euQuery,
+    onEuQueryChange,
     rejects,
     repairBar,
     repairColorStyle,
@@ -1501,15 +1503,15 @@ export default function AppView(v) {
             <button onClick={exportCsv} style={{ height: '46px', padding: '0 18px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '13px', background: '#fff', fontSize: '13.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>조회 결과 내보내기</button>
           </div>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>식별자 코드</span><input placeholder="DPP-KR-ST-2607-0142" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>통관용 상품코드</span><input placeholder="KRST-HRC-032" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>HS 코드</span><input placeholder="7208.39" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>식별자(UUID 일부)</span><input value={euQuery} onChange={onEuQueryChange} placeholder="예: 3f2a 또는 SKU/모델명 일부" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>등록회사</span><input value={euQuery} readOnly placeholder="위 검색어로 함께 조회됨" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace', background: '#F7F9FD', color: '#8494AC' }} /></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>HS 코드</span><input value={euQuery} readOnly placeholder="위 검색어로 함께 조회됨" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace', background: '#F7F9FD', color: '#8494AC' }} /></label>
             <button onClick={searchRegistry} style={{ height: '48px', padding: '0 26px', border: '0', borderRadius: '12px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>조회</button>
           </div>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>조회 결과 <span style={{ color: '#8494AC', fontWeight: '500' }}>6건</span></span><span style={{ fontSize: '12px', color: '#8494AC' }}>레지스트리 동기화 2026-07-30 09:40 CEST</span></div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>조회 결과 <span style={{ color: '#8494AC', fontWeight: '500' }}>{registry.length}건</span></span></div>
             <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.1fr 1.2fr 1.5fr 1.2fr .9fr 64px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-              <span>식별자 코드</span><span>상품코드</span><span>등록일 (시간)</span><span>상품명</span><span>등록회사</span><span>HS코드</span><span></span>
+              <span>식별자(UUID)</span><span>Lot/시리얼</span><span>발급일</span><span>상품명</span><span>등록회사</span><span>HS코드</span><span></span>
             </div>
             {(registry || []).map((r, $index) => (<React.Fragment key={$index}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.1fr 1.2fr 1.5fr 1.2fr .9fr 64px', gap: '12px', padding: '0 14px', height: '58px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>

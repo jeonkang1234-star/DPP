@@ -27,6 +27,11 @@ export default defineConfig({
                 target: "http://localhost:".concat(backendPort),
                 changeOrigin: true,
             },
+            // com.dpp.verify.controller.DppRegistryController - EU 시장감시/관세청 DPP 검색.
+            "/verify": {
+                target: "http://localhost:".concat(backendPort),
+                changeOrigin: true,
+            },
         },
     },
 });

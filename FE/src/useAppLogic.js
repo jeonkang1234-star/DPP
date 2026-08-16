@@ -11,7 +11,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -95,6 +95,8 @@ export function useAppLogic(userProps) {
   const [dashboardData, setDashboardData] = useState(null);
   // 관리자 가입승인 화면 전용 - ADMIN 계정이 아니면 fetchOrgApprovals가 403을 던지고 null로 남는다.
   const [orgApprovalsData, setOrgApprovalsData] = useState(null);
+  // EU 시장감시 레지스트리 조회 전용 - 규제기관 계정이 아니면 403으로 null 유지.
+  const [euRegistryData, setEuRegistryData] = useState(null);
   // "강재 기본 정보" 입력 폼(GET/POST /me/field-form*). requirement_field 시딩이 STEEL
   // 도메인만 있어서(V4__seed_requirement_steel.sql - battery/textile 시딩 없음) 철강
   // 역할에서만 실데이터로 불러온다 - 그 외 역할은 기존 목데이터 폼 그대로 유지.
@@ -194,6 +196,8 @@ export function useAppLogic(userProps) {
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
     // ADMIN 계정이 아니면 403 - 그 외 화면엔 영향 없이 조용히 무시(다른 fetch들과 동일한 패턴).
     fetchOrgApprovals().then((res) => { if (alive) setOrgApprovalsData(res || []); }).catch(() => {});
+    // EU_AUTHORITY/CUSTOMS org_type이거나 ADMIN이 아니면 403 - 마찬가지로 조용히 무시.
+    searchDppRegistry('').then((res) => { if (alive) setEuRegistryData(res || []); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
@@ -766,6 +770,7 @@ export function useAppLogic(userProps) {
     data,
     meData, orgData, setOrgData, dashboardData, scansData, notifCatsData, notifsData, fmtRelative,
     orgApprovalsData, refetchOrgApprovals,
+    euRegistryData, setEuRegistryData,
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp,
     documentFormData, setDocumentFormData, uploadDocument,

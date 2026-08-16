@@ -269,3 +269,13 @@ export function approveOrg(orgId) {
 export function rejectOrg(orgId, reason) {
   return authedFetch(`/admin/organizations/${orgId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
 }
+
+/**
+ * EU 시장감시(레지스트리)/관세청 통관 조회 공용 검색(com.dpp.verify.controller.
+ * DppRegistryController) - ADMIN이거나 org_type이 EU_AUTHORITY/CUSTOMS인 계정만 200.
+ * q를 안 주면 최신 발급분 50건을 돌려준다.
+ */
+export function searchDppRegistry(q) {
+  const query = q ? `?q=${encodeURIComponent(q)}` : '';
+  return authedFetch(`/verify/dpp/search${query}`);
+}
