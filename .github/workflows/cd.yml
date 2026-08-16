@@ -51,6 +51,14 @@ jobs:
               echo "WARNING: /opt/app/fabric-identity/admin-cert.pem 없음 - blockchain 오버레이 생략 (BLOCKCHAIN_ENABLED=false로 배포)"
             fi
 
+            # 배포가 중간에 끊기면(예: recreate 도중 SSH 세션 종료) compose가 재생성용으로
+            # rename한 임시 이름(<hash>_<service>)의 컨테이너가 지워지지 않고 남을 수 있다 -
+            # 다음 배포 때 그 이름이 새 컨테이너와 충돌해서 "Conflict. The container name ...
+            # is already in use" 에러로 up이 죽는다(2026-08-16, PR #42 배포 중 실제 발생).
+            # down은 이름이 아니라 compose 프로젝트/서비스 레이블로 컨테이너를 찾으므로
+            # rename된 상태여도 정리되고, up이 항상 처음부터 다시 만들게 돼 이 충돌이
+            # 원천적으로 재발하지 않는다.
+            docker compose $COMPOSE_FILES down --remove-orphans || true
             docker compose $COMPOSE_FILES pull || true
             docker compose $COMPOSE_FILES build
             docker compose $COMPOSE_FILES up -d --remove-orphans
