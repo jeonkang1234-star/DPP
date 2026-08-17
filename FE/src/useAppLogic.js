@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import QRCode from 'qrcode';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   pill, roleCard, pillDot, domainCard, tabStyle,
@@ -25,7 +26,6 @@ import { pathFor, stateFromPath } from './routes.js';
 import { makerVals } from './viewModels/makerVals.js';
 import { partnerVals } from './viewModels/partnerVals.js';
 import { passportVals } from './viewModels/passportVals.js';
-import { tierVals } from './viewModels/tierVals.js';
 import { approvalVals } from './viewModels/approvalVals.js';
 import { customsVals } from './viewModels/customsVals.js';
 import { euVals } from './viewModels/euVals.js';
@@ -154,6 +154,25 @@ export function useAppLogic(userProps) {
       removedProducts: [],
       confirm: null,
       toast: '',
+      // "기본 정보 입력" 폼에서 문서 업로드(Mill Sheet 등) 직후 새로 채워진 필드를
+      // "파싱됨"으로 표시하기 위한 세션 한정 캐시. { [fieldCode]: 문서라벨 }.
+      parsedFieldSources: {},
+      // DPP 발급과 동시에 발급한 QR 표시용 모달 상태. { id, dataUrl } | null.
+      qrModal: null,
+      // 이번 세션에 발급한 DPP의 필드 스냅샷 - QR 스캔(제품 조회)이 곧바로 조회할 수 있게.
+      // { [displayId]: { material, formLabel, fields } }.
+      issuedPassportCache: {},
+      tierRequestPending: {},
+      permRequestPending: {},
+      // 회원 관리(구 가입승인관리) "반려" 버튼 클릭 시 뜨는 반려 사유 입력 팝업.
+      // { orgId, name } | null. 2026-08-17: window.prompt 대신 팝업으로 교체.
+      rejectModal: null,
+      rejectReasonInput: '',
+      // 제품조회 "상세" 모달에서 발급완료 DPP의 QR을 그 자리에서 바로 볼 수 있게(2026-08-17).
+      // 세션 캐시가 아니라 표시할 때마다 필요한 식별자로 새로 생성해서 dppId에 매핑해 둔다.
+      dppQrCache: {},
+      dppQrPending: {},
+      productStatusFilter: 'all',
       // 새로고침해도 "철강 데이터 입력" 화면이 작성 중이던 DPP를 계속 이어서 보여주도록
       // localStorage에서 복원한다 - 로그인 안 된 상태(saved 없음)에서는 애초에 이 화면에
       // 못 들어가니 복원할 필요가 없다.
@@ -224,6 +243,10 @@ export function useAppLogic(userProps) {
     const session = loadSession();
     if (!session?.accessToken) return;
     const dppId = isDomainInput ? state.fieldFormDppId : state.partnerAssignedDppId;
+    // 이 DPP로 새로 폼을 불러오는 시점이니, 직전 DPP에서 쌓인 "이 문서 업로드로 방금
+    // 채워짐" 표시(parsedFieldSources)는 여기서 지운다 - 안 지우면 다른 DPP로 이동했는데도
+    // 이전 DPP에서 파싱됐던 필드가 계속 "파싱됨"으로 잘못 표시된다.
+    setState({ parsedFieldSources: {} });
     let alive = true;
     fetchFieldForm(dppId || undefined, domain || undefined)
       .then((res) => {
@@ -243,13 +266,17 @@ export function useAppLogic(userProps) {
    * 맞추기 위한 수동 새로고침. makerVals.js의 Mill Sheet 업로드 핸들러가 사용한다.
    */
   const refreshFieldForm = useCallback((dppId) => {
-    if (!dppId) return;
-    fetchFieldForm(dppId)
+    if (!dppId) return Promise.resolve(null);
+    // 반환값(res)을 문서 업로드 호출부(makerVals.js)가 이용한다 - 업로드 직전 입력값과
+    // 비교해 "이 업로드로 새로 채워진 필드"를 표시하기 위함(parsedFieldSources). 기존
+    // 호출부는 반환값을 안 쓰고 그냥 fire-and-forget으로 불러도 동작은 그대로다.
+    return fetchFieldForm(dppId)
       .then((res) => {
         setFieldFormData(res);
         setFieldFormInputs(Object.fromEntries((res.fields || []).map(f => [f.fieldCode, f.value || ''])));
+        return res;
       })
-      .catch(() => {});
+      .catch(() => null);
   }, []);
 
   /**
@@ -306,6 +333,38 @@ export function useAppLogic(userProps) {
   useEffect(() => {
     saveDraftDppId(state.role, loadSession()?.email, state.fieldFormDppId ?? null);
   }, [state.role, state.fieldFormDppId]);
+
+  /**
+   * 제품조회 "상세" 모달(dppOpen)에서 발급완료(완성도 100%) DPP를 열면 QR을 그 자리에서
+   * 바로 보여준다(2026-08-17 강 요청: "QR 만드는 기능 완성했으면 제품조회에서 id 상세
+   * 누르면 QR도 찍히게"). issuedPassportCache는 이번 세션에 "방금 발급한" DPP만 들고
+   * 있어서 새로고침 후나 예전에 발급된 DPP는 못 찾는다 - 대신 실제 대시보드 데이터
+   * (dashboardData.dpps)에서 그 DPP의 완성도를 확인해서, 100%면 표시용 식별자로 QR을
+   * 매번 새로 만든다(서버에 QR 이미지를 저장/조회하는 기능은 없음 - 클라이언트에서 같은
+   * 내용으로 재생성하는 것도 매번 동일한 QR이라 동등하다).
+   */
+  useEffect(() => {
+    if (!state.dppOpen || state.dppId == null || !dashboardData) return;
+    const row = dashboardData.dpps.find((d) => d.dppId === state.dppId);
+    if (!row || Math.round(row.completeness) !== 100) return;
+    const displayId = row.internalSku || ('DPP-' + row.dppId);
+    if (state.dppQrCache && state.dppQrCache[displayId]) return;
+    if (state.dppQrPending && state.dppQrPending[displayId]) return;
+    setState((s) => ({ dppQrPending: { ...(s.dppQrPending || {}), [displayId]: true } }));
+    let alive = true;
+    QRCode.toDataURL(displayId, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
+      .then((dataUrl) => {
+        if (!alive) return;
+        setState((s) => ({
+          dppQrCache: { ...(s.dppQrCache || {}), [displayId]: dataUrl },
+          dppQrPending: { ...(s.dppQrPending || {}), [displayId]: false }
+        }));
+      })
+      .catch(() => {
+        if (alive) setState((s) => ({ dppQrPending: { ...(s.dppQrPending || {}), [displayId]: false } }));
+      });
+    return () => { alive = false; };
+  }, [state.dppOpen, state.dppId, dashboardData]);
 
   /* URL → 상태 */
   useEffect(() => {
@@ -386,7 +445,10 @@ export function useAppLogic(userProps) {
       notifOpen: false, dppOpen: false, dppId: null, pubId: null,
       customsSearched: false, customsQuery: '',
       removedScans: [], removedProducts: [],
-      registered: {}, confirm: null, toast: '', fieldFormDppId: null
+      registered: {}, confirm: null, toast: '', fieldFormDppId: null,
+      parsedFieldSources: {}, qrModal: null, issuedPassportCache: {},
+      tierRequestPending: {}, permRequestPending: {},
+      rejectModal: null, rejectReasonInput: '', dppQrCache: {}, dppQrPending: {}, productStatusFilter: 'all'
     });
   }
 
@@ -420,13 +482,12 @@ export function useAppLogic(userProps) {
 
   function tabList() {
     const r = state.role;
-    if (r === 'admin') return [['dash', '대시보드'], ['approve', '가입 승인 관리'], ['tier', 'Tier 심사 예외'], ['docs', '문서 반려 관리']];
+    if (r === 'admin') return [['dash', '대시보드'], ['approve', '회원 관리']];
     if (r === 'eu') return [['registry', 'DPP 레지스트리'], ['audit', '감사 로그']];
     if (r === 'personal') return [['scans', '제품 조회 기록'], ['my', '마이페이지']];
     if (r === 'customs') return [['clearance', '통관 검증']];
     if (r === 'partner') return [['assigned', '참여 DPP'], ['my', '마이페이지']];
-    const inputLabel = r === 'steel' ? '철강 데이터 입력' : r === 'battery' ? '배터리 데이터 입력' : '섬유 데이터 입력';
-    return [['dash', '대시보드'], ['input', inputLabel], ['partners', '협력사 초대'], ['products', '제품 조회'], ['my', '마이페이지']];
+    return [['dash', '대시보드'], ['input', 'DPP 생성'], ['partners', '협력사 관리'], ['products', '제품 조회'], ['my', '마이페이지']];
   }
 
   function renderVals() {
@@ -479,8 +540,6 @@ export function useAppLogic(userProps) {
       isMaker,
       scAdminDash: s.role === 'admin' && s.tab === 'dash',
       scApprove: s.role === 'admin' && s.tab === 'approve',
-      scTier: s.role === 'admin' && s.tab === 'tier',
-      scDocs: s.role === 'admin' && s.tab === 'docs',
       scMakerDash: isMaker && s.tab === 'dash',
       scInput: isMaker && s.tab === 'input',
       scPartners: isMaker && s.tab === 'partners',
@@ -530,23 +589,13 @@ export function useAppLogic(userProps) {
       scRegistry: s.role === 'eu' && s.tab === 'registry',
       scAudit: s.role === 'eu' && s.tab === 'audit',
       goApprove: () => setState({ tab: 'approve' }),
-      goTier: () => setState({ tab: 'tier' }),
-      goDocs: () => setState({ tab: 'docs' }),
       ...approvalVals(ctx),
+      // tier1/2/3Chip은 Tier 심사 페이지(삭제됨, 2026-08-17)와 무관하게 알림센터 뱃지·
+      // 가입 온보딩의 Tier 선택 카드(obTier1/obTier2)에서도 계속 쓰이는 공용 칩 스타일이라
+      // 그대로 유지한다.
       tier1Chip: chip('rgba(16,32,64,.07)', '#44546F'),
       tier2Chip: chip('rgba(0,69,169,.10)', '#0045A9'),
       tier3Chip: chip('rgba(18,161,80,.12)', '#0E7A3D'),
-      ...tierVals(ctx),
-      rejects: [
-        ['대성제강', 'DOC-2607-1180', '필수 입력 데이터 누락', 'Heat 번호 · 제철소 코드 미입력', '2026-07-30 08:55'],
-        ['루멘셀', 'DOC-2607-1174', '데이터 적합성 오류', '정격용량 단위 불일치 (Ah ↔ Wh)', '2026-07-30 07:20'],
-        ['아라텍스', 'DOC-2607-1166', '필수 입력 데이터 누락', '소재 혼용률 합계 92% (100% 필요)', '2026-07-29 19:02'],
-        ['우진메탈', 'DOC-2607-1151', '데이터 적합성 오류', 'CO₂ 배출계수 범위 초과', '2026-07-29 14:38']
-      ].map(([name, id, kind, detail, at]) => ({
-        key: id, name, id, kind, detail, at,
-        kindChip: kind === '데이터 적합성 오류' ? chip('rgba(224,59,59,.12)', '#C22B2B') : chip('rgba(227,160,8,.16)', '#96660A')
-      })),
-      sendRejects: () => say('4건의 반려사유를 자동 발송했습니다.'),
       anchorBars: anchorSeq.map((h, i) => ({ key: i, style: { display: 'block', width: 6, height: h, borderRadius: 3, background: i > 12 ? 'rgba(134,239,172,.9)' : 'rgba(255,255,255,.24)' } })),
       inquiries: inqData.map(([label, count, pct]) => ({ key: label, label, count, pct, style: bar(pct * 2.6, '#0045A9') })),
       members: memberData.map(([name, biz, joined, country, domain, held, issued, hue, initial]) => ({
@@ -780,12 +829,12 @@ export function useAppLogic(userProps) {
     oekotexResult, setOekotexResult, uploadOekotexLabel,
     batteryCarbonResult, setBatteryCarbonResult, uploadBatteryCarbonReport,
     recyclingResult, setRecyclingResult, uploadRecyclingReport,
-    invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate,
+    invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate, fmtDateTime,
     participationsData,
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,
-    makerVals, partnerVals, passportVals, tierVals, approvalVals, customsVals, euVals, notifVals, dppVals, obVals,
+    makerVals, partnerVals, passportVals, approvalVals, customsVals, euVals, notifVals, dppVals, obVals,
   };
 
   if (loadError) return { loading: false, loadError };

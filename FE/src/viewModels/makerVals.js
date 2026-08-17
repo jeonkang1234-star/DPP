@@ -1,5 +1,47 @@
 import React from 'react';
+import QRCode from 'qrcode';
 import { updateOrganization } from '../api/meApi.js';
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function nowStamp() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+// ZKP 문서별 검증 기준(정적 설명) - documentSlots의 detailLabel(실측 결과)과 별개로,
+// "애초에 뭘 어떤 기준으로 보는지"를 항상 보여주기 위한 문구. 결과가 아직 없어도(업로드 전)
+// 표시된다. 2026-08-17 강 요청: 서술형 문장 대신 실제 회로/판정 로직에 쓰이는 정확한
+// 수치·부등호를 그대로 적는다(zkp-o1js/circuits.mjs, parser/judge.py 기준 확인 완료).
+const ZKP_CRITERIA = {
+  // Mill Sheet만 예외 - 강종마다 KS 규격 상하한이 달라서 단일 수치가 없다(judge.py의
+  // 의도적 설계: 성적서에 인쇄된 limit_text를 그대로 파싱해서 검증). 그래서 "고정값"
+  // 대신 실제 판정 예시(테스트 데이터 기준)를 부등호로 보여준다.
+  MILL_SHEET: 'C ≤0.240%, Mn ≤1.600%, P ≤0.035%, S ≤0.035% 등 성분별 상한(≤)·하한(≥) — 강종별 성적서에 표기된 값 그대로 검증',
+  CBAM_REPORT: '연간 누적 수입량 > 50t',
+  CARE_LABEL: '섬유 혼용률 합계 99.5%~100.5%',
+  OEKOTEX_LABEL: '4.0 ≤ pH ≤ 7.5',
+  BATTERY_CARBON_REPORT: '재생원료 함유율 Co ≥16%, Li ≥6%, Ni ≥6%',
+  RECYCLING_REPORT: '물질회수율 Cu ≥90%, Li ≥50%, Co ≥90%'
+};
+
+// 백엔드(DocumentSlotService.autoFillFieldsFromParsedDocument)가 실제로 문서에서
+// 자동 채우는 필드코드만 정확히 나열 - 이 4개 외 나머지 필드는 절대 문서에서 채워지지
+// 않고 항상 직접 입력이다(2026-08-17, 강이 "분명 파싱되는 애들인데 전부 수기입력으로
+// 뜬다"고 지적해서 정적 화이트리스트로 정확히 구분하도록 수정. 이전엔 이번 세션에
+// 업로드 이벤트로 직접 감지한 것만 '파싱됨'으로 표시하고 나머지는 값이 비었으면 무조건
+// '문서에 없음'으로 표시해서, 새로고침 후나 이전 세션에 이미 문서로 채워진 값도 마치
+// 항상 수기입력해야 하는 것처럼 보이는 문제가 있었다).
+// GTIN: 9종 문서 업로드 시 공통 시도. PCF_VALUE: PCF_REPORT/LCA_EPD. RECYCLABILITY_NOTE: LCA_EPD.
+// RECYCLED_SCRAP_RATE: SCRAP_PROOF.
+const AUTO_FILL_FIELD_CODES = new Set(['GTIN', 'PCF_VALUE', 'RECYCLABILITY_NOTE', 'RECYCLED_SCRAP_RATE']);
+// 위 필드가 아직 안 채워졌을 때 "어느 문서를 올리면 채워지는지" 구체적으로 안내(2026-08-17
+// 강 요청 - "문서 업로드 시 자동 인식됩니다" 같은 뭉뚱그린 문구 대신 "~페이지에서 파싱"으로).
+const AUTO_FILL_SOURCE_LABEL = {
+  GTIN: '문서 업로드 페이지에서 파싱',
+  PCF_VALUE: '탄소발자국 산정보고서 페이지에서 파싱',
+  RECYCLABILITY_NOTE: 'LCA/EPD 페이지에서 파싱',
+  RECYCLED_SCRAP_RATE: '스크랩 매입증빙 페이지에서 파싱'
+};
 
 /**
  * Builds the view-model slice consumed by AppView.
@@ -10,16 +52,12 @@ export function makerVals(ctx) {
   const r = state.role;
   const p = ctx.profile();
   const kpi = data.makerKpi[r] || ['0', 0, 0, 0, 0, 0];
-  const queues = data.makerQueues[r] || [];
   // ctx.dashboardData(GET /me/dashboard)가 로드됐으면 실데이터, 아니면 기존 목데이터로 폴백.
   // org_id 없는 계정이나 DPP를 아직 하나도 등록 안 한 조직은 dash가 와도 전부 0/빈 배열 -
   // 그 경우도 실데이터 분기를 그대로 타서 "0건/빈 목록"으로 정직하게 보여준다(가짜 숫자로
   // 안 채움). 목데이터로 폴백하는 건 dashboardData 자체가 아직 도착 전(null)이거나
   // 요청이 실패했을 때뿐.
   const dash = ctx.dashboardData;
-  const queueRows = dash
-    ? dash.missingFields.map(f => [f.section, f.labelKo, f.dppLabel, f.dppId + '-' + f.fieldCode])
-    : queues.map(([due, task, target]) => [due, task, target, task]);
   const completenessRows = dash
     ? dash.dpps.map(d => {
         const done = Math.round(d.completeness);
@@ -41,6 +79,12 @@ export function makerVals(ctx) {
   const ff = hasRealFieldForm ? ctx.fieldFormData : null;
   const ffInputs = ctx.fieldFormInputs || {};
   const ffFilledCount = ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0;
+  // 이번 세션에 문서 업로드로 "방금 채워진" 필드 - { [fieldCode]: 문서라벨 }. 파싱된
+  // 데이터인지 수기 입력해야 하는 데이터인지 구별해서 보여주기 위함(2026-08-17 강 요청).
+  // 이미 값이 있었지만 이번 세션에 파싱으로 채워진 게 아닌 경우(예: 이전 세션에 수기로
+  // 입력해둔 값)까지 "파싱됨"이라고 단정할 근거가 없어서, 그 경우는 배지를 아예 안 보여준다 -
+  // 근거 없는 라벨을 붙이는 것보다 정직하게 비워두는 쪽을 택했다.
+  const parsedSources = state.parsedFieldSources || {};
   // "필수 문서" 업로드 실데이터(GET /me/documents) - ff와 마찬가지로 실데이터가 있는 역할,
   // 그리고 dppId가 이미 있을 때만(초안조차 없으면 문서를 붙일 곳이 없음).
   const df = hasRealFieldForm ? ctx.documentFormData : null;
@@ -58,6 +102,20 @@ export function makerVals(ctx) {
   const rcr = (r === 'battery') ? ctx.recyclingResult : null;
   const DOC_STATUS_LABEL = { NOT_UPLOADED: '미제출', PENDING: '검토 중', APPROVED: '제출 완료', REJECTED: '반려됨', EXPIRED: '만료됨' };
   const DOC_STATUS_COLOR = { NOT_UPLOADED: '#9AA8BE', PENDING: '#E3A008', APPROVED: '#12A150', REJECTED: '#E03B3B', EXPIRED: '#C22B2B' };
+  // DPP 발급 조건(강 요청, 2026-08-17): 제조사가 반드시 채워야 하는 필수 데이터를 전부
+  // 입력해야만 발급 가능, 그 전엔 임시저장만 가능. ff(실 폼)가 없는 레거시 경로(아직 시딩
+  // 안 된 도메인)는 이 조건이 적용될 데이터 자체가 없으므로 기존 동작(항상 발급 가능)을
+  // 그대로 둔다 - 정확한 검증 근거 없이 막으면 오히려 더 헷갈린다.
+  // 제품조회 작성중/작성완료 필터(2026-08-17 강 요청) - 완성도 100%(=isIssued)를
+  // "작성완료", 그 미만을 "작성중" 기준으로 나눈다. 기존에도 버튼 자리(상태 전체/기간
+  // 90일)는 있었지만 onClick이 없어 눌러도 아무 동작이 없었다.
+  const pStatusFilter = state.productStatusFilter || 'all';
+  const requiredFieldsOk = ff ? ff.fields.filter(f => f.required).every(f => !!ffInputs[f.fieldCode]) : true;
+  const requiredDocsOk = df ? df.documents.filter(d => d.required).every(d => d.status === 'APPROVED') : true;
+  const issueReady = ff ? (requiredFieldsOk && requiredDocsOk) : true;
+  const issueDisabledHint = issueReady ? '' : !requiredFieldsOk
+    ? `필수 필드를 모두 입력해야 발급할 수 있습니다. (${ffFilledCount}/${ff ? ff.fields.length : 0})`
+    : '필수 문서를 모두 제출·검증 완료해야 발급할 수 있습니다.';
   return {
     kpiTotal: dash ? String(dash.totalCount) : kpi[0],
     // "이번 달 신규"/"서류 대기"는 실데이터 쪽에 대응하는 집계가 없다(생성일 기준 집계도,
@@ -91,19 +149,43 @@ export function makerVals(ctx) {
       ctx.setRecyclingResult(null);
       ctx.setFieldFormInputs({});
       ctx.setDocumentFormData(null);
-      setState({ tab: 'input', fieldFormDppId: null });
+      setState({ tab: 'input', fieldFormDppId: null, parsedFieldSources: {}, qrModal: null });
     },
-    queue: queueRows.map(([due, task, target, key]) => ({
-      key, due, task, target,
-      dueDot: ctx.pillDot(due === 'D-1' ? '#E03B3B' : due === 'D-2' ? '#E3A008' : '#9AA8BE'),
-      act: () => ctx.say((dash ? '미충족 필드로 이동했습니다 · ' : '작업을 처리 화면으로 이동했습니다 · ') + task)
+    // 최근 작업 조회 DPP(2026-08-17 강 요청) - 예전 "대기작업 큐"(마감일 D-1/D-2 같은
+    // 가짜 워크플로 문구)를 걷어내고, 실제 있는 DPP 중 최근 것 몇 건만 핵심 데이터
+    // 3항목(일련번호/상품명/상태)으로 간단히 보여주는 목록으로 교체. 클릭하면 바로 그
+    // DPP의 입력 화면으로 이동한다(대기작업 큐의 "처리" 버튼과 동일한 이동 동작 유지).
+    recentDpps: completenessRows.slice(0, 5).map(([openId, displayId, name, done]) => ({
+      key: openId,
+      serial: displayId,
+      productName: name || '(이름 없음)',
+      statusLabel: done === 100 ? '발급 완료' : done === 0 ? '입력 대기' : (done + '% 작성 중'),
+      statusChip: done === 100
+        ? ctx.chip('rgba(18,161,80,.12)', '#0E7A3D')
+        : done === 0
+          ? ctx.chip('rgba(132,148,172,.16)', '#6B7A93')
+          : ctx.chip('rgba(227,160,8,.16)', '#96660A'),
+      open: () => setState({ tab: 'input', fieldFormDppId: openId, parsedFieldSources: {}, qrModal: null })
     })),
+    recentDppsEmpty: completenessRows.length === 0,
+    // 2026-08-17 강 정정: "완성도" 그래프/목록 카드는 원래대로 유지하고(제목만 "입력률"로),
+    // ESPR 업데이트는 대신 KPI 카드 줄의 "평균 완성도" 자리에 넣는다(지난번엔 잘못 이해해서
+    // 완성도 그래프 카드 쪽을 통째로 ESPR로 바꿔버렸었음).
     completeness: completenessRows.map(([openId, displayId, name, done, prog, none]) => ({
       key: openId, id: displayId, name, pct: done,
       pctStyle: ctx.pctStyle(done),
       segs: [{ key: 'a', style: ctx.segStyle(done, '#12A150') }, { key: 'b', style: ctx.segStyle(prog, '#E3A008') }, { key: 'c', style: ctx.segStyle(none, '#E03B3B') }],
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
+    // KPI 카드 줄의 "평균 완성도" 자리에 들어갈 정적 규정 업데이트 안내 - 카드 폭이 좁아서
+    // 문구를 짧게 줄임. 실제 EU 관보/집행위 발표 연동은 없는 정적 카드(다른 KPI 카드들처럼
+    // 지금은 표시만, 나중에 실제 피드 API가 생기면 교체).
+    esprUpdate: {
+      title: 'EU ESPR 규정 업데이트',
+      summary: '제품군별 DPP 의무화 일정이 위임법령으로 순차 확정 중',
+      updatedAt: nowStamp().slice(0, 10) + ' 확인',
+      openDetail: () => ctx.say('EU ESPR 규정 상세 안내 페이지는 준비 중입니다.')
+    },
     inputTitle: inputMeta.title,
     formTitle: inputMeta.form,
     fieldCount: ff ? ff.fields.filter(f => f.required).length : inputMeta.count,
@@ -113,21 +195,30 @@ export function makerVals(ctx) {
     setSingle: () => setState({ issueMode: 'single' }),
     setBatch: () => setState({ issueMode: 'batch' }),
     issueLabel: isBatch ? '배치 240건 발급' : 'DPP 발급',
+    issueReady,
+    issueDisabledHint,
     // "기본 정보 입력" 카드를 토글로 열고 닫을 수 있게(2026-08-16 사용자 피드백: "소재 기본
     // 정보를 토글로 열고 닫을 수 있게 하는게 더 보기 좋을 것 같음"). 기본값은 열림 -
     // state.fieldFormOpen이 아직 세팅 전(undefined)이어도 열려 보여야 하므로 `!== false`로
     // 판정한다.
     fieldFormOpen: state.fieldFormOpen !== false,
     toggleFieldForm: () => setState(s => ({ fieldFormOpen: !(s.fieldFormOpen !== false) })),
+    // "입력 검증 결과" 패널(2026-08-17 강 요청) - 예전엔 오른쪽 사이드 컬럼에 항상 펼쳐진
+    // 채로 자리를 차지했는데, 어차피 열고닫는 토글이니 단일발급/배치발급 버튼 옆으로 옮기고
+    // 기본은 닫아둬서 필수 문서·기본 정보 카드가 더 넓게 보이게 한다.
+    validationOpen: !!state.validationOpen,
+    toggleValidation: () => setState(s => ({ validationOpen: !s.validationOpen })),
+    validationWarnCount: ff ? (ffFilledCount === ff.fields.length ? 0 : 1) : (fieldSets.every(f => !!f[3]) ? 0 : 1),
     // ff(실 폼)가 있으면 실제로 저장한다 - 없으면(battery/textile, 아직 시딩 없음) 기존
     // 목데이터 토스트만 보여준다.
+    lastSavedLabel: (state.draftSavedAt && state.draftSavedAt[r]) ? ('마지막 임시저장 ' + state.draftSavedAt[r]) : '아직 임시저장한 이력이 없습니다',
     saveDraft: async () => {
       if (!ff) { ctx.say('임시저장했습니다.'); return; }
       try {
         const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
         ctx.setFieldFormData(result);
         ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        setState({ fieldFormDppId: result.dppId });
+        setState(s => ({ fieldFormDppId: result.dppId, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
         ctx.say('임시저장했습니다 · 완성도 ' + Math.round(result.completeness) + '%');
       } catch (e) {
         ctx.say(e.message || '임시저장에 실패했습니다.');
@@ -136,6 +227,10 @@ export function makerVals(ctx) {
     issueDpp: async () => {
       if (!ff) { ctx.say(isBatch ? '배치 240건의 DPP 발급을 시작했습니다.' : 'DPP를 발급하고 블록체인에 앵커링했습니다.'); return; }
       if (isBatch) { ctx.say('배치 대량 발급은 아직 실데이터 연동 전입니다.'); return; }
+      // 제조사 입장에서 반드시 채워야 하는 데이터를 다 입력했을 때만 발급 가능 - 그 전엔
+      // 임시저장만(2026-08-17 강 요청). 버튼도 비활성화되지만, 혹시 모를 경합(다른 탭에서
+      // 필드를 지운 직후 등)을 대비해 실제 발급 호출 전에도 한 번 더 막는다.
+      if (!issueReady) { ctx.say(issueDisabledHint); return; }
       try {
         let dppId = ff.dppId;
         if (!dppId) {
@@ -146,22 +241,82 @@ export function makerVals(ctx) {
         const issued = await ctx.issueFieldFormDpp(dppId);
         ctx.setFieldFormData(issued);
         ctx.setFieldFormInputs(Object.fromEntries((issued.fields || []).map(f => [f.fieldCode, f.value || ''])));
+        // DPP 발급과 동시에 QR 발급(2026-08-17 강 요청) - 아직 공개(비로그인) 조회용 백엔드
+        // 엔드포인트가 없어서, 지금은 이번 브라우저 세션 안에서 "제품 조회 → QR 스캔"으로
+        // 바로 조회할 수 있도록 필드 스냅샷을 세션 캐시에 같이 남긴다(issuedPassportCache).
+        // 특별사항대로 파싱된 데이터(=지금 입력 폼의 값)만 담는다.
+        const displayId = issued.internalSku || ('DPP-' + issued.dppId);
+        const snapshot = (issued.fields || []).map(f => ({ label: f.labelKo, value: f.value || '', required: f.required }));
+        try {
+          const dataUrl = await QRCode.toDataURL(displayId, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } });
+          setState(s => ({
+            issuedPassportCache: { ...(s.issuedPassportCache || {}), [displayId]: { material: r, formLabel: inputMeta.form, fields: snapshot } },
+            qrModal: { id: displayId, dataUrl, showProductsLink: true }
+          }));
+        } catch (qrErr) {
+          // QR 이미지 생성만 실패해도 발급 자체(실데이터, 블록체인 앵커링)는 이미 끝났으니
+          // 발급 실패로 되돌리지 않는다 - 토스트로만 알린다.
+          ctx.say('DPP는 발급됐지만 QR 이미지 생성에 실패했습니다.');
+        }
         ctx.say('DPP를 제출했습니다 · 완성도 ' + Math.round(issued.completeness) + '%');
       } catch (e) {
         ctx.say(e.message || 'DPP 발급에 실패했습니다.');
       }
     },
+    // qrModal state는 역할 공용(2026-08-17부터 세관 화면도 같은 모달을 재사용) - "제품
+    // 조회에서 보기" 버튼은 제조사에게만 의미가 있어서(제품 조회 탭이 없는 역할에서 누르면
+    // 빈 화면으로 이동해버림) qrModalShowLink로 노출 여부를 구분한다.
+    qrModalOpen: !!state.qrModal,
+    qrModalId: state.qrModal ? state.qrModal.id : '',
+    qrModalImg: state.qrModal ? state.qrModal.dataUrl : '',
+    qrModalShowLink: !!(state.qrModal && state.qrModal.showProductsLink),
+    qrModalBadge: (state.qrModal && state.qrModal.badge) || 'DPP 발급 완료',
+    qrModalTitle: (state.qrModal && state.qrModal.title) || 'QR 코드가 함께 발급되었습니다',
+    qrModalHint: (state.qrModal && state.qrModal.hint) || '이 QR을 스캔하면 현재까지 입력·검증된 데이터를 조회할 수 있습니다.',
+    closeQrModal: () => setState({ qrModal: null }),
+    goToProductsFromQr: () => setState({ tab: 'products', qrModal: null }),
     // ff가 있으면(철강 역할) requirement_field 실 라벨/필수여부 + dpp_field_value 실 저장값,
     // 없으면 기존 목데이터 폼("SPHC" 같은 예시값 포함, 미시딩 도메인 한정 - 위 주석 참고).
     fields: ff
-      ? ff.fields.map(f => ({
-          key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
-          req: f.required ? '필수' : '선택', ph: f.helpText || '', value: ffInputs[f.fieldCode] || '',
-          hint: f.helpText || '',
-          onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
-        }))
+      ? ff.fields.map(f => {
+          const value = ffInputs[f.fieldCode] || '';
+          const parsedFrom = parsedSources[f.fieldCode];
+          const isAutoFillable = AUTO_FILL_FIELD_CODES.has(f.fieldCode);
+          // 파싱됨/수기 입력 구분(2026-08-17 강 요청, 재수정): 어떤 필드가 실제로 문서에서
+          // 자동 채워지는지는 백엔드 로직(AUTO_FILL_FIELD_CODES 주석 참고)에 정확히 정의돼
+          // 있으므로, 그 화이트리스트를 기준으로 판정한다 - 이번 세션에 업로드로 방금 채운
+          // 게 감지되면 어느 문서에서 왔는지까지 표시하고, 새로고침 등으로 감지를 놓쳤어도
+          // 화이트리스트 필드에 값이 있으면 "파싱됨"으로 인정한다. 화이트리스트 필드인데
+          // 아직 비어있으면 "문서에 없음"이 아니라 "문서 업로드 시 자동 인식"으로 안내한다
+          // (문서를 아직 안 올렸을 뿐, 언젠가 채워질 필드라는 뜻). 화이트리스트 밖의
+          // 필드(Heat No/강종 등 26개)는 애초에 어떤 문서에서도 자동 추출되지 않는
+          // 순수 수기입력 항목이라 "직접 입력 항목"으로 중립적으로 표시한다.
+          let sourceLabel; let sourceChip;
+          if (parsedFrom) {
+            sourceLabel = '파싱됨 · ' + parsedFrom + '에서 인식';
+            sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
+          } else if (isAutoFillable && value) {
+            sourceLabel = '파싱됨 · 업로드된 문서에서 자동 인식';
+            sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
+          } else if (isAutoFillable && !value) {
+            sourceLabel = AUTO_FILL_SOURCE_LABEL[f.fieldCode] || '문서 업로드 페이지에서 파싱';
+            sourceChip = ctx.chip('rgba(0,69,169,.10)', '#0045A9');
+          } else if (!value) {
+            sourceLabel = '직접 입력 항목';
+            sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
+          } else {
+            sourceLabel = '직접 입력됨';
+            sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
+          }
+          return {
+            key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
+            req: f.required ? '필수' : '선택', ph: f.helpText || '', value,
+            hint: f.helpText || '', sourceLabel, sourceChip,
+            onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
+          };
+        })
       : fieldSets.map(([label, req, ph, value, hint]) => ({
-          key: label, label, req, ph, value, hint, onChange: undefined
+          key: label, label, req, ph, value, hint, sourceLabel: '', sourceChip: null, onChange: undefined
         })),
     fieldCheck: ff
       ? ff.fields.map(f => {
@@ -241,6 +396,10 @@ export function makerVals(ctx) {
             if (d.docTypeCode === 'RECYCLING_REPORT' && rcr) return (rcr.specPassed ? '검증 통과' : '검증 실패') + ' · 물질회수율 Cu ' + rcr.copperRecoveryPercent + '% · Li ' + rcr.lithiumRecoveryPercent + '% · Co ' + rcr.cobaltRecoveryPercent + '%';
             return '';
           })();
+          // "ZKP 증명 시 어떤 수치를 어떤 기준으로 검증 중인지"(2026-08-17 강 요청) - 결과가
+          // 아직 없어도(업로드 전) 고정 문구로 항상 보여준다. detailLabel은 실측 결과가 있을
+          // 때만 채워지는 것과 달리, criterionLabel은 애초에 뭘 보는지에 대한 설명.
+          const criterionLabel = d.zkpTarget ? (ZKP_CRITERIA[d.docTypeCode] || '') : '';
           return {
             key: d.fieldCode, label: d.labelKo, req: d.required ? '필수' : '선택',
             fileName: d.fileName || '',
@@ -248,6 +407,7 @@ export function makerVals(ctx) {
             dot: ctx.pillDot(uploading ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
             categoryLabel: d.zkpTarget ? '데이터 검증' : '형식 확인',
             categoryChip: d.zkpTarget ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#6B7A93'),
+            criterionLabel,
             detailLabel,
             // 스피너(active)는 "검증 중"(stageIdx===1) 단계에서만 돈다 - 예전엔
             // i===stageIdx 조건만 봐서 아직 업로드 전(stageIdx===0, "미제출")에도 그
@@ -275,7 +435,23 @@ export function makerVals(ctx) {
                   zkpUploader.setResult({ ...result, fileName: file.name });
                   if (result.dppId) {
                     setState({ fieldFormDppId: result.dppId });
-                    ctx.refreshFieldForm(result.dppId);
+                    // 업로드 직전 입력값(prevInputs)과 새로 불러온 폼을 비교해서, 이 문서
+                    // 업로드로 "방금 채워진" 필드만 파싱됨으로 표시한다(파싱되는 데이터가
+                    // 어디서 왔는지 표시, 2026-08-17 강 요청).
+                    const prevInputs = ffInputs;
+                    const refreshed = await ctx.refreshFieldForm(result.dppId);
+                    if (refreshed && refreshed.fields) {
+                      const newlyFilled = refreshed.fields
+                        .filter(nf => !prevInputs[nf.fieldCode] && (nf.value || ''))
+                        .map(nf => nf.fieldCode);
+                      if (newlyFilled.length) {
+                        setState(s => {
+                          const next = { ...(s.parsedFieldSources || {}) };
+                          newlyFilled.forEach(code => { next[code] = d.labelKo; });
+                          return { parsedFieldSources: next };
+                        });
+                      }
+                    }
                     ctx.refreshDocumentForm(result.dppId);
                   }
                   ctx.say(zkpUploader.okMsg(result));
@@ -476,15 +652,36 @@ export function makerVals(ctx) {
               }
         })
       };
-    }),
+    }).filter(p => pStatusFilter === 'all' ? true : pStatusFilter === 'done' ? p.isIssued : !p.isIssued),
+    productStatusFilter: pStatusFilter,
+    setProductStatusFilter: (k) => setState({ productStatusFilter: k }),
+    productFilterTabs: [['all', '전체'], ['inProgress', '작성중'], ['done', '작성완료']].map(([k, label]) => ({
+      key: k, label,
+      style: {
+        height: 40, padding: '0 14px', border: '1px solid ' + (pStatusFilter === k ? '#0045A9' : 'rgba(16,32,64,.12)'),
+        borderRadius: 12, background: pStatusFilter === k ? 'rgba(0,69,169,.08)' : '#fff',
+        color: pStatusFilter === k ? '#0045A9' : '#44546F', fontSize: 13, fontWeight: 600, cursor: 'pointer'
+      },
+      go: () => setState({ productStatusFilter: k })
+    })),
     myBiz: { steel: '218-81-04471', battery: '124-86-77203', textile: '312-81-55910' }[r] || '',
     myUrl: { steel: 'https://daesungsteel.co.kr', battery: 'https://lumencell.co.kr', textile: 'https://aratex.co.kr' }[r] || '',
     // ctx.orgData(GET /me/organization)가 로드됐으면 실제 tier_level, 아니면 기존 역할별 자리표시자.
     myTier: ctx.orgData ? ('Tier ' + ctx.orgData.tierLevel) : (r === 'steel' ? 'Tier 3' : 'Tier 2'),
     myTierName: r === 'steel' ? '엔터프라이즈 / Full DPP' : '표준 / 검증 등록',
     myTierDesc: r === 'steel' ? '공급망 하위 업체를 초대해 전체 추적망을 연동할 수 있습니다.' : '제3자 인증서 기반 검증 등록이 가능합니다. Tier 3 신청 시 하위 협력사 연동이 열립니다.',
-    requestTier: () => ctx.say('상위 Tier 신청서를 제출했습니다. 자동심사 진행 중입니다.'),
-    requestPerm: () => ctx.say('권한 추가 신청이 관리자에게 전달되었습니다.'),
+    tierRequestPending: !!(state.tierRequestPending && state.tierRequestPending[r]),
+    requestTier: () => {
+      if (state.tierRequestPending && state.tierRequestPending[r]) { ctx.say('이미 상위 Tier 신청이 접수되어 심사 중입니다.'); return; }
+      setState(s => ({ tierRequestPending: { ...(s.tierRequestPending || {}), [r]: true } }));
+      ctx.say('상위 Tier 신청서를 제출했습니다. 자동심사 진행 중입니다.');
+    },
+    permRequestPending: !!(state.permRequestPending && state.permRequestPending[r]),
+    requestPerm: () => {
+      if (state.permRequestPending && state.permRequestPending[r]) { ctx.say('이미 권한 추가 신청이 접수되어 검토 중입니다.'); return; }
+      setState(s => ({ permRequestPending: { ...(s.permRequestPending || {}), [r]: true } }));
+      ctx.say('권한 추가 신청이 관리자에게 전달되었습니다.');
+    },
     saveProfile: () => ctx.say('기업 정보를 수정했습니다.'),
     myPerms: [['DPP 발급·수정', 1], ['협력사 초대', 1], ['ZKP 증명 제출', r === 'steel' ? 1 : 0], ['감사 로그 열람', 0], ['배치 대량 발급', r === 'steel' ? 1 : 0]].map(([label, on]) => ({
       key: label, label, style: on ? ctx.chip('rgba(0,69,169,.10)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#9AA8BE')

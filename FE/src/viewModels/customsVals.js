@@ -1,4 +1,5 @@
 import React from 'react';
+import QRCode from 'qrcode';
 
 /**
  * Builds the view-model slice consumed by AppView.
@@ -75,7 +76,16 @@ export function customsVals(ctx) {
       detailStyle: { fontSize: 11.5, lineHeight: 1.5, color: ok ? '#8494AC' : '#C22B2B' }
     })),
     cDownloadAll: () => ctx.say('적합성 선언서·기술문서·DPP 증명서를 하나의 ZIP으로 내려받습니다.'),
-    cDownloadDoc: () => ctx.say(cur.doc + ' 을(를) 내려받습니다.'),
+    // 2026-08-17 강 요청: "검색해서 클릭하면 QR 보이게" - 조회된 화물의 DPP 식별자로 QR을
+    // 그 자리에서 생성해 공용 qrModal(제조사 발급 QR과 같은 모달)로 보여준다. 세관은 QR을
+    // "발급"하는 게 아니라 이미 발급된 DPP를 다시 조회하는 용도라 배지/문구를 다르게 준다.
+    showQr: () => {
+      QRCode.toDataURL(cur.id, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
+        .then((dataUrl) => {
+          setState({ qrModal: { id: cur.id, dataUrl, badge: '통관 조회', title: '해당 DPP의 QR 코드입니다', hint: '수입업체·현장 검수 시 이 QR로 동일한 DPP를 다시 조회할 수 있습니다.' } });
+        })
+        .catch(() => ctx.say('QR 생성에 실패했습니다.'));
+    },
     cApprove: () => ctx.say(cur.id + ' 통관 승인 처리했습니다.'),
     cHold: () => ctx.say(cur.id + ' 통관 보류 사유를 수입업체에 통보했습니다.'),
     clearLog: [

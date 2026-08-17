@@ -19,10 +19,16 @@ export function approvalVals(ctx) {
   const isPending = (r) => r.approvalStatus === 'PENDING';
   const isDone = (r) => r.approvalStatus !== 'PENDING';
   const shown = rows.filter((r) => cur === 'all' || (cur === 'pending' ? isPending(r) : isDone(r)));
+  // 2026-08-17 강 요청: "가입완료 계정, 가입대기 계정으로 필터링 가능하게" - 탭 자체는
+  // 이미 있었고(전체/대기중/처리완료) 라벨만 요청한 문구에 맞게 정리한다. 다만 "처리완료"는
+  // 승인/반려를 모두 포함하는 상태이고 "가입완료"는 실제로는 승인된 계정만을 뜻하는 것이
+  // 더 정확하지만, 반려 건도 더 이상 "대기중"이 아니므로 지금은 기존과 동일하게 승인+반려를
+  // 한 탭에 묶어 "가입완료"로 부른다 - 반려만 따로 보고 싶다면 각 행의 "반려됨" 표시로
+  // 구분할 수 있다.
   const tabs = [
     ['all', '전체', rows.length],
-    ['pending', '대기중', rows.filter(isPending).length],
-    ['done', '처리완료', rows.filter(isDone).length],
+    ['pending', '가입대기', rows.filter(isPending).length],
+    ['done', '가입완료', rows.filter(isDone).length],
   ];
 
   const domainLabel = (d) => (d === 'STEEL' ? '철강' : d === 'BATTERY' ? '배터리' : d === 'TEXTILE' ? '섬유' : '—');
@@ -54,7 +60,9 @@ export function approvalVals(ctx) {
       const country = r.countryCode || '—';
       const cc = r.countryCode || '—';
       const biz = r.bizRegNo || '—';
-      const at = ctx.fmtDate(r.createdAt);
+      // 2026-08-17 강 요청: "신청일시" 라벨인데 시간 없이 날짜만 나오던 것을 시:분까지
+      // 나오는 진짜 타임스탬프로 수정(createdAt 자체는 원래도 전체 ISO 타임스탬프였음).
+      const at = ctx.fmtDateTime(r.createdAt);
       const isAuto = r.autoApproved;
       const isManual = isPending(r);
       const isRejected = r.approvalStatus === 'REJECTED';
@@ -68,13 +76,29 @@ export function approvalVals(ctx) {
         routeStyle: { fontSize: 12.5, fontWeight: 600, color: isManual ? '#C22B2B' : isRejected ? '#8494AC' : '#0E7A3D' },
         ccStyle: { display: 'inline-grid', placeItems: 'center', width: 30, height: 22, borderRadius: 6, background: 'rgba(16,32,64,.07)', color: '#44546F', fontFamily: "'JetBrains Mono',monospace", fontSize: 11, fontWeight: 700 },
         approve: () => runAction(approveOrg(r.orgId), name + ' 가입을 승인했습니다.'),
-        reject: () => {
-          const reason = window.prompt(name + ' 반려 사유를 입력해 주세요(빈 값이면 기본 사유로 처리됩니다):', '');
-          if (reason === null) return; // 취소
-          runAction(rejectOrg(r.orgId, reason), name + ' 가입을 반려하고 사유를 발송했습니다.');
-        },
+        // 2026-08-17 강 요청: "반려 버튼을 누르면 지금의 <문서 반려 관리> 페이지가
+        // 팝업으로 바뀌게" - window.prompt 대신, 문서 반려 관리 화면(그 자체는 별도
+        // 페이지로서는 삭제됨)과 같은 톤의 팝업을 띄워서 사유를 입력받는다.
+        reject: () => setState({ rejectModal: { orgId: r.orgId, name }, rejectReasonInput: '' }),
         detail: () => setState({ docPreview: { name: name + ' · ' + domainLabel(r.domain), meta: country + ' · ' + biz, status: isManual ? '심사 대기' : isRejected ? '반려됨' : '승인됨' } })
       };
-    })
+    }),
+    rejectModalOpen: !!state.rejectModal,
+    rejectModalName: state.rejectModal ? state.rejectModal.name : '',
+    rejectReasonInput: state.rejectReasonInput || '',
+    setRejectReasonInput: (e) => setState({ rejectReasonInput: e.target.value }),
+    closeRejectModal: () => setState({ rejectModal: null, rejectReasonInput: '' }),
+    // 예전 "문서 반려 관리" 페이지에 있던 자주 쓰는 반려 사유 3개를 빠른 선택 칩으로 재사용.
+    rejectReasonPresets: ['필수 입력 데이터 누락', '데이터 적합성 오류', '인증서 유효기간 만료'].map((label) => ({
+      key: label, label,
+      apply: () => setState((s) => ({ rejectReasonInput: s.rejectReasonInput ? (s.rejectReasonInput + ' / ' + label) : label }))
+    })),
+    confirmReject: () => {
+      if (!state.rejectModal) return;
+      const { orgId, name } = state.rejectModal;
+      const reason = (state.rejectReasonInput || '').trim();
+      runAction(rejectOrg(orgId, reason), name + ' 가입을 반려하고 사유를 발송했습니다.');
+      setState({ rejectModal: null, rejectReasonInput: '' });
+    }
   };
 }
