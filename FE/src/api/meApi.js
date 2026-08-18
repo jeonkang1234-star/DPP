@@ -252,3 +252,30 @@ export function fetchNotificationCategories() {
 export function fetchNotifications() {
   return authedFetch('/notifications');
 }
+
+/**
+ * 관리자 가입승인 화면(com.dpp.mypage.controller.AdminOrganizationController) - ADMIN
+ * 계정만 200을 받는다(그 외는 403). 목록은 필터 없이 전체를 내려주고 FE(approvalVals.js)가
+ * 탭별로 나눠 보여준다.
+ */
+export function fetchOrgApprovals() {
+  return authedFetch('/admin/organizations');
+}
+
+export function approveOrg(orgId) {
+  return authedFetch(`/admin/organizations/${orgId}/approve`, { method: 'POST' });
+}
+
+export function rejectOrg(orgId, reason) {
+  return authedFetch(`/admin/organizations/${orgId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+/**
+ * EU 시장감시(레지스트리)/관세청 통관 조회 공용 검색(com.dpp.verify.controller.
+ * DppRegistryController) - ADMIN이거나 org_type이 EU_AUTHORITY/CUSTOMS인 계정만 200.
+ * q를 안 주면 최신 발급분 50건을 돌려준다.
+ */
+export function searchDppRegistry(q) {
+  const query = q ? `?q=${encodeURIComponent(q)}` : '';
+  return authedFetch(`/verify/dpp/search${query}`);
+}

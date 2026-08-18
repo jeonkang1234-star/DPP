@@ -14,7 +14,9 @@
     "partner-test@cheongwoo.test": "partner",
     "testlab-test@krbattery.test": "partner",
     "recycler-test@greenloop.test": "partner",
-    "supplier-test@coreminerals.test": "partner"
+    "supplier-test@coreminerals.test": "partner",
+    "pending-kr@sinheung-steel.test": "steel",
+    "pending-de@nordstahl.test": "steel"
   },
   "products": {
     "steel": [
@@ -541,7 +543,7 @@
   },
   "makerInputMeta": {
     "steel": {
-      "title": "철강 데이터 입력 (Mill Sheet)",
+      "title": "DPP 데이터 입력",
       "upload": "밀시트 업로드",
       "hint": "PDF · XLSX · 스캔 이미지 지원 · 최대 20MB",
       "file": "MillSheet_H26-0817.pdf",
@@ -550,7 +552,7 @@
       "count": 18
     },
     "battery": {
-      "title": "배터리 데이터 입력",
+      "title": "DPP 데이터 입력",
       "upload": "셀 시험성적서 업로드",
       "hint": "PDF · CSV · 최대 20MB",
       "file": "CellTestReport_NCM811.pdf",
@@ -559,7 +561,7 @@
       "count": 21
     },
     "textile": {
-      "title": "섬유 데이터 입력",
+      "title": "DPP 데이터 입력",
       "upload": "소재 시험성적서 업로드",
       "hint": "PDF · XLSX · 최대 20MB",
       "file": "FabricSpec_OC180.pdf",
