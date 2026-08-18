@@ -315,18 +315,53 @@ public class DocumentSlotService {
         String recyclability = asTrimmedString(sustainability.get("recyclability_percent"));
         String recycledContent = asTrimmedString(sustainability.get("recycled_content_percent"));
 
+        // 2026-08-18 확장 - "문서에 존재하면서 데이터 필드에 해당되면 다 긁어야지"(강 요청)
+        // 대응으로 PCF_METHOD/UOI_MANUFACTURER/ORIGIN_COUNTRY 3개를 추가로 매핑한다.
+        // parser/extractor.py의 TYPE_SPECIFIC_EXTRACTORS가 registry_code별로 얹어주는
+        // pcf_method/origin_country 키를 그대로 읽는다 - 값이 없으면(패턴 불일치) null이라
+        // fillIfEmpty가 알아서 건너뛴다.
+        @SuppressWarnings("unchecked")
+        Map<String, Object> pcfMethod = (Map<String, Object>) parsed.get("pcf_method");
+        String pcfMethodText = pcfMethod == null ? null : asTrimmedString(pcfMethod.get("method"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> originCountry = (Map<String, Object>) parsed.get("origin_country");
+        String originCountryCode = originCountry == null ? null : asTrimmedString(originCountry.get("origin_country_code"));
+
         switch (docTypeCode) {
-            case "PCF_REPORT" -> fillIfEmpty(dppId, orgId, userId, "PCF_VALUE", carbonFootprint);
+            case "PCF_REPORT" -> {
+                fillIfEmpty(dppId, orgId, userId, "PCF_VALUE", carbonFootprint);
+                fillIfEmpty(dppId, orgId, userId, "PCF_METHOD", pcfMethodText);
+            }
             case "LCA_EPD" -> {
                 fillIfEmpty(dppId, orgId, userId, "PCF_VALUE", carbonFootprint);
+                fillIfEmpty(dppId, orgId, userId, "PCF_METHOD", pcfMethodText);
                 if (recyclability != null) {
                     fillIfEmpty(dppId, orgId, userId, "RECYCLABILITY_NOTE", recyclability + "%");
                 }
             }
             case "SCRAP_PROOF" -> fillIfEmpty(dppId, orgId, userId, "RECYCLED_SCRAP_RATE", recycledContent);
+            // EORI는 이미 common 필드(parsed.get("eori"))로 최상위에서 뽑히지만, "제조자 고유
+            // 운영자 식별자"라는 의미상 EU 적합성선언서(EU_DOC)에 실제로 찍혀 있는 값만
+            // 신뢰해서 채운다(다른 문서 유형에 우연히 EORI 형식 문자열이 있어도 오채움 방지).
+            case "EU_DOC" -> fillIfEmpty(dppId, orgId, userId, "UOI_MANUFACTURER", asTrimmedString(parsed.get("eori")));
+            case "COO" -> fillIfEmpty(dppId, orgId, userId, "ORIGIN_COUNTRY", originCountryCode);
+            // 2026-08-18 강 요청("섬유도 파싱할 수 있는 데이터 다 파싱") - GRS/RCS 거래증명서의
+            // "Recycled Cotton 5% / Recycled Polyamide 15%" 인증 소재 구성을 합산한
+            // grs_boxes.total_recycled_percent를 재생 섬유 함유율로 채운다. 섬유 케어라벨
+            // (CareLabelIngestService)이 이미 채웠으면(먼저 업로드된 경우) 덮어쓰지 않는다.
+            case "GRS_CERTIFICATE" -> {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> grsBoxes = (Map<String, Object>) parsed.get("grs_boxes");
+                Object totalRecycled = grsBoxes == null ? null : grsBoxes.get("total_recycled_percent");
+                if (totalRecycled instanceof Number n) {
+                    fillIfEmpty(dppId, orgId, userId, "RECYCLED_FIBER_RATE", String.valueOf(n.doubleValue()));
+                }
+            }
             default -> {
-                // 나머지 6종(TECH_FILE/SOC_SDS/EU_DOC/TEST_REPORT/COO/LABEL/MANUAL)은
-                // GTIN 외엔 신뢰도 있게 매핑되는 필드가 없다 - 억지로 채우지 않는다.
+                // 나머지 문서 유형(TECH_FILE/SOC_SDS/TEST_REPORT/LABEL/MANUAL/
+                // DUE_DILIGENCE_REPORT)은 GTIN 외엔 신뢰도 있게 매핑되는 필드가 없다 -
+                // 억지로 채우지 않는다.
             }
         }
     }

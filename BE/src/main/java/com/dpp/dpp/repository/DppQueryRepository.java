@@ -7,6 +7,8 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 이름을 DppRepository가 아니라 DppQueryRepository로 지은 이유: com.dpp.document.repository에
@@ -20,6 +22,13 @@ import java.util.List;
 public interface DppQueryRepository extends JpaRepository<Dpp, Long> {
 
     List<Dpp> findByOwnerOrgIdAndDeletedAtIsNull(Long ownerOrgId);
+
+    /**
+     * 공개 조회(GET /public/dpp/{publicUuid}, 인증 불필요) 전용 - QR/링크가 이 값으로
+     * DPP를 찾는다. public_uuid는 dpp 생성 시점부터 항상 채워져 있다(FieldFormService.
+     * createDraftDpp의 UUID.randomUUID() 참고).
+     */
+    Optional<Dpp> findByPublicUuidAndDeletedAtIsNull(UUID publicUuid);
 
     /**
      * V2__functions.sql의 fn_recalc_completeness(dpp_id)를 그대로 호출한다 - dpp 테이블의
@@ -73,6 +82,19 @@ public interface DppQueryRepository extends JpaRepository<Dpp, Long> {
             + "FROM v_dpp_missing_field WHERE dpp_id IN (:dppIds) ORDER BY sort_order LIMIT :limit",
             nativeQuery = true)
     List<Object[]> findMissingFields(@Param("dppIds") List<Long> dppIds, @Param("limit") int limit);
+
+    /**
+     * "협력사 초대"가 필요한 DPP id만 - v_dpp_missing_field에서 책임 주체가 제조사가 아닌
+     * (RAW_SUPPLIER/TEST_LAB/RECYCLER) 미충족 필수 필드가 하나라도 있는 DPP. findMissingFields는
+     * "대기작업 큐" 표시용으로 전체 DPP를 합쳐 상위 N건만 담는 값이라(2026-08-18 확인 - 그
+     * 캡 때문에 제조사 담당 필드가 많은 DPP가 자리를 다 차지하면 협력사 담당 필드가 있는
+     * DPP가 응답에서 아예 안 보일 수 있었다), 이 쿼리는 LIMIT 없이 "필요한지 여부"만 정확히
+     * 판정한다. DppSummaryDto.needsPartnerInput의 데이터 소스.
+     */
+    @Query(value = "SELECT DISTINCT dpp_id FROM v_dpp_missing_field "
+            + "WHERE dpp_id IN (:dppIds) AND responsible_role <> 'MANUFACTURER'",
+            nativeQuery = true)
+    List<Long> findDppIdsNeedingPartnerInput(@Param("dppIds") List<Long> dppIds);
 
     /**
      * V2__functions.sql의 fn_create_dpp_snapshot(dpp_id, reason, user_id, mock)을 호출한다.

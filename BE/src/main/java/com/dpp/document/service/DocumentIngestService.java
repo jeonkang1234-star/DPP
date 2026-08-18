@@ -20,6 +20,8 @@ import com.dpp.document.repository.DppRepository;
 import com.dpp.document.repository.MaterialCompositionRepository;
 import com.dpp.document.repository.ZkpProofRepository;
 import com.dpp.document.zkp.SteelZkpMapper;
+import com.dpp.dpp.entity.DppFieldValue;
+import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
 import com.dpp.notify.entity.Notification;
 import com.dpp.notify.entity.NotificationCategory;
@@ -76,6 +78,7 @@ public class DocumentIngestService {
     private final ZkpProofRepository zkpProofRepository;
     private final BlockchainAnchorRepository blockchainAnchorRepository;
     private final MaterialCompositionRepository materialCompositionRepository;
+    private final DppFieldValueRepository dppFieldValueRepository;
     private final ParserClient parserClient;
     private final ZkpClient zkpClient;
     private final Optional<BlockchainClient> blockchainClient;
@@ -91,6 +94,7 @@ public class DocumentIngestService {
                                   ZkpProofRepository zkpProofRepository,
                                   BlockchainAnchorRepository blockchainAnchorRepository,
                                   MaterialCompositionRepository materialCompositionRepository,
+                                  DppFieldValueRepository dppFieldValueRepository,
                                   ParserClient parserClient,
                                   ZkpClient zkpClient,
                                   Optional<BlockchainClient> blockchainClient,
@@ -105,6 +109,7 @@ public class DocumentIngestService {
         this.zkpProofRepository = zkpProofRepository;
         this.blockchainAnchorRepository = blockchainAnchorRepository;
         this.materialCompositionRepository = materialCompositionRepository;
+        this.dppFieldValueRepository = dppFieldValueRepository;
         this.parserClient = parserClient;
         this.zkpClient = zkpClient;
         this.blockchainClient = blockchainClient;
@@ -245,6 +250,15 @@ public class DocumentIngestService {
         // "성공"이라 별도 알림 없이 화면 표시로 충분하다고 보고 실패 케이스만 보낸다.
         if (!specPassed) {
             notifySpecFailure(orgId, document, verdicts);
+        }
+
+        // 6-1) steel_mill_values.identity(Heat/Cast/Lot 번호, 강종, 규격, 치수, 중량)를
+        // dpp_field_value에 자동 채움 - "증명에 실패했으면 데이터 파싱 안되게"(2026-08-18
+        // 이전 라운드 피드백)와 같은 원칙을 여기도 적용해 specPassed일 때만 채운다. 이미
+        // 값이 있는 필드(수기 입력 포함)는 DocumentSlotService.fillIfEmpty와 동일하게
+        // 덮어쓰지 않는다.
+        if (specPassed) {
+            persistIdentityFields(dpp.getDppId(), orgId, userId, steelMillValues);
         }
 
         // 7) zkp_proof 행 저장 - 실측값(private input)은 어디에도 저장하지 않는다.
@@ -433,6 +447,73 @@ public class DocumentIngestService {
             row.setSourceDocumentId(documentId);
             materialCompositionRepository.save(row);
         }
+    }
+
+    /**
+     * steel_mill_values.identity(Heat No./Cast·Lot No./강종/규격/치수/중량)를 dpp_field_value에
+     * 채운다 - DocumentSlotService.fillIfEmpty와 동일하게 이미 값이 있으면(수기 입력 포함)
+     * 덮어쓰지 않는다. NET_WEIGHT_T는 요건 필드의 단위가 톤(T)인데 문서엔 kg로만 나와서
+     * 1000으로 나눠 변환한다.
+     *
+     * 2026-08-18 강 리포트: "LOT-2026-0201-A가 CAST 번호에도 이렇게 파싱되는 오류" - 애초에
+     * mock 문서 4종 전부 Heat No.와 "Cast/Lot No."를 별도 필드가 아니라 하나의 결합값으로만
+     * 인쇄한다(cast_lot_no). 이 값은 형식상 "LOT-..."라 실제로는 Lot 번호에 더 가깝고, Cast
+     * 번호는 문서에 아예 없는 정보다 - 그런데도 같은 값을 CAST_NO에도 채운 게 잘못이었다.
+     * LOT_NO에만 채우고 CAST_NO는 손대지 않는다(수기 입력 대상으로 남김).
+     * OPERATOR_MANUFACTURER(복합 정보, 신뢰도 있게 조합 불가), SCRAP_SOURCE·PRODUCTION_DATE
+     * (문서에 명확한 대응 신호 없음), PRODUCT_FORM(자유텍스트 "BEAM"을 "형강" 같은 분류로
+     * 추론해야 해서 리스크 있음)은 의도적으로 제외했다.
+     */
+    @SuppressWarnings("unchecked")
+    private void persistIdentityFields(Long dppId, Long orgId, Long userId, Map<String, Object> steelMillValues) {
+        Object raw = steelMillValues.get("identity");
+        if (!(raw instanceof Map<?, ?> rawMap)) {
+            return;
+        }
+        Map<String, Object> identity = (Map<String, Object>) rawMap;
+
+        fillFieldIfEmpty(dppId, orgId, userId, "HEAT_NO", asTrimmedString(identity.get("heat_no")));
+        fillFieldIfEmpty(dppId, orgId, userId, "LOT_NO", asTrimmedString(identity.get("cast_lot_no")));
+        fillFieldIfEmpty(dppId, orgId, userId, "STEEL_GRADE", asTrimmedString(identity.get("steel_grade")));
+        fillFieldIfEmpty(dppId, orgId, userId, "STEEL_STANDARD", asTrimmedString(identity.get("standard")));
+        fillFieldIfEmpty(dppId, orgId, userId, "DIMENSION", asTrimmedString(identity.get("dimension_text")));
+
+        Object weightKg = identity.get("weight_kg");
+        if (weightKg instanceof Number n) {
+            BigDecimal tons = BigDecimal.valueOf(n.doubleValue())
+                    .divide(BigDecimal.valueOf(1000), 3, java.math.RoundingMode.HALF_UP);
+            fillFieldIfEmpty(dppId, orgId, userId, "NET_WEIGHT_T", tons.stripTrailingZeros().toPlainString());
+        }
+    }
+
+    private static String asTrimmedString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String s = String.valueOf(value).trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    /** DocumentSlotService.fillIfEmpty와 동일한 "이미 값 있으면 안 덮어씀" 정책. */
+    private void fillFieldIfEmpty(Long dppId, Long orgId, Long userId, String fieldCode, String value) {
+        if (value == null) {
+            return;
+        }
+        Optional<DppFieldValue> existing = dppFieldValueRepository.findByDppIdAndFieldCode(dppId, fieldCode);
+        if (existing.isPresent() && existing.get().getValueText() != null && !existing.get().getValueText().isBlank()) {
+            return;
+        }
+        DppFieldValue row = existing.orElseGet(() -> {
+            DppFieldValue v = new DppFieldValue();
+            v.setDppId(dppId);
+            v.setFieldCode(fieldCode);
+            return v;
+        });
+        row.setValueText(value);
+        row.setSubmittedByOrg(orgId);
+        row.setSubmittedByUser(userId);
+        row.setUpdatedAt(OffsetDateTime.now());
+        dppFieldValueRepository.save(row);
     }
 
     private static String truncate(String s, int max) {

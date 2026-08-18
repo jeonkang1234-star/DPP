@@ -32,6 +32,10 @@ export default defineConfig({
                 target: "http://localhost:".concat(backendPort),
                 changeOrigin: true,
             },
+            "/public": {
+                target: "http://localhost:".concat(backendPort),
+                changeOrigin: true,
+            },
         },
     },
 });

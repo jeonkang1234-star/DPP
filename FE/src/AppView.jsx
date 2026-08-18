@@ -802,7 +802,7 @@ export default function AppView(v) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: '16px', alignItems: 'start' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>최근 작업 조회 DPP</span><span style={{ height: '28px', padding: '0 11px', display: 'grid', placeItems: 'center', borderRadius: '9px', background: '#F2F6FC', color: '#44546F', fontSize: '11.5px', fontWeight: '600' }}>최근순</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>최근 작업 DPP 조회</span><span style={{ height: '28px', padding: '0 11px', display: 'grid', placeItems: 'center', borderRadius: '9px', background: '#F2F6FC', color: '#44546F', fontSize: '11.5px', fontWeight: '600' }}>최근순</span></div>
               {recentDppsEmpty ? (<>
               <div style={{ padding: '20px 4px', fontSize: '13px', color: '#8494AC' }}>아직 등록한 DPP가 없습니다.</div>
               </>) : (<>
@@ -903,7 +903,7 @@ export default function AppView(v) {
                 <span style={{ fontSize: '15px', fontWeight: '600' }}>필수 문서</span>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                   {(documentSlots || []).map((d, $index) => (<React.Fragment key={$index}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '13px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '13px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1.5px solid ' + d.tileBorderColor }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', flexWrap: 'wrap' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: '500', color: '#8494AC' }}>{d.req}</span></span>
                       <label htmlFor={d.inputId} style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '9px', background: '#fff', color: '#0045A9', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>{d.fileName ? '재업로드' : '업로드'}</label>
@@ -911,7 +911,24 @@ export default function AppView(v) {
                     </div>
                     <span style={d.categoryChip}>{d.categoryLabel}</span>
                     <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{d.fileName || '아직 업로드되지 않았습니다'}</span>
-                    {d.criterionLabel ? (<span style={{ fontSize: '11px', color: '#8494AC', lineHeight: '1.5' }}>기준: {d.criterionLabel}</span>) : null}
+                    {d.criterionItems && d.criterionItems.length ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <button type="button" onClick={d.toggleCriterion} style={{ display: 'flex', alignItems: 'center', gap: '4px', border: 'none', background: 'none', padding: '0', cursor: 'pointer', fontSize: '11px', color: '#0045A9', fontWeight: '600' }}>
+                          <span>검증 기준 {d.criterionOpen ? '숨기기' : '보기'}</span>
+                          <span style={{ fontSize: '9px', transform: d.criterionOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}>▾</span>
+                        </button>
+                        {d.criterionOpen ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', padding: '8px 10px', background: '#F7F9FC', borderRadius: '9px' }}>
+                            {d.criterionItems.map((c, $ci) => (<React.Fragment key={$ci}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '10px' }}>
+                              <span style={{ fontSize: '11px', color: c.failed ? '#E03B3B' : '#6B7A93', fontWeight: c.failed ? '600' : '400' }}>{c.item}</span>
+                              <span style={{ fontSize: '11px', color: c.failed ? '#E03B3B' : '#2A3A55', fontWeight: '600', fontFamily: '\'JetBrains Mono\',monospace' }}>{c.criterion}</span>
+                            </div>
+                            </React.Fragment>))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {d.detailLabel ? (<span style={{ fontSize: '11px', color: '#6B7A93' }}>{d.detailLabel}</span>) : null}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                       {(d.steps || []).map((s, $stepIndex) => (<React.Fragment key={s.key}>
@@ -942,20 +959,48 @@ export default function AppView(v) {
                   </span>
                 </button>
                 {fieldFormOpen ? (<>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  {(fields || []).map((f, $index) => (<React.Fragment key={$index}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
-                      {f.label}{f.req === '필수' ? (<span style={{ color: '#C22B2B' }}>*</span>) : null}
-                      {f.sourceChip ? (<span style={f.sourceChip}>{f.sourceLabel}</span>) : null}
-                    </span>
-                    {f.onChange
-                      ? <input placeholder={f.ph} value={f.value} onChange={f.onChange} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} />
-                      : <input placeholder={f.ph} defaultValue={f.value} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} />}
-                    <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.hint || f.sourceLabel}</span>
-                  </label>
-                  </React.Fragment>))}
-                </div>
+                {(() => {
+                  const parsedFields = (fields || []).filter(f => f.autoFillable);
+                  const manualFields = (fields || []).filter(f => !f.autoFillable);
+                  const renderField = (f, $index) => (<React.Fragment key={$index}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '7px' }}>
+                        <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
+                          {f.label}{f.req === '필수' ? (<span style={{ color: '#C22B2B' }}>*</span>) : null}
+                        </span>
+                        {f.locked ? (<button type="button" onClick={f.unlock} style={{ height: '22px', padding: '0 9px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '7px', background: '#fff', fontSize: '10.5px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', flex: 'none' }}>수정</button>) : null}
+                      </span>
+                      {f.onChange
+                        ? <input placeholder={f.ph} value={f.value} onChange={f.locked ? undefined : f.onChange} readOnly={f.locked} style={{ height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: f.locked ? '#F2F4F8' : '#fff', color: f.locked ? '#6B7A93' : '#0B1B33', cursor: f.locked ? 'not-allowed' : 'text' }} />
+                        : <input placeholder={f.ph} defaultValue={f.value} style={{ height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: '#fff' }} />}
+                      <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.sourceLabel}</span>
+                    </label>
+                    </React.Fragment>);
+                  // 2026-08-18(2차) 강 요청: "파싱되는 데이터랑 그냥 입력하는 데이터랑
+                  // 블록으로 구분" - 예전엔 위/아래로 나뉜 섹션 제목 텍스트만 있고 눈에 띄는
+                  // 경계가 없어서 헷갈렸다. 각 그룹을 옅은 배경 + 테두리가 있는 카드형 블록
+                  // 으로 감싸서(파싱=초록 톤, 수기=회색 톤) 한눈에 구분되게 한다.
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      {parsedFields.length ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '14px', borderRadius: '14px', background: 'rgba(18,161,80,.05)', border: '1px solid rgba(18,161,80,.18)' }}>
+                          <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#0E7A3D' }}>문서에서 자동 인식되는 항목</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                            {parsedFields.map((f, $index) => renderField(f, 'p' + $index))}
+                          </div>
+                        </div>
+                      ) : null}
+                      {manualFields.length ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '14px', borderRadius: '14px', background: 'rgba(132,148,172,.05)', border: '1px solid rgba(132,148,172,.18)' }}>
+                          {parsedFields.length ? (<span style={{ fontSize: '11.5px', fontWeight: '600', color: '#6B7A93' }}>직접 입력해야 하는 항목</span>) : null}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                            {manualFields.map((f, $index) => renderField(f, 'm' + $index))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '16px', borderTop: '1px solid rgba(16,32,64,.07)' }}>
                   <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{lastSavedLabel}</span>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
@@ -982,7 +1027,7 @@ export default function AppView(v) {
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <span style={{ fontSize: '15px', fontWeight: '600' }}>초대할 DPP 선택</span>
             {partnerDppsEmpty ? (<>
-            <div style={{ padding: '18px 4px', fontSize: '13px', color: '#8494AC' }}>아직 발급한 DPP가 없습니다. 철강 데이터 입력에서 DPP를 먼저 임시저장해 주세요.</div>
+            <div style={{ padding: '18px 4px', fontSize: '13px', color: '#8494AC' }}>협력사 초대가 필요한(담당 필드가 비어있는) DPP가 없습니다.</div>
             </>) : null}
             <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '2px' }}>
               {(partnerDpps || []).map((d, $index) => (<React.Fragment key={$index}>

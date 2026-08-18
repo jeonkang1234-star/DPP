@@ -33,6 +33,9 @@ public class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/**").permitAll()
+                        // QR/링크로 로그인 없이 스캔하는 공개 DPP 조회(2026-08-18,
+                        // PublicPassportController) - 여기도 permitAll이어야 한다.
+                        .requestMatchers("/public/**").permitAll()
                         // JwtAuthenticationFilter는 OncePerRequestFilter 기본값대로 ERROR
                         // 디스패치(예외 발생 후 서블릿 컨테이너가 /error로 forward)에서는
                         // 실행되지 않는다. /error를 인증 요구 대상에서 빼두지 않으면,

@@ -19,8 +19,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -80,6 +82,13 @@ public class DashboardService {
                 .stream()
                 .collect(Collectors.toMap(ProductModel::getModelId, m -> m));
 
+        List<Long> allDppIds = dpps.stream().map(Dpp::getDppId).toList();
+        // 캡 없는 별도 쿼리 - findMissingFields(대기작업 큐용, 전체 합산 상위 10건)와
+        // 다르게 여기선 "이 DPP에 협력사 담당 미충족 필드가 있는가"만 정확히 판정해야 한다
+        // (2026-08-18, DppSummaryDto.needsPartnerInput 주석 참고).
+        Set<Long> needsPartnerInputIds = new HashSet<>(
+                dppRepository.findDppIdsNeedingPartnerInput(allDppIds));
+
         List<DppSummaryDto> summaries = new ArrayList<>();
         double completenessSum = 0;
         int incompleteCount = 0;
@@ -101,7 +110,8 @@ public class DashboardService {
                     counts[0],
                     counts[1],
                     dpp.getSerialNumber(),
-                    dpp.getIssuedAt() != null ? dpp.getIssuedAt().toLocalDate().toString() : null
+                    dpp.getIssuedAt() != null ? dpp.getIssuedAt().toLocalDate().toString() : null,
+                    needsPartnerInputIds.contains(dpp.getDppId())
             ));
             completenessSum += rate;
             if (rate < 100.0) {

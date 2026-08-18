@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { useAppLogic } from './useAppLogic.js';
 import AppView from './AppView.jsx';
+import PublicPassport from './screens/PublicPassport.jsx';
 import { DEFAULT_PATH, ROUTES } from './routes.js';
 
 /**
@@ -51,6 +52,12 @@ export default function App() {
           세션이 진짜 없을 때만 그 안에서 /login으로 보내도록 한다.
         */}
         <Route path="/" element={<Screen />} />
+        {/*
+          QR/링크로 로그인 없이 들어오는 공개 DPP 조회(2026-08-18) - useAppLogic()/AppView
+          (로그인 세션 전제) 대신 완전히 독립적인 화면을 렌더링한다. 위 "/" 라우트보다
+          먼저 매칭시킬 필요는 없다 - path가 겹치지 않는다.
+        */}
+        <Route path="/p/:publicUuid" element={<PublicPassport />} />
         {ROUTES.map((r) => (
           <Route key={r.path} path={r.path} element={<Screen />} />
         ))}

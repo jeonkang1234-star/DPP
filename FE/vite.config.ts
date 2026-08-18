@@ -33,6 +33,12 @@ export default defineConfig({
         target: `http://localhost:${backendPort}`,
         changeOrigin: true,
       },
+      // com.dpp.dpp.controller.PublicPassportController - QR/링크로 로그인 없이 DPP 조회
+      // (2026-08-18). 공개 페이지라 dev 서버로도 바로 테스트할 수 있어야 해서 추가.
+      "/public": {
+        target: `http://localhost:${backendPort}`,
+        changeOrigin: true,
+      },
     },
   },
 });

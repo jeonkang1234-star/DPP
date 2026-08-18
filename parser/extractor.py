@@ -8,6 +8,10 @@ BIZ_REG_PAT = re.compile(r"사업자/법인번호\s+([0-9\-]+)")
 EORI_PAT = re.compile(r"EORI\s+([A-Z0-9]+)")
 GTIN_PAT = re.compile(r"GTIN\s+(\d+)")
 DPP_ANNOTATION_PAT = re.compile(r"^DPP:\s*(.+)$", re.MULTILINE)
+# 2026-08-18 강 요청("전 도메인 파싱 확대") - "Made in KR · PL-TEE-180 / LOT-2026-0201-A ·
+# GTIN ..." 형태(섬유 케어라벨 mock 4종에서 확인)에서 로트 번호만 뽑는다. GTIN과 마찬가지로
+# 모든 문서 유형에 공통 시도하되, 이 패턴이 있는 문서(케어라벨)에서만 실제로 매칭된다.
+LOT_NO_PAT = re.compile(r"Made in [A-Z]{2}\s*·\s*\S+\s*/\s*(\S+)\s*·\s*GTIN")
 
 # 문서번호는 문서 유형별로 표기 방식이 달라서 우선순위대로 시도.
 # 새 문서 유형을 추가할 때 이 리스트에 패턴만 추가하면 됨.
@@ -60,6 +64,7 @@ def extract_common_fields(text: str) -> dict:
         "biz_reg_no": _first(BIZ_REG_PAT),
         "eori": _first(EORI_PAT),
         "gtin": _first(GTIN_PAT),
+        "lot_no": _first(LOT_NO_PAT),
         "dpp_annotation": extract_dpp_annotation(text),
     }
 
@@ -114,12 +119,21 @@ def extract_fiber_composition(text: str) -> list:
     return out
 
 
+_GRS_PERCENT_PAT = re.compile(r"([\d.]+)\s*%")
+
+
 def extract_grs_boxes(text: str) -> dict:
-    """Q1_03(GRS 거래인증서) 전용 - 규제상 고정된 3개 박스 필드."""
+    """Q1_03(GRS 거래인증서) 전용 - 규제상 고정된 3개 박스 필드.
+    2026-08-18 강 요청 대응 - "Recycled Cotton 5% / Recycled Polyamide 15%" 처럼 인증
+    대상 소재가 전부 재생원료인 문서 특성상, composition 줄에 나오는 %들을 합산해
+    total_recycled_percent로도 같이 내려준다(재생 섬유 함유율 필드 자동채움용)."""
     result = {}
     m = re.search(r"Certified material composition\s*\n(.+)", text)
     if m:
-        result["certified_material_composition"] = m.group(1).strip()
+        composition = m.group(1).strip()
+        result["certified_material_composition"] = composition
+        percents = [float(p) for p in _GRS_PERCENT_PAT.findall(composition)]
+        result["total_recycled_percent"] = round(sum(percents), 2) if percents else None
     m = re.search(r"Total certified net shipping weight\s*\n([\d.]+\s*kg)", text)
     if m:
         result["total_certified_net_weight"] = m.group(1).strip()
@@ -142,13 +156,27 @@ _STEEL_MECH = [
     ("연신율 A", "A"),
     ("충격흡수에너지 KV (20℃)", "KV"),
 ]
+# 2026-08-18 추가 - "제품표준 EN 10025-2:2019" / "주문/제품 STRUCTA S355 BEAM (S355JR)
+# 규격 300×150×6500 mm 중량 62.4 kg" / "Heat No. (용해) H260201 Cast/Lot No. (주조)
+# LOT-2026-0201-A" 3줄에서 강종·규격(치수)·제품표준·Heat/Cast·Lot 번호를 뽑는다. 규격
+# 값은 "1200 mm × coil"처럼 제품형태에 따라 형식이 달라서 mm 뒤에 뭐가 더 붙어도
+# 되도록 non-greedy로 "중량" 앞까지 통째로 잡는다.
+_STEEL_STANDARD_PAT = re.compile(r"제품표준\s+([^\n]+)")
+_STEEL_PRODUCT_LINE_PAT = re.compile(r"주문/제품\s+(.+?)\s*\(([^)]+)\)\s+규격\s+(.+?)\s+중량\s+([\d.]+)\s*kg")
+_STEEL_HEAT_CAST_PAT = re.compile(r"Heat No\.\s*\([^)]*\)\s*(\S+)\s+Cast/Lot No\.\s*\([^)]*\)\s*(\S+)")
 
 
 def extract_steel_mill_values(text: str) -> dict:
     """Q2_05(제강성적서) 전용 - 화학성분표 8개 + 기계적성질표 4개 = 12개 값.
     선형화된 표에서 '항목명 -> 값 -> 규격' 이 항상 연속 3줄로 나오는 걸 이용한
     위치기반 파싱(정규식 라벨 매칭이 아니라 줄 단위 오프셋). 23종_원문_추출값_대조 결과
-    문서 10건 전부 레이아웃이 동일해서 이 방식으로 12/12 안정적으로 뽑힘."""
+    문서 10건 전부 레이아웃이 동일해서 이 방식으로 12/12 안정적으로 뽑힘.
+
+    identity - 2026-08-18 강 요청("실제 문서에 있는 데이터는 최대한 파싱") 대응으로 추가.
+    Heat No./Cast·Lot No./강종/규격(제품표준)/치수/중량은 지금까지 ZKP 판정에 안 쓰여서
+    한 번도 안 뽑혔던 값인데, mock PDF 4종(PASS 2건·FAIL 2건) 전부 대조해서 검증된
+    패턴만 넣었다 - "주문/제품 STRUCTA HR COIL (S355JR)   규격 1200 mm × coil   중량
+    2140.0 kg" 처럼 형강/코일 등 제품형태가 달라도 안정적으로 뽑히는지 확인함."""
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     result = {"chemical_composition_wt_percent": {}, "mechanical_properties": {}}
     for i, line in enumerate(lines):
@@ -166,16 +194,36 @@ def extract_steel_mill_values(text: str) -> dict:
                     result["mechanical_properties"][key] = {
                         "measured": float(val), "unit": unit, "spec_text": spec,
                     }
+
+    identity = {"heat_no": None, "cast_lot_no": None, "steel_grade": None,
+                "dimension_text": None, "weight_kg": None, "standard": None}
+    m = _STEEL_STANDARD_PAT.search(text)
+    if m:
+        identity["standard"] = m.group(1).strip()
+    m = _STEEL_PRODUCT_LINE_PAT.search(text)
+    if m:
+        identity["steel_grade"] = m.group(2).strip()
+        identity["dimension_text"] = m.group(3).strip()
+        identity["weight_kg"] = float(m.group(4))
+    m = _STEEL_HEAT_CAST_PAT.search(text)
+    if m:
+        identity["heat_no"] = m.group(1).strip()
+        identity["cast_lot_no"] = m.group(2).strip()
+    result["identity"] = identity
     return result
 
 
 _BATTERY_RATED_CAPACITY_PAT = re.compile(r"([\d.]+)\s*kWh")
 _BATTERY_FUNCTIONAL_UNIT_PCF_PAT = re.compile(r"기능단위당\s*\n?\s*([\d.]+)")
+# 2026-08-18 강 요청("배터리도 파싱할 수 있는 데이터 다 파싱") 대응 - "정격 용량 / 화학조성
+# 4.8 kWh · LiCoO2 / Graphite"에서 화학조성만 뽑는다. mock PDF 4종(PASS 2건·FAIL 2건)
+# 전부 대조해서 동일 위치에 있음을 확인했다.
+_BATTERY_CHEMISTRY_PAT = re.compile(r"화학조성\s+[\d.]+\s*kWh\s*·\s*([^\n]+)")
 
 
 def extract_battery_pcf_values(text: str) -> dict:
     """Q2_07(배터리 탄소발자국) 전용 - 정격용량(kWh), 기능단위당 탄소발자국(kgCO2e/kWh),
-    재생원료 함유율 Co/Li/Ni/Pb 4개. 기존 sustainability_metrics의
+    재생원료 함유율 Co/Li/Ni/Pb 4개, 화학조성. 기존 sustainability_metrics의
     total_carbon_footprint_kg_co2e는 '총 탄소발자국'(제품 전체)이라 이 규칙이 필요로
     하는 '기능단위당' 값과 다르므로 별도 필드로 분리."""
     lines = [l.strip() for l in text.split("\n") if l.strip()]
@@ -183,6 +231,7 @@ def extract_battery_pcf_values(text: str) -> dict:
         "rated_capacity_kwh": None,
         "carbon_footprint_per_functional_unit_kg_co2e_kwh": None,
         "recycled_content_percent": {},
+        "chemistry": None,
     }
     m = _BATTERY_RATED_CAPACITY_PAT.search(text)
     if m:
@@ -190,6 +239,9 @@ def extract_battery_pcf_values(text: str) -> dict:
     m = _BATTERY_FUNCTIONAL_UNIT_PCF_PAT.search(text)
     if m:
         result["carbon_footprint_per_functional_unit_kg_co2e_kwh"] = float(m.group(1))
+    m = _BATTERY_CHEMISTRY_PAT.search(text)
+    if m:
+        result["chemistry"] = m.group(1).strip()
     for i, line in enumerate(lines):
         if "재생원료 함유율" in line:
             labels = lines[i + 1:i + 5]
@@ -253,6 +305,30 @@ def extract_cbam_values(text: str) -> dict:
     return {"import_quantity_t": float(m.group(1))} if m else {"import_quantity_t": None}
 
 
+# 2026-08-18 추가 - "4 Country of origin REPUBLIC OF KOREA (KR)"에서 ISO 2자리 국가코드만
+# 뽑는다(requirement_field.ORIGIN_COUNTRY의 validation_rule이 ^[A-Z]{2}$라 코드로 맞춤).
+_ORIGIN_COUNTRY_PAT = re.compile(r"Country of origin\s+[A-Z ]+?\s*\(([A-Z]{2})\)")
+
+
+def extract_origin_country(text: str) -> dict:
+    """Q1_01(EUR.1 이동증명서/원산지증명서) 전용 - 원산지 국가코드(ISO 3166-1 alpha-2)."""
+    m = _ORIGIN_COUNTRY_PAT.search(text)
+    return {"origin_country_code": m.group(1)} if m else {"origin_country_code": None}
+
+
+# 2026-08-18 추가 - "산정 방법론 ISO 14067 · 배경DB ecoinvent 3.9 · 시스템 경계
+# Cradle-to-gate"에서 탄소발자국 산정 기준 한 줄을 그대로 뽑는다. LCA/EPD 문서(같은
+# registry_code Q2_03을 공유 - DocumentSlotService.REGISTRY_CODE_BY_DOC_TYPE 참고)는
+# 이 문구가 없어서 조용히 None으로 빠진다.
+_PCF_METHOD_PAT = re.compile(r"산정\s*방법론\s+([^\n]+)")
+
+
+def extract_pcf_method(text: str) -> dict:
+    """Q2_03(PCF/LCA·EPD) 전용 - 탄소발자국 산정 기준(방법론) 한 줄."""
+    m = _PCF_METHOD_PAT.search(text)
+    return {"method": m.group(1).strip()} if m else {"method": None}
+
+
 _NUMBERED_SECTION_PAT = re.compile(r"^(\d{1,2})\.\s+(\S.*)$")
 _NUMBERED_SECTION_STOP_PAT = re.compile(r"^(DPP:|MOCK\s*/)")
 _TRAILING_PAGE_MARKER_PAT = re.compile(r"\s*\d{1,3}\s*/\s*\d{1,3}\s*$")
@@ -306,8 +382,10 @@ def extract_numbered_sections(text: str) -> dict:
 
 # registry_code -> 그 유형에만 의미 있는 전용 추출기.
 TYPE_SPECIFIC_EXTRACTORS = {
+    "Q1_01": ("origin_country", extract_origin_country),
     "Q1_03": ("grs_boxes", extract_grs_boxes),
     "Q1_04": ("fiber_composition", extract_fiber_composition),
+    "Q2_03": ("pcf_method", extract_pcf_method),
     "Q2_05": ("steel_mill_values", extract_steel_mill_values),
     "Q2_06": ("cbam_values", extract_cbam_values),
     "Q2_07": ("battery_pcf_values", extract_battery_pcf_values),

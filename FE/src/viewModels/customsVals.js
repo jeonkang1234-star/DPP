@@ -79,6 +79,9 @@ export function customsVals(ctx) {
     // 2026-08-17 강 요청: "검색해서 클릭하면 QR 보이게" - 조회된 화물의 DPP 식별자로 QR을
     // 그 자리에서 생성해 공용 qrModal(제조사 발급 QR과 같은 모달)로 보여준다. 세관은 QR을
     // "발급"하는 게 아니라 이미 발급된 DPP를 다시 조회하는 용도라 배지/문구를 다르게 준다.
+    // 세관 화면은 아직 목데이터(data.customsItems)라 실제 publicUuid가 없다 - 그래서
+    // makerVals.js/useAppLogic.js와 달리 여기는 /p/{publicUuid} 공개 URL을 못 만들고
+    // 텍스트 그대로 인코딩한다(2026-08-18). 세관 데이터가 실 연동되면 같이 고칠 것.
     showQr: () => {
       QRCode.toDataURL(cur.id, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
         .then((dataUrl) => {
