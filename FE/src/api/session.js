@@ -75,6 +75,44 @@ export function loadDraftDppId(role, email) {
 }
 
 /**
+ * "강재 기본 정보" 입력 폼에 지금 타이핑 중인 값(dpp_field_value로 아직 저장 안 된 것)을
+ * 새로고침해도 잃지 않기 위한 캐시(2026-08-18, "화면 새로고침해도 입력하던 데이터들은
+ * 그대로 있도록 - 임시저장 안하더라도" 사용자 요청). draftDppKey와 같은 이유로 role+email+
+ * dppId까지 키에 넣는다 - dppId가 아직 없는 새 초안은 'new'로 취급한다. 서버에 실제로
+ * 저장된 값(dpp_field_value)과는 별개의 로컬 전용 캐시라, 이 값을 신뢰하는 곳은 새로고침
+ * 직후 폼을 다시 그릴 때 서버값 위에 덮어씌우는 한 곳뿐이다(useAppLogic.js 참고).
+ */
+function draftInputsKey(role, email, dppId) {
+  const account = (email || 'default').trim().toLowerCase();
+  return PREFIX + 'draftInputs.' + (role || 'default') + '.' + account + '.' + (dppId ?? 'new');
+}
+
+export function saveDraftInputs(role, email, dppId, inputs) {
+  try {
+    sessionStorage.setItem(draftInputsKey(role, email, dppId), JSON.stringify(inputs || {}));
+  } catch {
+    /* 사파리 프라이빗 모드 등에서 저장이 막힌 경우 무시 */
+  }
+}
+
+export function loadDraftInputs(role, email, dppId) {
+  try {
+    const raw = sessionStorage.getItem(draftInputsKey(role, email, dppId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearDraftInputs(role, email, dppId) {
+  try {
+    sessionStorage.removeItem(draftInputsKey(role, email, dppId));
+  } catch {
+    /* 무시 */
+  }
+}
+
+/**
  * 로그아웃 — 이 앱이 만든 저장값을 모두 지웁니다.
  * 'ieum.' 으로 시작하는 키만 지우므로 같은 도메인의 다른 데이터는 건드리지 않습니다.
  * session/draftDppId는 이제 sessionStorage에만 쓰지만, localStorage 쪽도 예전 버전이

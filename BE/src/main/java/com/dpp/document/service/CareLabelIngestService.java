@@ -20,6 +20,8 @@ import com.dpp.document.repository.DppRepository;
 import com.dpp.document.repository.MaterialCompositionRepository;
 import com.dpp.document.repository.ZkpProofRepository;
 import com.dpp.document.zkp.FiberZkpMapper;
+import com.dpp.dpp.entity.DppFieldValue;
+import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
 import com.dpp.notify.entity.Notification;
 import com.dpp.notify.entity.NotificationCategory;
@@ -72,6 +74,7 @@ public class CareLabelIngestService {
     private final ZkpProofRepository zkpProofRepository;
     private final BlockchainAnchorRepository blockchainAnchorRepository;
     private final MaterialCompositionRepository materialCompositionRepository;
+    private final DppFieldValueRepository dppFieldValueRepository;
     private final ParserClient parserClient;
     private final ZkpClient zkpClient;
     private final Optional<BlockchainClient> blockchainClient;
@@ -87,6 +90,7 @@ public class CareLabelIngestService {
                                    ZkpProofRepository zkpProofRepository,
                                    BlockchainAnchorRepository blockchainAnchorRepository,
                                    MaterialCompositionRepository materialCompositionRepository,
+                                   DppFieldValueRepository dppFieldValueRepository,
                                    ParserClient parserClient,
                                    ZkpClient zkpClient,
                                    Optional<BlockchainClient> blockchainClient,
@@ -101,6 +105,7 @@ public class CareLabelIngestService {
         this.zkpProofRepository = zkpProofRepository;
         this.blockchainAnchorRepository = blockchainAnchorRepository;
         this.materialCompositionRepository = materialCompositionRepository;
+        this.dppFieldValueRepository = dppFieldValueRepository;
         this.parserClient = parserClient;
         this.zkpClient = zkpClient;
         this.blockchainClient = blockchainClient;
@@ -187,6 +192,20 @@ public class CareLabelIngestService {
         // 섬유 혼용률을 material_composition(entry_kind='MATERIAL')에 자동 저장 -
         // DocumentIngestService.persistChemicalComposition(CHEM_ELEMENT)과 같은 패턴.
         persistFiberComposition(dpp.getDppId(), document.getDocumentId(), fiberComposition);
+
+        // 2026-08-18 강 요청("섬유도 파싱할 수 있는 데이터 다 파싱") - "Made in KR ·
+        // PL-TEE-180 / LOT-2026-0201-A · GTIN ..."에서 로트 번호를 FABRIC_LOT_NO에 채우고,
+        // 섬유 혼용률 중 이름에 "재생"이 포함된 항목들의 비율 합을 RECYCLED_FIBER_RATE에
+        // 채운다(예: "재생 폴리아미드 15%" -> 15). 둘 다 이미 값이 있으면(수기 입력 포함)
+        // 덮어쓰지 않는다.
+        String lotNo = (String) parsed.get("lot_no");
+        if (lotNo != null && !lotNo.isBlank()) {
+            fillIfEmpty(dpp.getDppId(), orgId, userId, "FABRIC_LOT_NO", lotNo.trim());
+        }
+        Double recycledFiberPercent = sumRecycledFiberPercent(fiberComposition);
+        if (recycledFiberPercent != null) {
+            fillIfEmpty(dpp.getDppId(), orgId, userId, "RECYCLED_FIBER_RATE", String.valueOf(recycledFiberPercent));
+        }
 
         String documentAnchorTxId = anchorDocumentHash(document, orgId);
 
@@ -335,6 +354,53 @@ public class CareLabelIngestService {
             notification.setBody(body);
             notificationRepository.save(notification);
         }
+    }
+
+    /**
+     * fiber_composition([{fiber, percent}, ...]) 중 fiber 이름에 "재생"이 들어간 항목들의
+     * percent 합계를 재생 섬유 함유율로 본다 - GRS 인증서(영문 자유서식)보다 케어라벨의
+     * 구조화된 섬유 조성표가 더 신뢰도 높은 출처라 이쪽을 우선한다. "재생" 섬유가 하나도
+     * 없으면(순수 원사 제품) null - 있는데 0%라고 잘못 채우지 않는다.
+     */
+    @SuppressWarnings("unchecked")
+    private Double sumRecycledFiberPercent(List<Object> fiberComposition) {
+        if (fiberComposition == null) {
+            return null;
+        }
+        double sum = 0;
+        boolean found = false;
+        for (Object item : fiberComposition) {
+            if (!(item instanceof Map<?, ?> map)) {
+                continue;
+            }
+            Map<String, Object> data = (Map<String, Object>) map;
+            Object fiber = data.get("fiber");
+            Object percent = data.get("percent");
+            if (fiber != null && String.valueOf(fiber).contains("재생") && percent instanceof Number n) {
+                sum += n.doubleValue();
+                found = true;
+            }
+        }
+        return found ? sum : null;
+    }
+
+    /** DocumentSlotService.fillIfEmpty와 동일한 "이미 값 있으면 안 덮어씀" 정책. */
+    private void fillIfEmpty(Long dppId, Long orgId, Long userId, String fieldCode, String value) {
+        Optional<DppFieldValue> existing = dppFieldValueRepository.findByDppIdAndFieldCode(dppId, fieldCode);
+        if (existing.isPresent() && existing.get().getValueText() != null && !existing.get().getValueText().isBlank()) {
+            return;
+        }
+        DppFieldValue row = existing.orElseGet(() -> {
+            DppFieldValue v = new DppFieldValue();
+            v.setDppId(dppId);
+            v.setFieldCode(fieldCode);
+            return v;
+        });
+        row.setValueText(value);
+        row.setSubmittedByOrg(orgId);
+        row.setSubmittedByUser(userId);
+        row.setUpdatedAt(OffsetDateTime.now());
+        dppFieldValueRepository.save(row);
     }
 
     @SuppressWarnings("unchecked")

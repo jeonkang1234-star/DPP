@@ -126,7 +126,7 @@ public class FieldFormService {
                     .map(f -> new FieldFormItemDto(f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getUnit(),
                             f.getHelpText(), f.isRequired(), null))
                     .toList();
-            return new FieldFormResponse(null, domain, "DRAFT", 0.0, 0, 0, allFields);
+            return new FieldFormResponse(null, null, domain, "DRAFT", 0.0, 0, 0, allFields);
         }
 
         Dpp dpp = dppRepository.findById(dppId)
@@ -176,7 +176,7 @@ public class FieldFormService {
             completeness = myRequired > 0 ? (myFilled * 100.0 / myRequired) : 0.0;
         }
 
-        return new FieldFormResponse(dpp.getDppId(), domain, status, completeness, filled, required, fields);
+        return new FieldFormResponse(dpp.getDppId(), dpp.getPublicUuid(), domain, status, completeness, filled, required, fields);
     }
 
     @Transactional

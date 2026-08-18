@@ -268,6 +268,13 @@ public class BatteryCarbonIngestService {
         setFieldValue(dpp.getDppId(), orgId, userId, "RECYCLED_LEAD_RATE", String.valueOf(zkpInput.pb()));
         setFieldValue(dpp.getDppId(), orgId, userId, "BATTERY_CARBON_DECLARATION_REQUIRED", String.valueOf(capacityDeclarationRequired));
         fillIfEmpty(dpp.getDppId(), orgId, userId, "RATED_CAPACITY_KWH", String.valueOf(zkpInput.capacityKwh()));
+        // 2026-08-18 강 요청("배터리도 파싱할 수 있는 데이터 다 파싱") - "화학조성 4.8 kWh ·
+        // LiCoO2 / Graphite"에서 화학조성만 뽑아 BATTERY_CHEMISTRY에 채운다. 수기입력도
+        // 가능한 일반 SPEC 필드라 RATED_CAPACITY_KWH와 동일하게 비어 있을 때만 채운다.
+        Object chemistry = batteryPcfValues == null ? null : batteryPcfValues.get("chemistry");
+        if (chemistry instanceof String s && !s.isBlank()) {
+            fillIfEmpty(dpp.getDppId(), orgId, userId, "BATTERY_CHEMISTRY", s.trim());
+        }
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
 

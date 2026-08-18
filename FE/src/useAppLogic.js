@@ -6,7 +6,7 @@ import {
   chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,
 } from './uiStyles.js';
 import { fetchAppData } from './api/mockApi.js';
-import { loadSession, saveSession, loadDraftDppId, saveDraftDppId } from './api/session.js';
+import { loadSession, saveSession, loadDraftDppId, saveDraftDppId, loadDraftInputs, saveDraftInputs, clearDraftInputs } from './api/session.js';
 import {
   login, requestBusinessSignupCode, verifyBusinessSignupCode,
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
@@ -157,6 +157,10 @@ export function useAppLogic(userProps) {
       // "기본 정보 입력" 폼에서 문서 업로드(Mill Sheet 등) 직후 새로 채워진 필드를
       // "파싱됨"으로 표시하기 위한 세션 한정 캐시. { [fieldCode]: 문서라벨 }.
       parsedFieldSources: {},
+      // 파싱된 필드는 기본적으로 잠겨서(읽기 전용) 실수로 지워지지 않고, "수정" 버튼을
+      // 눌러야 편집 가능해진다(2026-08-18 강 요청) - 이 세션에서 잠금 해제한 fieldCode만
+      // 담는다. { [fieldCode]: true }.
+      unlockedFields: {},
       // DPP 발급과 동시에 발급한 QR 표시용 모달 상태. { id, dataUrl } | null.
       qrModal: null,
       // 이번 세션에 발급한 DPP의 필드 스냅샷 - QR 스캔(제품 조회)이 곧바로 조회할 수 있게.
@@ -173,6 +177,8 @@ export function useAppLogic(userProps) {
       dppQrCache: {},
       dppQrPending: {},
       productStatusFilter: 'all',
+      // 문서별 "검증 기준" 토글 열림 상태 - docTypeCode를 키로 하는 맵(2026-08-18).
+      criteriaOpen: {},
       // 새로고침해도 "철강 데이터 입력" 화면이 작성 중이던 DPP를 계속 이어서 보여주도록
       // localStorage에서 복원한다 - 로그인 안 된 상태(saved 없음)에서는 애초에 이 화면에
       // 못 들어가니 복원할 필요가 없다.
@@ -221,6 +227,31 @@ export function useAppLogic(userProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
 
+  /**
+   * 협력사 초대 알림이 실시간이 아니라 "새로고침해야 온다"는 리포트(2026-08-18) - 원인은
+   * 위 데이터 fetch가 로그인 시 딱 한 번만 도는 것과 같다. 초대 발송 자체(메일/알림 행
+   * 생성)는 이미 서버가 즉시 처리하지만(InvitationService.send), 받는 쪽 브라우저가 그걸
+   * 아는 방법이 폴링/웹소켓 없이는 없다 - 그래서 알림/참여 DPP/초대 내역을 짧은 주기로
+   * 다시 불러와서 화면을 열어둔 채로도 "바로바로" 반영되게 한다. 완전한 실시간(웹소켓)은
+   * 아니지만 새로고침 없이 20초 안에는 뜬다. 서버 부담이 큰 dashboard/scans 등은 여기서
+   * 안 돌린다 - 알림/초대 관련 3개만 가볍게.
+   */
+  useEffect(() => {
+    if (state.view !== 'app') return;
+    const session = loadSession();
+    if (!session?.accessToken) return;
+    let alive = true;
+    const POLL_MS = 20000;
+    const tick = () => {
+      fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
+      fetchInvitations().then((res) => { if (alive) setInvitesData(res || []); }).catch(() => {});
+      fetchParticipations().then((res) => { if (alive) setParticipationsData(res || []); }).catch(() => {});
+    };
+    const timer = setInterval(tick, POLL_MS);
+    return () => { alive = false; clearInterval(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.view]);
+
   /** 가입승인 화면(approvalVals.js)의 승인/반려 버튼이 처리 후 목록을 새로 불러올 때 씀. */
   const refetchOrgApprovals = useCallback(() => {
     fetchOrgApprovals().then((res) => setOrgApprovalsData(res || [])).catch(() => {});
@@ -246,19 +277,56 @@ export function useAppLogic(userProps) {
     // 이 DPP로 새로 폼을 불러오는 시점이니, 직전 DPP에서 쌓인 "이 문서 업로드로 방금
     // 채워짐" 표시(parsedFieldSources)는 여기서 지운다 - 안 지우면 다른 DPP로 이동했는데도
     // 이전 DPP에서 파싱됐던 필드가 계속 "파싱됨"으로 잘못 표시된다.
-    setState({ parsedFieldSources: {} });
+    setState({ parsedFieldSources: {}, unlockedFields: {} });
     let alive = true;
     fetchFieldForm(dppId || undefined, domain || undefined)
       .then((res) => {
         if (!alive) return;
         setFieldFormData(res);
-        setFieldFormInputs(Object.fromEntries((res.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        if (isDomainInput && res.dppId && res.dppId !== state.fieldFormDppId) setState({ fieldFormDppId: res.dppId });
+        const serverValues = Object.fromEntries((res.fields || []).map(f => [f.fieldCode, f.value || '']));
+        // 2026-08-18 강 요청: 새로고침해도 임시저장 안 한 입력값이 그대로 있어야 한다 -
+        // 서버값(dpp_field_value에 실제로 저장된 것) 위에, 아직 저장 안 하고 이 브라우저
+        // 탭에 남겨뒀던 로컬 캐시를 덮어씌운다(loadDraftInputs, session.js). 서버값이 더
+        // 최신인 필드(다른 협력사가 방금 채운 등)까지 로컬 캐시가 덮어쓰면 안 되니, 캐시는
+        // "서버에 아직 없는 값"에만 적용한다.
+        const cached = loadDraftInputs(state.role, session.email, dppId) || {};
+        const merged = { ...serverValues };
+        Object.keys(cached).forEach((code) => {
+          if (!serverValues[code] && cached[code]) merged[code] = cached[code];
+        });
+        setFieldFormInputs(merged);
+        if (isDomainInput && res.dppId && res.dppId !== state.fieldFormDppId) {
+          // 방금 첫 임시저장으로 새 dppId가 생긴 경우 - 'new' 캐시는 이 DPP로 옮겨간
+          // 셈이니 지워서, 다음번 "새 DPP 시작"이 이 낡은 값을 물려받지 않게 한다.
+          clearDraftInputs(state.role, session.email, null);
+          setState({ fieldFormDppId: res.dppId });
+        }
       })
       .catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view, state.role, state.tab, state.partnerAssignedDppId]);
+
+  /**
+   * 위 useEffect가 서버값+로컬캐시를 합쳐 fieldFormInputs를 채우면, 이 effect는 그 이후
+   * 타이핑할 때마다(setFieldFormInputs 호출마다) 최신 상태를 계속 같은 로컬 캐시에
+   * 다시 써 둔다 - 임시저장 버튼을 안 눌러도 새로고침 시 살아남는 이유가 이것.
+   * 저장 성공 후(makerVals.js saveDraft/issueDpp) 서버가 돌려준 값으로 setFieldFormInputs를
+   * 다시 부르면, 그 값 그대로 캐시에 덮어써져서 자동으로 최신 상태를 유지한다 - 별도
+   * "저장됐으니 캐시 지우기" 로직이 필요 없다.
+   */
+  useEffect(() => {
+    if (state.view !== 'app') return;
+    const domain = domainForRole(state.role);
+    const isDomainInput = !!domain && state.tab === 'input';
+    const isPartnerAssigned = state.role === 'partner' && state.tab === 'assigned' && !!state.partnerAssignedDppId;
+    if (!isDomainInput && !isPartnerAssigned) return;
+    const session = loadSession();
+    if (!session?.accessToken) return;
+    const dppId = isDomainInput ? state.fieldFormDppId : state.partnerAssignedDppId;
+    saveDraftInputs(state.role, session.email, dppId, fieldFormInputs);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldFormInputs]);
 
   /**
    * Mill Sheet 업로드처럼 fieldFormData 바깥(별도 엔드포인트)에서 완성도가 바뀌는 경우,
@@ -293,6 +361,19 @@ export function useAppLogic(userProps) {
   const refreshDocumentForm = useCallback((dppId) => {
     if (!dppId) return;
     fetchDocumentForm(dppId).then((res) => setDocumentFormData(res)).catch(() => {});
+  }, []);
+
+  /**
+   * dashboardData(GET /me/dashboard)는 로그인 직후 딱 한 번만 불러온다(위 useEffect,
+   * deps=[state.view] - view는 로그인 후 계속 'app'이라 다시 안 돈다). 그래서 DPP를 새로
+   * 만들거나 발급해도 이 화면 세션 안에서는 dashboardData.dpps/products가 갱신되지 않고,
+   * 진짜 새로고침(전체 리마운트)을 해야만 보였다(2026-08-18 강 리포트 - "DPP 생성해서
+   * 발급했는데 저장 안됨(제품 조회에서 전혀 안보임)" - 실제로는 저장은 됐지만 화면이 그
+   * 최신 상태를 안 불러온 것). issueDpp/saveFieldFormDraft(새 DPP 생성)처럼 dashboardData가
+   * 가리키는 DPP 목록 자체가 바뀌는 지점에서 이 함수를 불러 강제로 다시 가져온다.
+   */
+  const refreshDashboard = useCallback(() => {
+    return fetchDashboard().then((res) => { setDashboardData(res); return res; }).catch(() => null);
   }, []);
 
   /**
@@ -352,7 +433,10 @@ export function useAppLogic(userProps) {
     if (state.dppQrPending && state.dppQrPending[displayId]) return;
     setState((s) => ({ dppQrPending: { ...(s.dppQrPending || {}), [displayId]: true } }));
     let alive = true;
-    QRCode.toDataURL(displayId, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
+    // 2026-08-18 강 리포트: QR이 텍스트만 인코딩해서 스캐너가 구글 검색으로 처리하던
+    // 버그 - 공개 조회 URL(/p/{publicUuid})을 인코딩한다(makerVals.js issueDpp와 동일).
+    const passportUrl = row.publicUuid ? (window.location.origin + '/p/' + row.publicUuid) : displayId;
+    QRCode.toDataURL(passportUrl, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
       .then((dataUrl) => {
         if (!alive) return;
         setState((s) => ({
@@ -446,9 +530,10 @@ export function useAppLogic(userProps) {
       customsSearched: false, customsQuery: '',
       removedScans: [], removedProducts: [],
       registered: {}, confirm: null, toast: '', fieldFormDppId: null,
-      parsedFieldSources: {}, qrModal: null, issuedPassportCache: {},
+      parsedFieldSources: {}, unlockedFields: {}, qrModal: null, issuedPassportCache: {},
       tierRequestPending: {}, permRequestPending: {},
-      rejectModal: null, rejectReasonInput: '', dppQrCache: {}, dppQrPending: {}, productStatusFilter: 'all'
+      rejectModal: null, rejectReasonInput: '', dppQrCache: {}, dppQrPending: {}, productStatusFilter: 'all',
+      criteriaOpen: {}
     });
   }
 
@@ -823,7 +908,7 @@ export function useAppLogic(userProps) {
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp,
     documentFormData, setDocumentFormData, uploadDocument,
-    millSheetResult, setMillSheetResult, uploadSteelMillSheet, refreshFieldForm, refreshDocumentForm,
+    millSheetResult, setMillSheetResult, uploadSteelMillSheet, refreshFieldForm, refreshDocumentForm, refreshDashboard,
     cbamResult, setCbamResult, uploadCbamReport,
     careLabelResult, setCareLabelResult, uploadCareLabel,
     oekotexResult, setOekotexResult, uploadOekotexLabel,

@@ -9,38 +9,105 @@ function nowStamp() {
 }
 
 // ZKP 문서별 검증 기준(정적 설명) - documentSlots의 detailLabel(실측 결과)과 별개로,
-// "애초에 뭘 어떤 기준으로 보는지"를 항상 보여주기 위한 문구. 결과가 아직 없어도(업로드 전)
+// "애초에 뭘 어떤 기준으로 보는지"를 항상 보여주기 위한 데이터. 결과가 아직 없어도(업로드 전)
 // 표시된다. 2026-08-17 강 요청: 서술형 문장 대신 실제 회로/판정 로직에 쓰이는 정확한
 // 수치·부등호를 그대로 적는다(zkp-o1js/circuits.mjs, parser/judge.py 기준 확인 완료).
+// 2026-08-18 강 요청: 긴 문장 대신 토글로 열었을 때 항목별 "0.5 < aaa < 1.0" 형태로 담백하게
+// 보이도록 {item, criterion}[] 구조로 변경.
 const ZKP_CRITERIA = {
   // Mill Sheet만 예외 - 강종마다 KS 규격 상하한이 달라서 단일 수치가 없다(judge.py의
   // 의도적 설계: 성적서에 인쇄된 limit_text를 그대로 파싱해서 검증). 그래서 "고정값"
-  // 대신 실제 판정 예시(테스트 데이터 기준)를 부등호로 보여준다.
-  MILL_SHEET: 'C ≤0.240%, Mn ≤1.600%, P ≤0.035%, S ≤0.035% 등 성분별 상한(≤)·하한(≥) — 강종별 성적서에 표기된 값 그대로 검증',
-  CBAM_REPORT: '연간 누적 수입량 > 50t',
-  CARE_LABEL: '섬유 혼용률 합계 99.5%~100.5%',
-  OEKOTEX_LABEL: '4.0 ≤ pH ≤ 7.5',
-  BATTERY_CARBON_REPORT: '재생원료 함유율 Co ≥16%, Li ≥6%, Ni ≥6%',
-  RECYCLING_REPORT: '물질회수율 Cu ≥90%, Li ≥50%, Co ≥90%'
+  // 대신 실제 판정 예시(테스트 데이터 기준)를 항목별로 보여준다.
+  // vkey - zkp-o1js/server.mjs가 실제로 돌려주는 verdicts 맵의 키(항목별 참/거짓 판정).
+  // 2026-08-18 강 요청: 실패한 항목만 기준 텍스트를 빨간색으로 표시하려면 항목별 판정이
+  // 필요해서, 서버가 실제로 응답하는 verdicts 키를 그대로 매핑해 둔다(CBAM은 verdicts 자체가
+  // 없음 - obligated는 적합/부적합이 아니라 "의무 발생 여부"라 실패 개념이 없다).
+  MILL_SHEET: [
+    { item: 'C(탄소)', criterion: 'C ≤ 0.240%', vkey: 'C' },
+    { item: 'Mn(망간)', criterion: 'Mn ≤ 1.600%', vkey: 'Mn' },
+    { item: 'P(인)', criterion: 'P ≤ 0.035%', vkey: 'P' },
+    { item: 'S(황)', criterion: 'S ≤ 0.035%', vkey: 'S' },
+    { item: 'ReH(항복강도)', criterion: 'ReH ≥ 355 N/mm²', vkey: 'ReH' },
+    { item: 'Rm(인장강도)', criterion: '470 ≤ Rm ≤ 630 N/mm²', vkey: 'Rm' },
+    { item: 'A(연신율)', criterion: 'A ≥ 22%', vkey: 'A' },
+    { item: 'KV(충격흡수에너지)', criterion: 'KV ≥ 27 J', vkey: 'KV' },
+  ],
+  CBAM_REPORT: [
+    { item: '연간 누적 수입량', criterion: '> 50t' },
+  ],
+  CARE_LABEL: [
+    { item: '섬유 혼용률 합계', criterion: '99.5% ≤ 합계 ≤ 100.5%' },
+  ],
+  OEKOTEX_LABEL: [
+    { item: 'pH', criterion: '4.0 ≤ pH ≤ 7.5' },
+  ],
+  BATTERY_CARBON_REPORT: [
+    { item: 'Co(코발트) 재생원료 함유율', criterion: 'Co ≥ 16%', vkey: 'coOk' },
+    { item: 'Li(리튬) 재생원료 함유율', criterion: 'Li ≥ 6%', vkey: 'liOk' },
+    { item: 'Ni(니켈) 재생원료 함유율', criterion: 'Ni ≥ 6%', vkey: 'niOk' },
+  ],
+  RECYCLING_REPORT: [
+    { item: 'Cu(구리) 물질회수율', criterion: 'Cu ≥ 90%', vkey: 'cuOk' },
+    { item: 'Li(리튬) 물질회수율', criterion: 'Li ≥ 50%', vkey: 'liOk' },
+    { item: 'Co(코발트) 물질회수율', criterion: 'Co ≥ 90%', vkey: 'coOk' },
+  ]
 };
 
-// 백엔드(DocumentSlotService.autoFillFieldsFromParsedDocument)가 실제로 문서에서
-// 자동 채우는 필드코드만 정확히 나열 - 이 4개 외 나머지 필드는 절대 문서에서 채워지지
-// 않고 항상 직접 입력이다(2026-08-17, 강이 "분명 파싱되는 애들인데 전부 수기입력으로
-// 뜬다"고 지적해서 정적 화이트리스트로 정확히 구분하도록 수정. 이전엔 이번 세션에
-// 업로드 이벤트로 직접 감지한 것만 '파싱됨'으로 표시하고 나머지는 값이 비었으면 무조건
-// '문서에 없음'으로 표시해서, 새로고침 후나 이전 세션에 이미 문서로 채워진 값도 마치
-// 항상 수기입력해야 하는 것처럼 보이는 문제가 있었다).
-// GTIN: 9종 문서 업로드 시 공통 시도. PCF_VALUE: PCF_REPORT/LCA_EPD. RECYCLABILITY_NOTE: LCA_EPD.
-// RECYCLED_SCRAP_RATE: SCRAP_PROOF.
-const AUTO_FILL_FIELD_CODES = new Set(['GTIN', 'PCF_VALUE', 'RECYCLABILITY_NOTE', 'RECYCLED_SCRAP_RATE']);
-// 위 필드가 아직 안 채워졌을 때 "어느 문서를 올리면 채워지는지" 구체적으로 안내(2026-08-17
-// 강 요청 - "문서 업로드 시 자동 인식됩니다" 같은 뭉뚱그린 문구 대신 "~페이지에서 파싱"으로).
-const AUTO_FILL_SOURCE_LABEL = {
-  GTIN: '문서 업로드 페이지에서 파싱',
-  PCF_VALUE: '탄소발자국 산정보고서 페이지에서 파싱',
-  RECYCLABILITY_NOTE: 'LCA/EPD 페이지에서 파싱',
-  RECYCLED_SCRAP_RATE: '스크랩 매입증빙 페이지에서 파싱'
+// 백엔드가 실제로 문서에서 자동 채우는 필드코드만 정확히 나열 - 이 목록 밖의 필드는 절대
+// 문서에서 채워지지 않고 항상 직접 입력이다(2026-08-17, 강이 "분명 파싱되는 애들인데 전부
+// 수기입력으로 뜬다"고 지적해서 정적 화이트리스트로 정확히 구분하도록 수정).
+// 2026-08-18(2차) 강 리포트: "파싱되는 데이터 밑에 파싱이라고도, 직접 입력 항목이라고도
+// 동시에 뜬다" - 원인은 이 화이트리스트가 Round 4에서 새로 자동채움이 연결된 필드들
+// (제강 성적서 Heat No 등, 배터리/섬유 ZKP 문서가 채우는 필드들)을 전혀 반영하지 못해서,
+// 실제로는 파싱되는 필드인데 위쪽 정렬/블록 배정에서는 "수기 입력" 취급을 받아 섹션
+// 헤더("직접 입력해야 하는 항목")와 필드 자체의 sourceLabel("파싱(...)")이 서로 다른
+// 말을 하는 것처럼 보였다. 아래 목록을 백엔드 자동채움 로직과 정확히 동기화한다:
+//  - COMMON(전 도메인): GTIN(9종 문서 공통 시도), PCF_VALUE/PCF_METHOD(PCF_REPORT·LCA_EPD),
+//    RECYCLABILITY_NOTE(LCA_EPD), ORIGIN_COUNTRY(COO), UOI_MANUFACTURER(EU_DOC)
+//    - DocumentSlotService.autoFillFieldsFromParsedDocument
+//  - 철강: RECYCLED_SCRAP_RATE(SCRAP_PROOF), HEAT_NO/LOT_NO/STEEL_GRADE/STEEL_STANDARD/
+//    DIMENSION/NET_WEIGHT_T(Mill Sheet) - DocumentIngestService.persistIdentityFields
+//    (CAST_NO는 제외 - 문서에 Cast/Lot 결합값 하나만 있어서 Lot 쪽에만 채운다, 2026-08-18
+//    리포트: "LOT-2026-0201-A가 CAST 번호에도 파싱되는 오류" 수정)
+//  - 배터리: RECYCLED_COBALT_RATE/RECYCLED_LITHIUM_RATE/RECYCLED_NICKEL_RATE/
+//    RECYCLED_LEAD_RATE/BATTERY_CARBON_DECLARATION_REQUIRED/RATED_CAPACITY_KWH/
+//    BATTERY_CHEMISTRY(배터리 탄소발자국 선언) - BatteryCarbonIngestService,
+//    RECYCLED_COPPER_RECOVERY_RATE/RECYCLED_LITHIUM_RECOVERY_RATE/
+//    RECYCLED_COBALT_RECOVERY_RATE/OVERALL_RECYCLING_EFFICIENCY(재활용 처리결과보고서) -
+//    RecyclingIngestService
+//  - 섬유: OEKOTEX_CERT_NO(OEKO-TEX 라벨) - OekotexIngestService, FABRIC_LOT_NO/
+//    RECYCLED_FIBER_RATE(케어라벨 또는 GRS/RCS 거래증명서) - CareLabelIngestService/
+//    DocumentSlotService
+const AUTO_FILL_FIELD_CODES = new Set([
+  'GTIN', 'PCF_VALUE', 'PCF_METHOD', 'RECYCLABILITY_NOTE', 'ORIGIN_COUNTRY', 'UOI_MANUFACTURER',
+  'RECYCLED_SCRAP_RATE', 'HEAT_NO', 'LOT_NO', 'STEEL_GRADE', 'STEEL_STANDARD', 'DIMENSION', 'NET_WEIGHT_T',
+  'RECYCLED_COBALT_RATE', 'RECYCLED_LITHIUM_RATE', 'RECYCLED_NICKEL_RATE', 'RECYCLED_LEAD_RATE',
+  'BATTERY_CARBON_DECLARATION_REQUIRED', 'RATED_CAPACITY_KWH', 'BATTERY_CHEMISTRY',
+  'RECYCLED_COPPER_RECOVERY_RATE', 'RECYCLED_LITHIUM_RECOVERY_RATE', 'RECYCLED_COBALT_RECOVERY_RATE',
+  'OVERALL_RECYCLING_EFFICIENCY',
+  'OEKOTEX_CERT_NO', 'FABRIC_LOT_NO', 'RECYCLED_FIBER_RATE'
+]);
+// 위 필드가 아직 안 채워졌을 때 "어느 문서를 올리면 채워지는지" 구체적으로 안내할 때 쓰는
+// 문서명(짧게). 2026-08-18 강 요청: "~페이지에서 파싱"이 반복되면 텍스트가 너무 길어지니
+// "파싱(문서명)" 형태로 짧게 - 이 맵은 문서명만 담고, 조합은 사용하는 쪽에서 한다.
+const AUTO_FILL_DOC_NAME = {
+  GTIN: '업로드 문서',
+  PCF_VALUE: '탄소발자국 산정보고서',
+  PCF_METHOD: '탄소발자국 산정보고서',
+  RECYCLABILITY_NOTE: 'LCA/EPD',
+  ORIGIN_COUNTRY: '원산지증명서',
+  UOI_MANUFACTURER: 'EU 적합성선언서',
+  RECYCLED_SCRAP_RATE: '스크랩 매입증빙',
+  HEAT_NO: '제강 성적서', LOT_NO: '제강 성적서', STEEL_GRADE: '제강 성적서',
+  STEEL_STANDARD: '제강 성적서', DIMENSION: '제강 성적서', NET_WEIGHT_T: '제강 성적서',
+  RECYCLED_COBALT_RATE: '배터리 탄소발자국 선언', RECYCLED_LITHIUM_RATE: '배터리 탄소발자국 선언',
+  RECYCLED_NICKEL_RATE: '배터리 탄소발자국 선언', RECYCLED_LEAD_RATE: '배터리 탄소발자국 선언',
+  BATTERY_CARBON_DECLARATION_REQUIRED: '배터리 탄소발자국 선언', RATED_CAPACITY_KWH: '배터리 탄소발자국 선언',
+  BATTERY_CHEMISTRY: '배터리 탄소발자국 선언',
+  RECYCLED_COPPER_RECOVERY_RATE: '재활용 처리결과 보고서', RECYCLED_LITHIUM_RECOVERY_RATE: '재활용 처리결과 보고서',
+  RECYCLED_COBALT_RECOVERY_RATE: '재활용 처리결과 보고서', OVERALL_RECYCLING_EFFICIENCY: '재활용 처리결과 보고서',
+  OEKOTEX_CERT_NO: 'OEKO-TEX 라벨',
+  FABRIC_LOT_NO: '섬유 케어라벨', RECYCLED_FIBER_RATE: '섬유 케어라벨/GRS 거래증명서'
 };
 
 /**
@@ -149,7 +216,7 @@ export function makerVals(ctx) {
       ctx.setRecyclingResult(null);
       ctx.setFieldFormInputs({});
       ctx.setDocumentFormData(null);
-      setState({ tab: 'input', fieldFormDppId: null, parsedFieldSources: {}, qrModal: null });
+      setState({ tab: 'input', fieldFormDppId: null, parsedFieldSources: {}, unlockedFields: {}, qrModal: null });
     },
     // 최근 작업 조회 DPP(2026-08-17 강 요청) - 예전 "대기작업 큐"(마감일 D-1/D-2 같은
     // 가짜 워크플로 문구)를 걷어내고, 실제 있는 DPP 중 최근 것 몇 건만 핵심 데이터
@@ -165,7 +232,7 @@ export function makerVals(ctx) {
         : done === 0
           ? ctx.chip('rgba(132,148,172,.16)', '#6B7A93')
           : ctx.chip('rgba(227,160,8,.16)', '#96660A'),
-      open: () => setState({ tab: 'input', fieldFormDppId: openId, parsedFieldSources: {}, qrModal: null })
+      open: () => setState({ tab: 'input', fieldFormDppId: openId, parsedFieldSources: {}, unlockedFields: {}, qrModal: null })
     })),
     recentDppsEmpty: completenessRows.length === 0,
     // 2026-08-17 강 정정: "완성도" 그래프/목록 카드는 원래대로 유지하고(제목만 "입력률"로),
@@ -215,10 +282,14 @@ export function makerVals(ctx) {
     saveDraft: async () => {
       if (!ff) { ctx.say('임시저장했습니다.'); return; }
       try {
+        const isNewDpp = !ff.dppId;
         const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
         ctx.setFieldFormData(result);
         ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
         setState(s => ({ fieldFormDppId: result.dppId, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
+        // 새 DPP가 이번 임시저장으로 처음 생겼으면 dashboardData(제품 조회/최근 작업 DPP
+        // 조회의 출처)도 같이 갱신한다 - issueDpp와 같은 이유(2026-08-18 강 리포트).
+        if (isNewDpp) ctx.refreshDashboard();
         ctx.say('임시저장했습니다 · 완성도 ' + Math.round(result.completeness) + '%');
       } catch (e) {
         ctx.say(e.message || '임시저장에 실패했습니다.');
@@ -232,23 +303,34 @@ export function makerVals(ctx) {
       // 필드를 지운 직후 등)을 대비해 실제 발급 호출 전에도 한 번 더 막는다.
       if (!issueReady) { ctx.say(issueDisabledHint); return; }
       try {
-        let dppId = ff.dppId;
-        if (!dppId) {
-          const draft = await ctx.saveFieldFormDraft(null, ffInputs);
-          dppId = draft.dppId;
-          setState({ fieldFormDppId: dppId });
-        }
+        // 2026-08-18(2차) 강 요청: "임시저장 없이도 발급 누르면 텍스트 상자에 있는
+        // 데이터들로 발급할 수 있도록" - 예전엔 dppId가 이미 있으면(한 번이라도 임시저장한
+        // 적 있으면) 곧장 issueFieldFormDpp(dppId)를 불러서, 그 이후 텍스트 상자에 입력만
+        // 하고 임시저장 버튼을 안 누른 값은 서버에 저장 안 된 채로 발급이 진행돼 버렸다
+        // (발급은 서버에 이미 저장된 dpp_field_value만 보고 처리하기 때문). dppId 유무와
+        // 상관없이 항상 먼저 현재 ffInputs로 저장한 뒤 그 결과로 발급한다.
+        const saved = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
+        const dppId = saved.dppId;
+        setState({ fieldFormDppId: dppId });
         const issued = await ctx.issueFieldFormDpp(dppId);
         ctx.setFieldFormData(issued);
         ctx.setFieldFormInputs(Object.fromEntries((issued.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        // DPP 발급과 동시에 QR 발급(2026-08-17 강 요청) - 아직 공개(비로그인) 조회용 백엔드
-        // 엔드포인트가 없어서, 지금은 이번 브라우저 세션 안에서 "제품 조회 → QR 스캔"으로
-        // 바로 조회할 수 있도록 필드 스냅샷을 세션 캐시에 같이 남긴다(issuedPassportCache).
-        // 특별사항대로 파싱된 데이터(=지금 입력 폼의 값)만 담는다.
+        // 2026-08-18 강 리포트: "DPP 생성해서 발급했는데 저장 안됨(제품 조회에서 전혀
+        // 안보임)". 원인은 저장 실패가 아니라 dashboardData(제품 조회 목록의 실제 출처)를
+        // 로그인 시 딱 한 번만 불러오고 이 세션 안에서는 다시 안 불러왔기 때문 - 새로 발급된
+        // DPP가 진짜 새로고침(전체 리마운트) 전까지 목록에 안 보였다. 여기서 강제로
+        // 다시 불러온다.
+        ctx.refreshDashboard();
+        // DPP 발급과 동시에 QR 발급(2026-08-17 강 요청). 2026-08-18 강 리포트: "QR코드가
+        // 제 기능을 안함 - 구글에 냅다 DPP-11이라고 검색하고 있음". 원인은 QR에 순수
+        // 텍스트(표시용 식별자)만 인코딩해서 스캐너가 URL로 인식 못 하고 검색어로 취급한
+        // 것 - 이제 실제 공개 조회 URL(/p/{publicUuid} -> GET /public/dpp/{publicUuid},
+        // PublicPassportController, 로그인 불필요)을 인코딩한다.
         const displayId = issued.internalSku || ('DPP-' + issued.dppId);
         const snapshot = (issued.fields || []).map(f => ({ label: f.labelKo, value: f.value || '', required: f.required }));
         try {
-          const dataUrl = await QRCode.toDataURL(displayId, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } });
+          const passportUrl = issued.publicUuid ? (window.location.origin + '/p/' + issued.publicUuid) : displayId;
+          const dataUrl = await QRCode.toDataURL(passportUrl, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } });
           setState(s => ({
             issuedPassportCache: { ...(s.issuedPassportCache || {}), [displayId]: { material: r, formLabel: inputMeta.form, fields: snapshot } },
             qrModal: { id: displayId, dataUrl, showProductsLink: true }
@@ -278,7 +360,10 @@ export function makerVals(ctx) {
     // ff가 있으면(철강 역할) requirement_field 실 라벨/필수여부 + dpp_field_value 실 저장값,
     // 없으면 기존 목데이터 폼("SPHC" 같은 예시값 포함, 미시딩 도메인 한정 - 위 주석 참고).
     fields: ff
-      ? ff.fields.map(f => {
+      // 파싱되는(자동 채움) 필드를 위쪽에, 수기 입력 필드를 아래쪽에 배치(2026-08-18 강
+      // 요청) - AUTO_FILL_FIELD_CODES 화이트리스트 기준 안정 정렬(같은 그룹 안에서는
+      // 서버가 내려준 원래 순서 유지), documentSlots의 required 정렬과 동일한 패턴.
+      ? [...ff.fields].sort((a, b) => (AUTO_FILL_FIELD_CODES.has(b.fieldCode) ? 1 : 0) - (AUTO_FILL_FIELD_CODES.has(a.fieldCode) ? 1 : 0)).map(f => {
           const value = ffInputs[f.fieldCode] || '';
           const parsedFrom = parsedSources[f.fieldCode];
           const isAutoFillable = AUTO_FILL_FIELD_CODES.has(f.fieldCode);
@@ -291,15 +376,18 @@ export function makerVals(ctx) {
           // (문서를 아직 안 올렸을 뿐, 언젠가 채워질 필드라는 뜻). 화이트리스트 밖의
           // 필드(Heat No/강종 등 26개)는 애초에 어떤 문서에서도 자동 추출되지 않는
           // 순수 수기입력 항목이라 "직접 입력 항목"으로 중립적으로 표시한다.
+          // 2026-08-18 강 요청: "~페이지에서 파싱" 문구가 반복되면 너무 길어지니 "파싱(문서명)"
+          // 형태로 축약. sourceChip(항목 이름 옆 배지)은 AppView.jsx에서 더 이상 렌더링하지
+          // 않고(중복 표시 제거 요청) 이 sourceLabel 하나만 항목 아래에 표시한다.
           let sourceLabel; let sourceChip;
           if (parsedFrom) {
-            sourceLabel = '파싱됨 · ' + parsedFrom + '에서 인식';
+            sourceLabel = '파싱(' + parsedFrom + ')';
             sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
           } else if (isAutoFillable && value) {
-            sourceLabel = '파싱됨 · 업로드된 문서에서 자동 인식';
+            sourceLabel = '파싱(' + (AUTO_FILL_DOC_NAME[f.fieldCode] || '업로드 문서') + ')';
             sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
           } else if (isAutoFillable && !value) {
-            sourceLabel = AUTO_FILL_SOURCE_LABEL[f.fieldCode] || '문서 업로드 페이지에서 파싱';
+            sourceLabel = (AUTO_FILL_DOC_NAME[f.fieldCode] || '문서') + ' 업로드 시 자동 인식';
             sourceChip = ctx.chip('rgba(0,69,169,.10)', '#0045A9');
           } else if (!value) {
             sourceLabel = '직접 입력 항목';
@@ -308,10 +396,23 @@ export function makerVals(ctx) {
             sourceLabel = '직접 입력됨';
             sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
           }
+          // 2026-08-18 강 요청: "파싱된 이후로는 안지워지게 막기 - 수정하려면 수정 버튼
+          // 누르고 수정". 파싱된 상태(이번 세션에 감지됐거나, 화이트리스트 필드에 값이
+          // 이미 있는 경우)인 필드는 기본적으로 읽기 전용으로 잠그고, "수정" 버튼을 눌러
+          // 이 세션에서 한 번 잠금 해제해야 편집 가능해진다. 수기 입력 필드는 애초에
+          // 잠글 대상이 아니라 항상 편집 가능.
+          const isParsed = !!parsedFrom || (isAutoFillable && !!value);
+          const unlocked = !!(state.unlockedFields && state.unlockedFields[f.fieldCode]);
+          const locked = isParsed && !unlocked;
           return {
             key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
             req: f.required ? '필수' : '선택', ph: f.helpText || '', value,
             hint: f.helpText || '', sourceLabel, sourceChip,
+            autoFillable: isAutoFillable,
+            // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
+            inputBorderColor: value ? '#12A150' : '#E03B3B',
+            locked,
+            unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [f.fieldCode]: true } })),
             onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
           };
         })
@@ -353,7 +454,15 @@ export function makerVals(ctx) {
     // required 내림차순 정렬(true 먼저) - Array.sort는 안정 정렬이라 같은 필수여부 안에서는
     // 서버가 내려준 원래 순서를 그대로 유지한다.
     documentSlots: df
-      ? [...df.documents].sort((a, b) => (b.required - a.required)).map(d => {
+      // 2026-08-18 강 요청: 검증/파싱되는 문서가 상위로 오게 - 제강 성적서(Mill Sheet) >
+      // CBAM > 기타 순. 같은 우선순위 안에서는 기존처럼 required(필수) 내림차순 유지.
+      ? [...df.documents].sort((a, b) => {
+          const DOC_PRIORITY = { MILL_SHEET: 0, CBAM_REPORT: 1 };
+          const pa = DOC_PRIORITY[a.docTypeCode] ?? 2;
+          const pb = DOC_PRIORITY[b.docTypeCode] ?? 2;
+          if (pa !== pb) return pa - pb;
+          return b.required - a.required;
+        }).map(d => {
           const uploading = (state.uploadingDocTypes || []).includes(d.docTypeCode);
           const failed = !uploading && (d.status === 'REJECTED' || d.status === 'EXPIRED');
           const stageIdx = uploading || d.status === 'PENDING' ? 1
@@ -398,8 +507,29 @@ export function makerVals(ctx) {
           })();
           // "ZKP 증명 시 어떤 수치를 어떤 기준으로 검증 중인지"(2026-08-17 강 요청) - 결과가
           // 아직 없어도(업로드 전) 고정 문구로 항상 보여준다. detailLabel은 실측 결과가 있을
-          // 때만 채워지는 것과 달리, criterionLabel은 애초에 뭘 보는지에 대한 설명.
-          const criterionLabel = d.zkpTarget ? (ZKP_CRITERIA[d.docTypeCode] || '') : '';
+          // 때만 채워지는 것과 달리, criterionItems는 애초에 뭘 보는지에 대한 설명.
+          // 2026-08-18 강 요청: 긴 문장 한 줄 대신 토글로 열었을 때 항목별로 담백하게
+          // 보여준다 - criterionItems([{item, criterion}]) + criterionOpen(토글 상태).
+          // 2026-08-18 강 요청: 실패한 항목만 기준 텍스트를 빨간색으로 보여준다 - 서버가
+          // 돌려주는 실제 결과(verdicts/specPassed)를 항목(vkey)별로 대조한다. CBAM은
+          // pass/fail 개념이 없어서(의무 발생 여부만 판정) 항상 failed=false.
+          const zkpResultByDoc = { MILL_SHEET: msr, CARE_LABEL: clr, OEKOTEX_LABEL: oer, BATTERY_CARBON_REPORT: bcr, RECYCLING_REPORT: rcr };
+          const zkpResult = zkpResultByDoc[d.docTypeCode];
+          const criterionItems = (d.zkpTarget ? (ZKP_CRITERIA[d.docTypeCode] || []) : []).map(c => {
+            let itemFailed = false;
+            if (zkpResult) {
+              if (c.vkey && zkpResult.verdicts) itemFailed = zkpResult.verdicts[c.vkey] === false;
+              else if (typeof zkpResult.specPassed === 'boolean') itemFailed = zkpResult.specPassed === false;
+            }
+            return { ...c, failed: itemFailed };
+          });
+          const criterionOpen = !!(state.criteriaOpen && state.criteriaOpen[d.docTypeCode]);
+          // 2026-08-18 강 요청: 문서 타일 테두리 색 - 아직 업로드 안 됨(빨강), 검증/제출
+          // 통과(초록), 검증 실패(노랑). 업로드/검토 중(stageIdx===1)일 때는 결과가 아직
+          // 없으니 기존 중립 테두리를 유지한다.
+          const tileBorderColor = stageIdx === 2 ? (success ? '#12A150' : '#E3A008')
+            : stageIdx === 0 ? '#E03B3B'
+            : 'rgba(16,32,64,.07)';
           return {
             key: d.fieldCode, label: d.labelKo, req: d.required ? '필수' : '선택',
             fileName: d.fileName || '',
@@ -407,7 +537,10 @@ export function makerVals(ctx) {
             dot: ctx.pillDot(uploading ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
             categoryLabel: d.zkpTarget ? '데이터 검증' : '형식 확인',
             categoryChip: d.zkpTarget ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#6B7A93'),
-            criterionLabel,
+            criterionItems,
+            criterionOpen,
+            tileBorderColor,
+            toggleCriterion: () => setState((s) => ({ criteriaOpen: { ...(s.criteriaOpen || {}), [d.docTypeCode]: !(s.criteriaOpen && s.criteriaOpen[d.docTypeCode]) } })),
             detailLabel,
             // 스피너(active)는 "검증 중"(stageIdx===1) 단계에서만 돈다 - 예전엔
             // i===stageIdx 조건만 봐서 아직 업로드 전(stageIdx===0, "미제출")에도 그
@@ -433,23 +566,30 @@ export function makerVals(ctx) {
                 try {
                   const result = await zkpUploader.call(file);
                   zkpUploader.setResult({ ...result, fileName: file.name });
+                  // 2026-08-18 강 요청: "증명에 실패했으면 데이터 파싱 안되게" - specPassed가
+                  // 명시적으로 false면(=ZKP 검증 실패) 방금 올린 문서에서 새로 채워진 필드를
+                  // "파싱됨"으로 인정하지 않는다. CBAM은 specPassed 자체가 없는 응답(적합/
+                  // 부적합이 아니라 의무 발생 여부만 판정)이라 이 게이트 대상이 아니다.
+                  const zkpFailed = Object.prototype.hasOwnProperty.call(result, 'specPassed') && result.specPassed === false;
                   if (result.dppId) {
                     setState({ fieldFormDppId: result.dppId });
-                    // 업로드 직전 입력값(prevInputs)과 새로 불러온 폼을 비교해서, 이 문서
-                    // 업로드로 "방금 채워진" 필드만 파싱됨으로 표시한다(파싱되는 데이터가
-                    // 어디서 왔는지 표시, 2026-08-17 강 요청).
-                    const prevInputs = ffInputs;
-                    const refreshed = await ctx.refreshFieldForm(result.dppId);
-                    if (refreshed && refreshed.fields) {
-                      const newlyFilled = refreshed.fields
-                        .filter(nf => !prevInputs[nf.fieldCode] && (nf.value || ''))
-                        .map(nf => nf.fieldCode);
-                      if (newlyFilled.length) {
-                        setState(s => {
-                          const next = { ...(s.parsedFieldSources || {}) };
-                          newlyFilled.forEach(code => { next[code] = d.labelKo; });
-                          return { parsedFieldSources: next };
-                        });
+                    if (!zkpFailed) {
+                      // 업로드 직전 입력값(prevInputs)과 새로 불러온 폼을 비교해서, 이 문서
+                      // 업로드로 "방금 채워진" 필드만 파싱됨으로 표시한다(파싱되는 데이터가
+                      // 어디서 왔는지 표시, 2026-08-17 강 요청).
+                      const prevInputs = ffInputs;
+                      const refreshed = await ctx.refreshFieldForm(result.dppId);
+                      if (refreshed && refreshed.fields) {
+                        const newlyFilled = refreshed.fields
+                          .filter(nf => !prevInputs[nf.fieldCode] && (nf.value || ''))
+                          .map(nf => nf.fieldCode);
+                        if (newlyFilled.length) {
+                          setState(s => {
+                            const next = { ...(s.parsedFieldSources || {}) };
+                            newlyFilled.forEach(code => { next[code] = d.labelKo; });
+                            return { parsedFieldSources: next };
+                          });
+                        }
                       }
                     }
                     ctx.refreshDocumentForm(result.dppId);
@@ -467,6 +607,27 @@ export function makerVals(ctx) {
               try {
                 const result = await ctx.uploadDocument(state.fieldFormDppId, d.docTypeCode, file);
                 ctx.setDocumentFormData(result);
+                // 2026-08-18(2차) 강 요청 대응 - 이 9종 문서 경로(COO/EU_DOC/PCF_REPORT/
+                // LCA_EPD/GRS_CERTIFICATE 등)도 서버가 업로드 즉시 requirement_field를
+                // 자동 채운다(DocumentSlotService.autoFillFieldsFromParsedDocument). 그런데
+                // 여기는 zkpUploader 분기와 달리 지금까지 fieldForm을 다시 안 불러와서,
+                // 새로 채워진 값(원산지/UOI/재생 섬유 함유율 등)이 새로고침 전까지 화면에
+                // 안 보였다 - zkpUploader와 동일하게 refreshFieldForm + parsedFieldSources
+                // 추적을 붙인다.
+                const prevInputs = ffInputs;
+                const refreshed = await ctx.refreshFieldForm(state.fieldFormDppId);
+                if (refreshed && refreshed.fields) {
+                  const newlyFilled = refreshed.fields
+                    .filter(nf => !prevInputs[nf.fieldCode] && (nf.value || ''))
+                    .map(nf => nf.fieldCode);
+                  if (newlyFilled.length) {
+                    setState(s => {
+                      const next = { ...(s.parsedFieldSources || {}) };
+                      newlyFilled.forEach(code => { next[code] = d.labelKo; });
+                      return { parsedFieldSources: next };
+                    });
+                  }
+                }
                 ctx.say(d.labelKo + ' 업로드했습니다.');
               } catch (err) {
                 ctx.say(err.message || '문서 업로드에 실패했습니다.');
@@ -500,21 +661,35 @@ export function makerVals(ctx) {
     // "협력사 초대"는 이제 회사 대 회사 일반 연결이 아니라 특정 DPP에 대한 초대 - 화면에
     // 먼저 이 조직의 DPP 목록을 보여주고, 하나를 고르면 그 DPP에 여러 협력사를 한 번에
     // 초대할 수 있다(DppParticipant가 그 DPP의 "누가 뭘 채우는지" 실제 연결이 됨).
-    partnerDpps: (dash ? dash.dpps : []).map(d => {
-      const selected = state.partnersDppId === d.dppId;
-      return {
-        key: d.dppId, id: d.internalSku || ('DPP-' + d.dppId), name: d.modelName || ('DPP #' + d.dppId),
-        pct: Math.round(d.completeness), selected,
-        cardStyle: {
-          display: 'flex', flexDirection: 'column', gap: 4, minWidth: 168, padding: '12px 14px',
-          border: selected ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.10)', borderRadius: 13,
-          background: selected ? '#0045A9' : '#fff', color: selected ? '#fff' : '#0B1B33',
-          cursor: 'pointer', textAlign: 'left', flex: 'none'
-        },
-        select: () => setState({ partnersDppId: d.dppId, inviteRows: [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }] })
-      };
-    }),
-    partnerDppsEmpty: !dash || dash.dpps.length === 0,
+    // 2026-08-18 강 요청: DPP가 많아지면 관리하기 힘드니, 협력사(제조사 외 역할)가 채워야
+    // 할 필드가 아직 비어있는 DPP만 여기 보여준다 - responsibleRoleName이 '제조사'가 아닌
+    // missingFields 항목이 하나라도 있으면 "초대 필요"로 간주(RAW_SUPPLIER/TEST_LAB/RECYCLER
+    // 담당 필드가 비어있다는 뜻, 이미 초대를 보내 값이 채워졌으면 missingFields에서 빠짐).
+    // 정렬은 생성일이 가장 오래된 DPP가 먼저 보이게 - 실 스키마에 DPP별 생성일시가 별도
+    // 필드로 안 내려오므로(DppSummaryDto 참고), auto-increment PK인 dppId 오름차순을
+    // 생성순서 대리 지표로 사용한다.
+    // 2026-08-18 강 요청(2차): missingFields 기준 필터링이 대기작업 큐용 상위 10건 캡
+    // 때문에 실제로 협력사 초대가 필요한 DPP가 있어도 화면에 안 보이는 버그가 있었다 -
+    // 이제 백엔드가 캡 없이 정확히 계산해 내려주는 d.needsPartnerInput(GET /me/dashboard,
+    // DppSummaryDto)을 그대로 쓴다.
+    partnerDpps: (() => {
+      const eligible = (dash ? dash.dpps : []).filter(d => d.needsPartnerInput);
+      return [...eligible].sort((a, b) => a.dppId - b.dppId).map(d => {
+        const selected = state.partnersDppId === d.dppId;
+        return {
+          key: d.dppId, id: d.internalSku || ('DPP-' + d.dppId), name: d.modelName || ('DPP #' + d.dppId),
+          pct: Math.round(d.completeness), selected,
+          cardStyle: {
+            display: 'flex', flexDirection: 'column', gap: 4, minWidth: 168, padding: '12px 14px',
+            border: selected ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.10)', borderRadius: 13,
+            background: selected ? '#0045A9' : '#fff', color: selected ? '#fff' : '#0B1B33',
+            cursor: 'pointer', textAlign: 'left', flex: 'none'
+          },
+          select: () => setState({ partnersDppId: d.dppId, inviteRows: [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }] })
+        };
+      });
+    })(),
+    partnerDppsEmpty: !dash || !dash.dpps.some(d => d.needsPartnerInput),
     partnersHasSelection: !!state.partnersDppId,
     partnersSelectedDppName: (() => {
       const found = dash && dash.dpps.find(d => d.dppId === state.partnersDppId);

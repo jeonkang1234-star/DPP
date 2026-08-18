@@ -26,9 +26,11 @@ function CompanyMyPage({
   // 2026-08-17 강 요청: "마이페이지는 보유권한까지 싹 다 삭제해서 왼쪽에 있던 기업
   // 기본정보랑 증빙서류만 냅둬" - 온보딩 진행상황/완료 요약 카드와 보유 권한 카드(+
   // 권한 추가 신청 버튼)를 전부 제거하고 단일 컬럼으로 단순화.
+  // 2026-08-18 강 요청: "마이페이지 UI가 왼쪽으로 쏠려있는데 가운데에 맞춰" - PersonalMyPage와
+  // 동일한 패턴(margin: '0 auto' + alignItems: 'center')으로 중앙 정렬.
   return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-        <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>마이페이지</h1>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', maxWidth: '900px', margin: '0 auto', alignItems: 'center' }}>
+        <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em', textAlign: 'center' }}>마이페이지</h1>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '760px' }}>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>기업 기본정보</span><button onClick={openProfileEdit} style={{ height: '36px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '11px', background: '#fff', fontSize: '12.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv24">수정</button></div>
