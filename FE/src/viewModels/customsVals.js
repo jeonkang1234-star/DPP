@@ -2,105 +2,147 @@ import React from 'react';
 import QRCode from 'qrcode';
 
 /**
- * Builds the view-model slice consumed by AppView.
- * @param ctx shared context from useAppLogic (state, setState, props, style + helper fns)
+ * 세관 통관 검증 화면 - 2026-08-19 강 요청 "실 데이터로 연결해야함... 세관마다 확인해야
+ * 할 DPP가 달라야 함"으로 전면 교체. 예전엔 하드코딩 배열(data.customsItems) 6건을
+ * 어느 세관 계정으로 로그인해도 똑같이 보여줬다. 이제 com.dpp.customs.controller.
+ * CustomsClearanceController(GET /customs/queue)가 로그인한 세관 조직에 실제로
+ * 배정된 케이스만 돌려준다 - 배정은 서비스 쪽에서 DPP 수출국/수입국과 세관 조직의
+ * country_code를 매칭해서 결정한다(OrganizationService와 짝을 이루는 신규 기능).
+ *
+ * 검색(cQuery)은 예전처럼 전체 DPP 레지스트리를 뒤지지 않는다 - "세관마다 확인해야 할
+ * DPP가 달라야 한다"는 요청의 취지상, 내 큐(ctx.customsQueueData)에 이미 배정된 케이스
+ * 안에서만 필터링한다(EU 시장감시 쪽 euVals.js의 전체 레지스트리 검색과는 의도적으로
+ * 다른 범위).
  */
 export function customsVals(ctx) {
-  const { state, setState, props, data } = ctx;
-  const items = data.customsItems;
-  const match = q => {
+  const { state, setState } = ctx;
+  const queue = ctx.customsQueueData || [];
+  const detail = ctx.customsCaseDetail;
+  const green = '#12A150', red = '#E03B3B';
+
+  const short = (uuid) => (uuid || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+
+  const match = (q) => {
     const k = (q || '').trim().toLowerCase();
     if (!k) return null;
-    return items.find(i => i.id.toLowerCase() === k || i.declared.toLowerCase() === k || i.eori.toLowerCase() === k)
-      || items.find(i => i.id.toLowerCase().includes(k) || i.name.toLowerCase().includes(k) || i.importer.toLowerCase().includes(k))
-      || null;
+    return queue.find((i) =>
+      short(i.publicUuid).toLowerCase() === k
+      || (i.importerEori || '').toLowerCase() === k
+      || short(i.publicUuid).toLowerCase().includes(k)
+      || (i.modelName || '').toLowerCase().includes(k)
+      || (i.importerName || '').toLowerCase().includes(k)
+      || (i.hsCode || '').toLowerCase().includes(k)
+    ) || null;
   };
-  const found = items.find(i => i.id === state.customsId) || null;
-  const cur = found || items[0];
+
+  const found = queue.find((i) => i.clearanceId === state.customsId) || null;
   const noResult = !!state.customsSearched && !found;
-  const green = '#12A150', red = '#E03B3B';
+  const summary = detail ? detail.summary : found;
+  const checks = (detail ? detail.checks : []) || [];
+  const checkByLabel = (label) => checks.find((c) => c.label === label);
+  const docCheck = checkByLabel('EU 적합성 선언서(DoC)');
+  const techCheck = checkByLabel('CE 마크');
+  const ceOk = !!docCheck && !!techCheck && docCheck.pass && techCheck.pass;
+  const loading = !!found && !detail;
+
+  const openCase = (clearanceId) => {
+    setState({ customsSearched: true, customsId: clearanceId });
+  };
+
   return {
     cSearchMode: !state.customsSearched,
     cResultMode: !!state.customsSearched && !noResult,
     cNoResult: noResult,
     cQuery: state.customsQuery || '',
-    onCustomsQuery: e => setState({ customsQuery: e.target.value }),
+    onCustomsQuery: (e) => setState({ customsQuery: e.target.value }),
     runCustomsSearch: () => {
       const hit = match(state.customsQuery);
-      setState({ customsSearched: true, customsId: hit ? hit.id : null });
+      setState({ customsSearched: true, customsId: hit ? hit.clearanceId : null });
     },
     resetCustomsSearch: () => setState({ customsSearched: false, customsQuery: '', customsId: null }),
-    cRecent: ['DPP-KR-ST-2607-0142', 'DPP-KR-BT-2607-0311', 'DPP-KR-TX-2607-0521'].map(q => ({
-      key: q, label: q,
-      pick: () => {
-        const hit = match(q);
-        setState({ customsQuery: q, customsSearched: true, customsId: hit ? hit.id : null });
-      }
+    cRecent: queue.slice(0, 3).map((i) => ({
+      key: i.clearanceId, label: short(i.publicUuid) + ' · ' + (i.modelName || ''),
+      pick: () => openCase(i.clearanceId),
     })),
-    customsList: items.map(i => ({
-      key: i.id, id: i.id, name: i.name, importer: i.importer, hs: i.hs, declared: i.declared,
-      verdict: i.pass ? '통관 요건 충족' : '통관 요건 미충족',
-      dot: ctx.pillDot(i.pass ? green : red),
-      rowStyle: {
-        display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1.1fr .8fr 1fr 74px', gap: 12, padding: '13px 14px',
-        alignItems: 'center', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer',
-        borderBottom: '1px solid rgba(16,32,64,.06)',
-        background: i.id === cur.id ? 'rgba(0,69,169,.04)' : 'transparent'
-      },
-      pick: () => setState({ customsId: i.id })
+    // 큐 목록 - AppView의 검색 화면(cSearchMode)에 "내 세관에 배정된 대기 건" 표로 보여준다.
+    // 배정 자체가 이미 수출국/수입국 관할로 걸러진 결과라, 이 목록에 뜨는 것 자체가 곧
+    // "이 세관이 확인해야 할 DPP"의 실제 증거다.
+    cQueueEmpty: queue.length === 0,
+    cQueueRows: queue.map((i) => ({
+      key: i.clearanceId,
+      idLabel: short(i.publicUuid),
+      name: i.modelName || '—',
+      importer: i.importerName || '—',
+      sideLabel: i.clearanceSide === 'EXPORT' ? '수출측 심사' : i.clearanceSide === 'IMPORT' ? '수입측 심사' : '—',
+      route: (i.exportCountryCode || '?') + ' → ' + (i.importCountryCode || '?'),
+      open: () => openCase(i.clearanceId),
     })),
-    cVerdict: cur.pass ? '통관 요건 충족' : '통관 요건 미충족',
-    cVerdictSub: cur.pass ? '모든 필수 검증 항목을 충족합니다' : '아래 미충족 항목 해소 전까지 반출할 수 없습니다',
+    cVerdict: loading ? '조회 중…' : summary ? (detail ? (detail.overallPass ? '통관 요건 충족' : '통관 요건 미충족') : '') : '',
     cVerdictStyle: {
       display: 'flex', flexDirection: 'column', gap: 10, padding: '26px 28px', borderRadius: 20,
       background: '#fff', border: '1px solid rgba(16,32,64,.07)', boxShadow: '0 1px 2px rgba(16,32,64,.05)'
     },
-    cVerdictBarStyle: { width: 5, alignSelf: 'stretch', minHeight: 84, flex: 'none', borderRadius: 999, background: cur.pass ? green : red },
-    cVerdictDot: { width: 9, height: 9, flex: 'none', borderRadius: 999, background: cur.pass ? green : red },
-    cVerdictBadge: {
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 999,
-      background: cur.pass ? green : red, color: '#fff', fontSize: 20, fontWeight: 700, flex: 'none'
-    },
-    cVerdictMark: cur.pass ? '✓' : '!',
+    cVerdictDot: { width: 9, height: 9, flex: 'none', borderRadius: 999, background: detail && detail.overallPass ? green : red },
     cVerdictTextStyle: { fontSize: 22, fontWeight: 700, lineHeight: 1.2, color: '#0B1B33' },
-    cId: cur.id, cName: cur.name, cEori: cur.eori, cImporter: cur.importer, cImporterAddr: cur.importerAddr,
-    cExporter: cur.exporter, cHs: cur.hs, cHsName: cur.hsName, cQty: cur.qty, cDeclared: cur.declared,
-    cCeNote: cur.ceNote, cDoc: cur.doc, cTech: cur.tech,
-    cCeOk: cur.ce, cCeFail: !cur.ce,
-    cIssued: cur.issued, cUpdated: cur.updated, cStatus: cur.status,
-    cStatusDot: ctx.pillDot(cur.status === '유효' ? green : cur.status === '정지' ? '#E3A008' : red),
-    cChecks: cur.checks.map(([label, ok, detail]) => ({
-      key: label, label, detail,
-      mark: ok ? '✓' : '✕',
-      markStyle: { display: 'grid', placeItems: 'center', width: 22, height: 22, flex: 'none', borderRadius: 999, background: ok ? green : red, color: '#fff', fontSize: 11, fontWeight: 700 },
-      detailStyle: { fontSize: 11.5, lineHeight: 1.5, color: ok ? '#8494AC' : '#C22B2B' }
+    cId: summary ? short(summary.publicUuid) : '',
+    cName: summary ? (summary.modelName || '—') : '',
+    cEori: summary ? (summary.importerEori || '—') : '',
+    cImporter: summary ? (summary.importerName || '—') : '',
+    cImporterAddr: summary ? (summary.importerAddress || '') : '',
+    cExporter: summary ? ((summary.exporterOrgName || '—') + (summary.exportCountryCode ? ' (' + summary.exportCountryCode + ')' : '')) : '',
+    cHs: summary ? (summary.hsCode || '미신고') : '',
+    // HS 코드 설명(hsName) 대신 실제 정합성 확인 결과를 보여준다 - 상품명 데이터베이스
+    // 연동이 없어 "철 또는 비합금강의 평판압연제품" 같은 문구를 지어낼 수 없다.
+    cHsName: checkByLabel('HS 코드 정합성') ? checkByLabel('HS 코드 정합성').detail : '',
+    // 수입신고번호 대신 이 케이스가 수출측/수입측 중 어느 세관 심사인지 표시 - 원래 필드는
+    // 이 프로토타입에 신고번호 채번 기능 자체가 없어 대체.
+    cDeclared: summary ? (summary.clearanceSide === 'EXPORT' ? '수출측 심사' : summary.clearanceSide === 'IMPORT' ? '수입측 심사' : '—') : '',
+    // 수량 대신 신청일 - 마찬가지로 수량 데이터가 없어 실제로 있는 값으로 대체.
+    cQty: summary && summary.createdAtIso ? summary.createdAtIso.slice(0, 10) : '—',
+    cCeNote: docCheck ? docCheck.detail : '',
+    cDoc: 'EU 적합성 선언서 · 기술문서',
+    cTech: techCheck ? techCheck.detail : '',
+    cCeOk: ceOk,
+    cCeFail: !!detail && !ceOk,
+    cChecks: checks.map((c) => ({
+      key: c.label, label: c.label, detail: c.detail,
+      mark: c.pass ? '✓' : '✕',
+      markStyle: { display: 'grid', placeItems: 'center', width: 22, height: 22, flex: 'none', borderRadius: 999, background: c.pass ? green : red, color: '#fff', fontSize: 11, fontWeight: 700 },
+      detailStyle: { fontSize: 11.5, lineHeight: 1.5, color: c.pass ? '#8494AC' : '#C22B2B' }
     })),
     cDownloadAll: () => ctx.say('적합성 선언서·기술문서·DPP 증명서를 하나의 ZIP으로 내려받습니다.'),
-    // 2026-08-17 강 요청: "검색해서 클릭하면 QR 보이게" - 조회된 화물의 DPP 식별자로 QR을
-    // 그 자리에서 생성해 공용 qrModal(제조사 발급 QR과 같은 모달)로 보여준다. 세관은 QR을
-    // "발급"하는 게 아니라 이미 발급된 DPP를 다시 조회하는 용도라 배지/문구를 다르게 준다.
-    // 세관 화면은 아직 목데이터(data.customsItems)라 실제 publicUuid가 없다 - 그래서
-    // makerVals.js/useAppLogic.js와 달리 여기는 /p/{publicUuid} 공개 URL을 못 만들고
-    // 텍스트 그대로 인코딩한다(2026-08-18). 세관 데이터가 실 연동되면 같이 고칠 것.
+    // QR - 실제 publicUuid로 공개 조회 URL(/p/{publicUuid})을 인코딩한다(makerVals.js와
+    // 동일 패턴, 2026-08-19 - 예전엔 세관 화면이 목데이터라 이 부분만 텍스트 그대로
+    // 인코딩했었다).
     showQr: () => {
-      QRCode.toDataURL(cur.id, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
+      if (!summary) return;
+      const url = summary.publicUuid ? (window.location.origin + '/p/' + summary.publicUuid) : short(summary.publicUuid);
+      QRCode.toDataURL(url, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
         .then((dataUrl) => {
-          setState({ qrModal: { id: cur.id, dataUrl, badge: '통관 조회', title: '해당 DPP의 QR 코드입니다', hint: '수입업체·현장 검수 시 이 QR로 동일한 DPP를 다시 조회할 수 있습니다.' } });
+          setState({ qrModal: { id: cIdLabel(summary), dataUrl, badge: '통관 조회', title: '해당 DPP의 QR 코드입니다', hint: '수입업체·현장 검수 시 이 QR로 동일한 DPP를 다시 조회할 수 있습니다.' } });
         })
         .catch(() => ctx.say('QR 생성에 실패했습니다.'));
     },
-    cApprove: () => ctx.say(cur.id + ' 통관 승인 처리했습니다.'),
-    cHold: () => ctx.say(cur.id + ' 통관 보류 사유를 수입업체에 통보했습니다.'),
-    clearLog: [
-      ['2026-08-07 09:12', 'DPP-KR-ST-2607-0142', 'Nordwerk GmbH', '7208.39', '통관 가능', '승인'],
-      ['2026-08-06 17:44', 'DPP-KR-BT-2607-0311', 'Voltique SAS', '8507.60', '통관 보류', '보류'],
-      ['2026-08-06 14:20', 'DPP-KR-TX-2607-0521', 'Deltamode B.V.', '6006.21', '통관 가능', '승인'],
-      ['2026-08-05 11:38', 'DPP-DE-ST-2607-0088', 'Hanseatic Metals', '7208.51', '통관 가능', '승인'],
-      ['2026-08-04 08:55', 'DPP-FR-TX-2607-0204', 'Deltamode B.V.', '5407.52', '통관 보류', '보류'],
-      ['2026-08-03 16:07', 'DPP-KR-ST-2607-0138', 'Nordwerk GmbH', '7208.51', '통관 가능', '승인']
-    ].map(([at, id, importer, hs, verdict, action]) => ({
-      key: at + id, at, id, importer, hs, verdict, action,
-      dot: ctx.pillDot(verdict === '통관 가능' ? green : red)
-    }))
+    cCanDecide: !!found && found.decision === 'PENDING',
+    cApprove: () => decide(ctx, found, 'APPROVE', '통관 승인'),
+    cHold: () => decide(ctx, found, 'HOLD', '통관 보류'),
+    cReject: () => decide(ctx, found, 'REJECT', '통관 반려'),
   };
+
+  function cIdLabel(s) {
+    return short(s.publicUuid);
+  }
+}
+
+function decide(ctx, found, decision, verb) {
+  if (!found) return;
+  const clearanceId = found.clearanceId;
+  const label = found.modelName || 'DPP';
+  ctx.decideCustomsCase(clearanceId, decision)
+    .then(() => {
+      ctx.say(label + ' ' + verb + ' 처리했습니다.');
+      ctx.refetchCustomsQueue();
+      ctx.refetchCustomsCase(clearanceId);
+    })
+    .catch((err) => ctx.say(err.message || (verb + ' 처리에 실패했습니다.')));
 }
