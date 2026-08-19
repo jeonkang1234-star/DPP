@@ -81,6 +81,62 @@ public class RequirementField {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
+    // ── 규제 분류 메타데이터 (V20__requirement_field_spec_columns.sql) ──────────
+    // 출처는 'DPP_데이터항목_분류.xlsx' - 909개 항목을 근거 조항 유무로 T0~T4로 판정한 표다.
+    // 여기 있는 값들은 화면 동작을 바꾸지는 않고(필수 여부는 여전히 is_required가 결정한다),
+    // "이 칸을 왜 받는가"를 사용자와 심사자에게 설명하는 데 쓴다.
+
+    /** T0 법정필수 / T1 조건부필수 / T2 초안·예정 / T3 자체부가 / T4 제외권장. */
+    @Column(name = "tier", length = 2)
+    private String tier;
+
+    /** 인용한 근거가 지금 구속력이 있는지 - '구속', '조건부 구속', '위임법 대기' 등. */
+    @Column(name = "binding_strength", length = 30)
+    private String bindingStrength;
+
+    /** 근거 법령명 + 조·부속서. 근거를 못 쓰면 T0·T1이 될 수 없다는 게 분류표의 판정 규칙 1이다. */
+    @Column(name = "legal_basis", length = 400)
+    private String legalBasis;
+
+    /** T1일 때 의무가 발동하는 조건. T0/T2~T4는 null. */
+    @Column(name = "t1_condition", length = 300)
+    private String t1Condition;
+
+    /**
+     * PUBLIC / RESTRICTED / TRADE_SECRET.
+     * 공개 QR 페이지(PublicPassportService)가 PUBLIC 이외를 걸러내는 기준이다 - 그전까지는
+     * 값이 있는 필드를 전부 공개했다(HEAD_NO·설비ID까지 QR로 노출되고 있었다).
+     */
+    @Column(name = "disclosure_scope", nullable = false, length = 20)
+    private String disclosureScope;
+
+    /**
+     * PARSER / MANUAL / SYSTEM. 입력 폼에서 "문서에서 자동 인식되는 항목"과 "직접 입력해야
+     * 하는 항목"을 가르는 기준. 지금까지 FE makerVals.js가 필드코드 26개를 손으로 나열해서
+     * 이 구분을 흉내내고 있었는데, 필드가 300개를 넘으면 그 방식은 유지가 안 된다.
+     */
+    @Column(name = "data_source", nullable = false, length = 10)
+    private String dataSource;
+
+    /** 분류표 원본 행 참조 ('STEEL#148'). 근거를 다시 따질 때 출발점. */
+    @Column(name = "spec_ref", length = 120)
+    private String specRef;
+
+    /** 분류표 MVP 열 - 보유 목데이터 문서로 실제 값이 나오는 항목인지. */
+    @Column(name = "is_mvp", nullable = false)
+    private boolean mvp;
+
+    /** 분류표 '검토 의견' - 왜 이 등급인지, 어떤 인용을 고쳤는지. */
+    @Column(name = "review_note", length = 600)
+    private String reviewNote;
+
+    /**
+     * code_master.code_group. 선택지가 명확한 Enum 필드만 값이 있고(V22), 나머지는 null이라
+     * FE가 자유 텍스트로 그린다.
+     */
+    @Column(name = "code_group", length = 40)
+    private String codeGroup;
+
     @Column(name = "is_active", nullable = false)
     private boolean active;
 }

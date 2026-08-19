@@ -78,6 +78,12 @@ const ZKP_CRITERIA = {
 //  - 섬유: OEKOTEX_CERT_NO(OEKO-TEX 라벨) - OekotexIngestService, FABRIC_LOT_NO/
 //    RECYCLED_FIBER_RATE(케어라벨 또는 GRS/RCS 거래증명서) - CareLabelIngestService/
 //    DocumentSlotService
+// 2026-08-19: 이 화이트리스트는 이제 '폴백'이다. 어떤 필드가 문서에서 자동으로 채워지는지는
+// requirement_field.data_source(PARSER/MANUAL/SYSTEM)가 정답이고, 서버가 폼 응답에 실어
+// 보낸다(FieldFormItemDto.dataSource). 필드가 361개로 늘어난 이상 이 목록을 손으로 유지하는
+// 건 불가능하고, 실제로 Round 4 때 이미 한 번 어긋나서 같은 필드가 "파싱됨"과 "직접 입력"으로
+// 동시에 표시되는 버그가 났었다. 서버가 dataSource를 안 주는 경우(구버전 BE)에만 아래 목록을
+// 쓴다 - 그때는 적어도 예전과 똑같이 동작한다.
 const AUTO_FILL_FIELD_CODES = new Set([
   'GTIN', 'PCF_VALUE', 'PCF_METHOD', 'RECYCLABILITY_NOTE', 'ORIGIN_COUNTRY', 'UOI_MANUFACTURER',
   'RECYCLED_SCRAP_RATE', 'HEAT_NO', 'LOT_NO', 'STEEL_GRADE', 'STEEL_STANDARD', 'DIMENSION', 'NET_WEIGHT_T',
@@ -109,6 +115,85 @@ const AUTO_FILL_DOC_NAME = {
   OEKOTEX_CERT_NO: 'OEKO-TEX 라벨',
   FABRIC_LOT_NO: '섬유 케어라벨', RECYCLED_FIBER_RATE: '섬유 케어라벨/GRS 거래증명서'
 };
+
+// ── 필드 메타데이터 해석 (2026-08-19, T0·T1 시딩) ───────────────────────────
+// 아래 4개는 전부 "서버가 준 값이 있으면 그걸 쓰고, 없으면 예전처럼 동작한다" 구조다.
+// 구버전 BE와 붙어도 화면이 깨지지 않게 하기 위한 것.
+
+const TIER_LABEL = { T0: '법정필수', T1: '조건부', T2: '예정', T3: '자체', T4: '제외권장' };
+const DISCLOSURE_LABEL = { RESTRICTED: '권한자 한정', TRADE_SECRET: '영업비밀(ZKP 대체)' };
+
+/** 이 필드가 문서 파싱으로 채워지는가. 서버의 data_source가 정답, 없으면 구 화이트리스트. */
+function isParserField(f) {
+  if (f.dataSource) return f.dataSource === 'PARSER';
+  return AUTO_FILL_FIELD_CODES.has(f.fieldCode);
+}
+
+/** data_type -> 입력 위젯 종류. code_group이 붙은 CODE만 드롭다운이 된다(선택지가 실제로
+ *  있는 경우에만 - V22에서 선택지를 못 심은 Enum은 code_group을 비워뒀다). */
+function inputKindOf(f) {
+  if (f.dataType === 'CODE' && f.codeGroup) return 'select';
+  switch (f.dataType) {
+    case 'BOOLEAN': return 'boolean';
+    case 'NUMBER': return 'number';
+    case 'DATE': return 'date';
+    case 'DATETIME': return 'datetime';
+    case 'URL': return 'url';
+    case 'TEXT': return 'textarea';
+    default: return 'text';
+  }
+}
+
+/** 폼 응답의 codeOptions에서 이 필드가 쓸 선택지만 뽑는다. */
+function optionsFor(f, codeOptions) {
+  if (!f.codeGroup || !codeOptions) return [];
+  return codeOptions
+    .filter(o => o.codeGroup === f.codeGroup)
+    .map(o => ({ value: o.code, label: o.nameKo }));
+}
+
+/**
+ * 섹션별로 필드를 묶는다. 서버가 sections를 주면 그 순서를 그대로 따르고(code_master의
+ * FIELD_SECTION sort_order), 안 주면 필드에 나온 순서대로 만든다.
+ *
+ * 섹션 안에서 다시 파싱/수기로 나누는 이유: 이 두 축은 서로 대체하는 게 아니라 직교한다.
+ * "화학 성분" 섹션 안에도 성적서에서 자동으로 오는 값과 직접 쳐야 하는 값이 같이 있다.
+ * 예전엔 파싱/수기 두 덩어리만 있어서, 361개가 되면 각 덩어리가 그냥 긴 벽이 된다.
+ */
+function groupBySection(fields, sections, openMap, setState) {
+  const order = (sections && sections.length)
+    ? sections.map(sec => sec.section)
+    : [...new Set(fields.map(f => f.section))];
+  const labelOf = {};
+  (sections || []).forEach(sec => { labelOf[sec.section] = sec.labelKo || sec.section; });
+
+  return order.map((key, idx) => {
+    const mine = fields.filter(f => f.section === key);
+    const required = mine.filter(f => f.req === '필수');
+    const filled = required.filter(f => f.value && String(f.value).trim());
+    // 첫 섹션만 기본으로 열어둔다. 21개 섹션이 전부 펼쳐진 채로 뜨면 스크롤이 수백 줄이다.
+    const open = openMap && Object.prototype.hasOwnProperty.call(openMap, key)
+      ? !!openMap[key]
+      : idx === 0;
+    return {
+      key,
+      label: labelOf[key] || key,
+      total: mine.length,
+      requiredCount: required.length,
+      filledRequiredCount: filled.length,
+      // 필수 항목이 하나도 안 채워졌으면 빨강, 다 채웠으면 초록, 그 사이는 주황.
+      progressColor: required.length === 0 ? '#8494AC'
+        : filled.length === required.length ? '#12A150'
+        : filled.length === 0 ? '#E03B3B' : '#E3A008',
+      open,
+      toggle: () => setState(st => ({
+        openFieldSections: { ...(st.openFieldSections || {}), [key]: !open }
+      })),
+      parsed: mine.filter(f => f.autoFillable),
+      manual: mine.filter(f => !f.autoFillable)
+    };
+  }).filter(sec => sec.total > 0);
+}
 
 /**
  * Builds the view-model slice consumed by AppView.
@@ -145,6 +230,9 @@ export function makerVals(ctx) {
   const hasRealFieldForm = r === 'steel' || r === 'textile' || r === 'battery';
   const ff = hasRealFieldForm ? ctx.fieldFormData : null;
   const ffInputs = ctx.fieldFormInputs || {};
+  // Enum 필드 드롭다운 선택지(code_master) - 폼 응답에 같이 온다. 구버전 BE면 빈 배열이라
+  // inputKindOf가 select 대신 text로 떨어진다.
+  const codeOptions = ff && ff.codeOptions ? ff.codeOptions : [];
   const ffFilledCount = ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0;
   // 이번 세션에 문서 업로드로 "방금 채워진" 필드 - { [fieldCode]: 문서라벨 }. 파싱된
   // 데이터인지 수기 입력해야 하는 데이터인지 구별해서 보여주기 위함(2026-08-17 강 요청).
@@ -183,6 +271,90 @@ export function makerVals(ctx) {
   const issueDisabledHint = issueReady ? '' : !requiredFieldsOk
     ? `필수 필드를 모두 입력해야 발급할 수 있습니다. (${ffFilledCount}/${ff ? ff.fields.length : 0})`
     : '필수 문서를 모두 제출·검증 완료해야 발급할 수 있습니다.';
+  // 입력 폼 필드 목록. 예전엔 return 객체 안에 인라인으로 있었는데, 섹션 묶음
+  // (fieldSections)이 같은 목록을 다시 봐야 해서 밖으로 뺐다.
+  const formFields = ff
+    // 파싱되는(자동 채움) 필드를 위쪽에, 수기 입력 필드를 아래쪽에 배치(2026-08-18 강
+    // 요청) - AUTO_FILL_FIELD_CODES 화이트리스트 기준 안정 정렬(같은 그룹 안에서는
+    // 서버가 내려준 원래 순서 유지), documentSlots의 required 정렬과 동일한 패턴.
+    ? [...ff.fields].sort((a, b) => (isParserField(b) ? 1 : 0) - (isParserField(a) ? 1 : 0)).map(f => {
+        const value = ffInputs[f.fieldCode] || '';
+        const parsedFrom = parsedSources[f.fieldCode];
+        const isAutoFillable = isParserField(f);
+        // 파싱됨/수기 입력 구분(2026-08-17 강 요청, 재수정): 어떤 필드가 실제로 문서에서
+        // 자동 채워지는지는 백엔드 로직(AUTO_FILL_FIELD_CODES 주석 참고)에 정확히 정의돼
+        // 있으므로, 그 화이트리스트를 기준으로 판정한다 - 이번 세션에 업로드로 방금 채운
+        // 게 감지되면 어느 문서에서 왔는지까지 표시하고, 새로고침 등으로 감지를 놓쳤어도
+        // 화이트리스트 필드에 값이 있으면 "파싱됨"으로 인정한다. 화이트리스트 필드인데
+        // 아직 비어있으면 "문서에 없음"이 아니라 "문서 업로드 시 자동 인식"으로 안내한다
+        // (문서를 아직 안 올렸을 뿐, 언젠가 채워질 필드라는 뜻). 화이트리스트 밖의
+        // 필드(Heat No/강종 등 26개)는 애초에 어떤 문서에서도 자동 추출되지 않는
+        // 순수 수기입력 항목이라 "직접 입력 항목"으로 중립적으로 표시한다.
+        // 2026-08-18 강 요청: "~페이지에서 파싱" 문구가 반복되면 너무 길어지니 "파싱(문서명)"
+        // 형태로 축약. sourceChip(항목 이름 옆 배지)은 AppView.jsx에서 더 이상 렌더링하지
+        // 않고(중복 표시 제거 요청) 이 sourceLabel 하나만 항목 아래에 표시한다.
+        let sourceLabel; let sourceChip;
+        if (parsedFrom) {
+          sourceLabel = '파싱(' + parsedFrom + ')';
+          sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
+        } else if (isAutoFillable && value) {
+          sourceLabel = '파싱(' + (AUTO_FILL_DOC_NAME[f.fieldCode] || '업로드 문서') + ')';
+          sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
+        } else if (isAutoFillable && !value) {
+          sourceLabel = (AUTO_FILL_DOC_NAME[f.fieldCode] || '문서') + ' 업로드 시 자동 인식';
+          sourceChip = ctx.chip('rgba(0,69,169,.10)', '#0045A9');
+        } else if (!value) {
+          sourceLabel = '직접 입력 항목';
+          sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
+        } else {
+          sourceLabel = '직접 입력됨';
+          sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
+        }
+        // 2026-08-18 강 요청: "파싱된 이후로는 안지워지게 막기 - 수정하려면 수정 버튼
+        // 누르고 수정". 파싱된 상태(이번 세션에 감지됐거나, 화이트리스트 필드에 값이
+        // 이미 있는 경우)인 필드는 기본적으로 읽기 전용으로 잠그고, "수정" 버튼을 눌러
+        // 이 세션에서 한 번 잠금 해제해야 편집 가능해진다. 수기 입력 필드는 애초에
+        // 잠글 대상이 아니라 항상 편집 가능.
+        const isParsed = !!parsedFrom || (isAutoFillable && !!value);
+        const unlocked = !!(state.unlockedFields && state.unlockedFields[f.fieldCode]);
+        const locked = isParsed && !unlocked;
+        return {
+          key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
+          labelEn: f.labelEn || '',
+          req: f.required ? '필수' : '선택', ph: f.helpText || '', value,
+          hint: f.helpText || '', sourceLabel, sourceChip,
+          autoFillable: isAutoFillable,
+          section: f.section || 'SYSTEM',
+          // 입력 위젯 종류. 지금까지 361개 필드를 전부 <input type=text>로 받았다 -
+          // 날짜에 "2026/08/19"와 "26.8.19"가 섞여 들어오고, Enum에는 "코일"과 "Coil"이
+          // 같이 들어왔다. data_type/code_group으로 위젯을 갈라준다.
+          inputKind: inputKindOf(f),
+          options: optionsFor(f, codeOptions),
+          // T0(법정필수)인지 T1(조건부필수)인지. 제조사 입장에서 "EU 법이 요구하는 칸"과
+          // "우리가 그냥 받는 칸"은 채우는 우선순위가 완전히 다른데 지금까지 화면에서
+          // 구분이 안 됐다.
+          tier: f.tier || '',
+          tierLabel: TIER_LABEL[f.tier] || '',
+          tierStyle: f.tier === 'T0' ? ctx.chip('rgba(224,59,59,.10)', '#C22B2B')
+            : f.tier === 'T1' ? ctx.chip('rgba(0,69,169,.10)', '#0045A9')
+            : ctx.chip('rgba(132,148,172,.16)', '#6B7A93'),
+          // 근거 조항 + T1 발동 조건. 항상 펼쳐두면 폼이 법령 인용으로 뒤덮이니
+          // 툴팁(title 속성)으로만 붙인다.
+          basisTip: [f.legalBasis, f.t1Condition ? '발동 조건: ' + f.t1Condition : '']
+            .filter(Boolean).join(' / '),
+          restricted: f.disclosureScope && f.disclosureScope !== 'PUBLIC',
+          disclosureLabel: DISCLOSURE_LABEL[f.disclosureScope] || '',
+          // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
+          inputBorderColor: value ? '#12A150' : '#E03B3B',
+          locked,
+          unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [f.fieldCode]: true } })),
+          onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
+        };
+      })
+    : fieldSets.map(([label, req, ph, value, hint]) => ({
+        key: label, label, req, ph, value, hint, sourceLabel: '', sourceChip: null, onChange: undefined
+      }));
+
   return {
     kpiTotal: dash ? String(dash.totalCount) : kpi[0],
     // "이번 달 신규" - 2026-08-19 수정: 예전엔 실데이터 쪽에 대응하는 집계가 없어서
@@ -361,66 +533,11 @@ export function makerVals(ctx) {
     goToProductsFromQr: () => setState({ tab: 'products', qrModal: null }),
     // ff가 있으면(철강 역할) requirement_field 실 라벨/필수여부 + dpp_field_value 실 저장값,
     // 없으면 기존 목데이터 폼("SPHC" 같은 예시값 포함, 미시딩 도메인 한정 - 위 주석 참고).
-    fields: ff
-      // 파싱되는(자동 채움) 필드를 위쪽에, 수기 입력 필드를 아래쪽에 배치(2026-08-18 강
-      // 요청) - AUTO_FILL_FIELD_CODES 화이트리스트 기준 안정 정렬(같은 그룹 안에서는
-      // 서버가 내려준 원래 순서 유지), documentSlots의 required 정렬과 동일한 패턴.
-      ? [...ff.fields].sort((a, b) => (AUTO_FILL_FIELD_CODES.has(b.fieldCode) ? 1 : 0) - (AUTO_FILL_FIELD_CODES.has(a.fieldCode) ? 1 : 0)).map(f => {
-          const value = ffInputs[f.fieldCode] || '';
-          const parsedFrom = parsedSources[f.fieldCode];
-          const isAutoFillable = AUTO_FILL_FIELD_CODES.has(f.fieldCode);
-          // 파싱됨/수기 입력 구분(2026-08-17 강 요청, 재수정): 어떤 필드가 실제로 문서에서
-          // 자동 채워지는지는 백엔드 로직(AUTO_FILL_FIELD_CODES 주석 참고)에 정확히 정의돼
-          // 있으므로, 그 화이트리스트를 기준으로 판정한다 - 이번 세션에 업로드로 방금 채운
-          // 게 감지되면 어느 문서에서 왔는지까지 표시하고, 새로고침 등으로 감지를 놓쳤어도
-          // 화이트리스트 필드에 값이 있으면 "파싱됨"으로 인정한다. 화이트리스트 필드인데
-          // 아직 비어있으면 "문서에 없음"이 아니라 "문서 업로드 시 자동 인식"으로 안내한다
-          // (문서를 아직 안 올렸을 뿐, 언젠가 채워질 필드라는 뜻). 화이트리스트 밖의
-          // 필드(Heat No/강종 등 26개)는 애초에 어떤 문서에서도 자동 추출되지 않는
-          // 순수 수기입력 항목이라 "직접 입력 항목"으로 중립적으로 표시한다.
-          // 2026-08-18 강 요청: "~페이지에서 파싱" 문구가 반복되면 너무 길어지니 "파싱(문서명)"
-          // 형태로 축약. sourceChip(항목 이름 옆 배지)은 AppView.jsx에서 더 이상 렌더링하지
-          // 않고(중복 표시 제거 요청) 이 sourceLabel 하나만 항목 아래에 표시한다.
-          let sourceLabel; let sourceChip;
-          if (parsedFrom) {
-            sourceLabel = '파싱(' + parsedFrom + ')';
-            sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
-          } else if (isAutoFillable && value) {
-            sourceLabel = '파싱(' + (AUTO_FILL_DOC_NAME[f.fieldCode] || '업로드 문서') + ')';
-            sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
-          } else if (isAutoFillable && !value) {
-            sourceLabel = (AUTO_FILL_DOC_NAME[f.fieldCode] || '문서') + ' 업로드 시 자동 인식';
-            sourceChip = ctx.chip('rgba(0,69,169,.10)', '#0045A9');
-          } else if (!value) {
-            sourceLabel = '직접 입력 항목';
-            sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
-          } else {
-            sourceLabel = '직접 입력됨';
-            sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
-          }
-          // 2026-08-18 강 요청: "파싱된 이후로는 안지워지게 막기 - 수정하려면 수정 버튼
-          // 누르고 수정". 파싱된 상태(이번 세션에 감지됐거나, 화이트리스트 필드에 값이
-          // 이미 있는 경우)인 필드는 기본적으로 읽기 전용으로 잠그고, "수정" 버튼을 눌러
-          // 이 세션에서 한 번 잠금 해제해야 편집 가능해진다. 수기 입력 필드는 애초에
-          // 잠글 대상이 아니라 항상 편집 가능.
-          const isParsed = !!parsedFrom || (isAutoFillable && !!value);
-          const unlocked = !!(state.unlockedFields && state.unlockedFields[f.fieldCode]);
-          const locked = isParsed && !unlocked;
-          return {
-            key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
-            req: f.required ? '필수' : '선택', ph: f.helpText || '', value,
-            hint: f.helpText || '', sourceLabel, sourceChip,
-            autoFillable: isAutoFillable,
-            // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
-            inputBorderColor: value ? '#12A150' : '#E03B3B',
-            locked,
-            unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [f.fieldCode]: true } })),
-            onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
-          };
-        })
-      : fieldSets.map(([label, req, ph, value, hint]) => ({
-          key: label, label, req, ph, value, hint, sourceLabel: '', sourceChip: null, onChange: undefined
-        })),
+    fields: formFields,
+    // 섹션 묶음(식별자 / 화학 성분 / 탄소·CBAM ...). 서버가 sections를 주면 그 순서를
+    // 따르고, 안 주면 필드 등장 순서로 만든다. 21개 섹션이 전부 펼쳐지면 스크롤이
+    // 수백 줄이라 첫 섹션만 열어둔다.
+    fieldSections: ff ? groupBySection(formFields, ff.sections, state.openFieldSections, setState) : [],
     fieldCheck: ff
       ? ff.fields.map(f => {
           const value = ffInputs[f.fieldCode] || '';

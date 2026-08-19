@@ -115,6 +115,7 @@ export default function AppView(v) {
     fieldFilledCount,
     fieldTotalCount,
     fields,
+    fieldSections,
     documentSlots,
     documentSlotsEmpty,
     partnerDocumentSlots,
@@ -993,27 +994,63 @@ export default function AppView(v) {
                 </button>
                 {fieldFormOpen ? (<>
                 {(() => {
-                  const parsedFields = (fields || []).filter(f => f.autoFillable);
-                  const manualFields = (fields || []).filter(f => !f.autoFillable);
+                  // 2026-08-19: 필드가 80 -> 361개가 되면서 화면 구조를 두 단계로 바꿨다.
+                  //   1단계 섹션(식별자 / 화학 성분 / 탄소·CBAM ...) - 접었다 펼 수 있고,
+                  //          헤더에 그 섹션의 필수 입력 진행도(3/7)를 붙인다.
+                  //   2단계 섹션 안에서 파싱/수기 구분 - 예전 화면의 두 블록을 그대로 유지.
+                  // 예전처럼 파싱/수기 두 덩어리만 두면 각 덩어리가 150줄짜리 벽이 된다.
+                  // fieldSections가 비어 있으면(구버전 BE, 또는 목데이터 폼 역할) 예전
+                  // 방식으로 그대로 그린다.
+                  const renderInput = (f) => {
+                    const base = { height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: f.locked ? '#F2F4F8' : '#fff', color: f.locked ? '#6B7A93' : '#0B1B33', cursor: f.locked ? 'not-allowed' : 'text', width: '100%', boxSizing: 'border-box' };
+                    if (!f.onChange) {
+                      return <input placeholder={f.ph} defaultValue={f.value} style={{ ...base, background: '#fff' }} />;
+                    }
+                    const onChange = f.locked ? undefined : f.onChange;
+                    if (f.inputKind === 'select') {
+                      return (
+                        <select value={f.value} onChange={onChange} disabled={f.locked} style={base}>
+                          <option value="">선택하세요</option>
+                          {(f.options || []).map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                        </select>
+                      );
+                    }
+                    if (f.inputKind === 'boolean') {
+                      return (
+                        <select value={f.value} onChange={onChange} disabled={f.locked} style={base}>
+                          <option value="">선택하세요</option>
+                          <option value="true">예 / 해당됨</option>
+                          <option value="false">아니오 / 해당 없음</option>
+                        </select>
+                      );
+                    }
+                    if (f.inputKind === 'textarea') {
+                      return <textarea placeholder={f.ph} value={f.value} onChange={onChange} readOnly={f.locked} rows={3} style={{ ...base, height: 'auto', padding: '12px 14px', resize: 'vertical', fontFamily: 'inherit' }} />;
+                    }
+                    const type = f.inputKind === 'number' ? 'number'
+                      : f.inputKind === 'date' ? 'date'
+                      : f.inputKind === 'datetime' ? 'datetime-local'
+                      : f.inputKind === 'url' ? 'url' : 'text';
+                    return <input type={type} placeholder={f.ph} value={f.value} onChange={onChange} readOnly={f.locked} style={base} />;
+                  };
                   const renderField = (f, $index) => (<React.Fragment key={$index}>
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                       <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '7px' }}>
-                        <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
                           {f.label}{f.req === '필수' ? (<span style={{ color: '#C22B2B' }}>*</span>) : null}
+                          {f.tierLabel ? (<span title={f.basisTip} style={{ ...f.tierStyle, fontSize: '10px', padding: '1px 6px', borderRadius: '6px', fontWeight: '600', cursor: f.basisTip ? 'help' : 'default' }}>{f.tierLabel}</span>) : null}
+                          {f.disclosureLabel ? (<span style={{ fontSize: '10px', color: '#8494AC' }}>· {f.disclosureLabel}</span>) : null}
                         </span>
                         {f.locked ? (<button type="button" onClick={f.unlock} style={{ height: '22px', padding: '0 9px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '7px', background: '#fff', fontSize: '10.5px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', flex: 'none' }}>수정</button>) : null}
                       </span>
-                      {f.onChange
-                        ? <input placeholder={f.ph} value={f.value} onChange={f.locked ? undefined : f.onChange} readOnly={f.locked} style={{ height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: f.locked ? '#F2F4F8' : '#fff', color: f.locked ? '#6B7A93' : '#0B1B33', cursor: f.locked ? 'not-allowed' : 'text' }} />
-                        : <input placeholder={f.ph} defaultValue={f.value} style={{ height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: '#fff' }} />}
+                      {renderInput(f)}
                       <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.sourceLabel}</span>
                     </label>
                     </React.Fragment>);
                   // 2026-08-18(2차) 강 요청: "파싱되는 데이터랑 그냥 입력하는 데이터랑
-                  // 블록으로 구분" - 예전엔 위/아래로 나뉜 섹션 제목 텍스트만 있고 눈에 띄는
-                  // 경계가 없어서 헷갈렸다. 각 그룹을 옅은 배경 + 테두리가 있는 카드형 블록
-                  // 으로 감싸서(파싱=초록 톤, 수기=회색 톤) 한눈에 구분되게 한다.
-                  return (
+                  // 블록으로 구분" - 각 그룹을 옅은 배경 + 테두리가 있는 카드형 블록으로
+                  // 감싼다(파싱=초록 톤, 수기=회색 톤).
+                  const renderGroups = (parsedFields, manualFields) => (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                       {parsedFields.length ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '14px', borderRadius: '14px', background: 'rgba(18,161,80,.05)', border: '1px solid rgba(18,161,80,.18)' }}>
@@ -1031,6 +1068,29 @@ export default function AppView(v) {
                           </div>
                         </div>
                       ) : null}
+                    </div>
+                  );
+                  if (!fieldSections || !fieldSections.length) {
+                    return renderGroups((fields || []).filter(f => f.autoFillable), (fields || []).filter(f => !f.autoFillable));
+                  }
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {fieldSections.map((sec) => (
+                        <div key={sec.key} style={{ border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', overflow: 'hidden' }}>
+                          <button type="button" onClick={sec.toggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', width: '100%', padding: '12px 14px', border: '0', background: sec.open ? '#F7F9FD' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: sec.progressColor, flex: 'none' }}></span>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#0B1B33' }}>{sec.label}</span>
+                              <span style={{ fontSize: '11px', color: '#8494AC' }}>{sec.total}개 항목</span>
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              {sec.requiredCount ? (<span style={{ fontSize: '11.5px', fontWeight: '600', color: sec.progressColor }}>필수 {sec.filledRequiredCount}/{sec.requiredCount}</span>) : null}
+                              <span style={{ fontSize: '11px', color: '#8494AC', transform: sec.open ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
+                            </span>
+                          </button>
+                          {sec.open ? (<div style={{ padding: '4px 14px 14px' }}>{renderGroups(sec.parsed, sec.manual)}</div>) : null}
+                        </div>
+                      ))}
                     </div>
                   );
                 })()}
