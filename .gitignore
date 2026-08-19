@@ -19,6 +19,8 @@ FE/*.local
 # --- Python (parser) ---
 parser/__pycache__/
 parser/**/__pycache__/
+# 목데이터 생성기도 파이썬이라 같은 캐시가 생긴다
+docker/mock-documents/generator/__pycache__/
 parser/.pytest_cache/
 parser/*.pyc
 parser/.venv/
