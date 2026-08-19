@@ -185,9 +185,11 @@ export function makerVals(ctx) {
     : '필수 문서를 모두 제출·검증 완료해야 발급할 수 있습니다.';
   return {
     kpiTotal: dash ? String(dash.totalCount) : kpi[0],
-    // "이번 달 신규"/"서류 대기"는 실데이터 쪽에 대응하는 집계가 없다(생성일 기준 집계도,
-    // 서류별 대기 상태 집계도 아직 안 만듦) - 가짜 숫자 대신 0으로 정직하게.
-    kpiNew: dash ? 0 : kpi[1],
+    // "이번 달 신규" - 2026-08-19 수정: 예전엔 실데이터 쪽에 대응하는 집계가 없어서
+    // 항상 0을 보여줬다("등록 DPP 수" 옆 +N 배지가 실제 값을 반영 못하던 버그) - 이제
+    // DashboardResponse.newThisMonthCount(BE, dpp.created_at 기준 집계)를 그대로 쓴다.
+    // "서류 대기"는 여전히 대응하는 집계가 없어서 0으로 남겨둔다.
+    kpiNew: dash ? dash.newThisMonthCount : kpi[1],
     kpiIncomplete: dash ? dash.incompleteCount : kpi[2],
     kpiMissing: dash ? dash.missingFields.length : kpi[3],
     kpiWaiting: dash ? 0 : kpi[4],

@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -92,8 +93,15 @@ public class DashboardService {
         List<DppSummaryDto> summaries = new ArrayList<>();
         double completenessSum = 0;
         int incompleteCount = 0;
+        // "이번 달 신규" 집계(2026-08-19 추가) - 이 달 1일 00:00 이후 생성된 DPP 수.
+        OffsetDateTime monthStart = OffsetDateTime.now()
+                .withDayOfMonth(1).withHour(0).withMinute(0).withSecond(0).withNano(0);
+        int newThisMonthCount = 0;
 
         for (Dpp dpp : dpps) {
+            if (dpp.getCreatedAt() != null && !dpp.getCreatedAt().isBefore(monthStart)) {
+                newThisMonthCount++;
+            }
             double rate = recalc(dpp.getDppId());
             int[] counts = fetchCounts(dpp.getDppId());
             ProductModel model = modelsById.get(dpp.getModelId());
@@ -141,7 +149,7 @@ public class DashboardService {
         long zkpPending = zkpProofRepository.countByDppIdInAndStatus(dppIds, "REQUESTED");
         long zkpRejected = zkpProofRepository.countByDppIdInAndStatus(dppIds, "REJECTED");
 
-        return new DashboardResponse(summaries.size(), incompleteCount, average, summaries, missingFields,
+        return new DashboardResponse(summaries.size(), newThisMonthCount, incompleteCount, average, summaries, missingFields,
                 zkpPending, zkpRejected);
     }
 
@@ -169,6 +177,6 @@ public class DashboardService {
     }
 
     private DashboardResponse emptyDashboard() {
-        return new DashboardResponse(0, 0, 0.0, List.of(), List.of(), 0, 0);
+        return new DashboardResponse(0, 0, 0, 0.0, List.of(), List.of(), 0, 0);
     }
 }
