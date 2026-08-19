@@ -12,7 +12,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAuditLog } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -104,6 +104,9 @@ export function useAppLogic(userProps) {
   // 큐에서 케이스 하나를 선택하면(state.customsId) 아래 useEffect가 상세(체크리스트 포함)를
   // 불러와 여기 채운다. 선택 전이거나 아직 로딩 중이면 null.
   const [customsCaseDetail, setCustomsCaseDetail] = useState(null);
+  // EU 시장감시 감사 로그(GET /audit-log) - ADMIN이거나 org_type=EU_AUTHORITY 계정이
+  // 아니면 403으로 null 유지(euVals.js scAudit 화면 전용).
+  const [auditLogData, setAuditLogData] = useState(null);
   // "강재 기본 정보" 입력 폼(GET/POST /me/field-form*). requirement_field 시딩이 STEEL
   // 도메인만 있어서(V4__seed_requirement_steel.sql - battery/textile 시딩 없음) 철강
   // 역할에서만 실데이터로 불러온다 - 그 외 역할은 기존 목데이터 폼 그대로 유지.
@@ -232,6 +235,8 @@ export function useAppLogic(userProps) {
     searchDppRegistry('').then((res) => { if (alive) setEuRegistryData(res || []); }).catch(() => {});
     // 세관(org_type=CUSTOMS) 계정이 아니면 403 - 마찬가지로 조용히 무시.
     fetchCustomsQueue(false).then((res) => { if (alive) setCustomsQueueData(res || []); }).catch(() => {});
+    // ADMIN이거나 EU_AUTHORITY 계정이 아니면 403 - 마찬가지로 조용히 무시.
+    fetchAuditLog().then((res) => { if (alive) setAuditLogData(res || []); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
@@ -936,6 +941,7 @@ export function useAppLogic(userProps) {
     euRegistryData, setEuRegistryData,
     customsQueueData, customsCaseDetail, refetchCustomsQueue, refetchCustomsCase, decideCustomsCase,
     requestCustomsClearance,
+    auditLogData,
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp,
     documentFormData, setDocumentFormData, uploadDocument,

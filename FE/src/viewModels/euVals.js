@@ -11,6 +11,11 @@ import { searchDppRegistry } from '../api/meApi.js';
  * 앞 8자리만 잘라서 보여준다. 검색창 3개(식별자/회사/HS코드)는 백엔드가 단일 검색어로
  * 한 번에 OR 매칭하므로 실제로는 하나의 입력값을 공유한다(euQuery) - 나머지 두 칸은
  * 참고용으로 읽기전용 표시만 한다.
+ *
+ * 감사 로그(auditLog)는 2026-08-19부터 com.dpp.audit.controller.AuditLogController(GET
+ * /audit-log) 실데이터다 - 그 전엔 audit_log 테이블 자체엔 자바 코드가 전혀 없어서 하드코딩
+ * 배열 8건을 그대로 보여줬다. ADMIN이거나 org_type=EU_AUTHORITY가 아니면 403이라 그 경우
+ * ctx.auditLogData는 null로 남고 화면엔 빈 목록으로 보인다.
  */
 export function euVals(ctx) {
   const { state, setState } = ctx;
@@ -43,18 +48,12 @@ export function euVals(ctx) {
       name: r.modelName, company: r.orgName, hs: r.hsCode || '—', domainRaw: r.domain,
       open: () => setState({ docPreview: { name: r.modelName + ' · ' + r.orgName, meta: 'HS ' + (r.hsCode || '—') + ' · ' + (r.issuedAtDate || '—'), status: '발급됨' } })
     })),
-    auditLog: [
-      ['2026-07-30 07:41:12', '대성제강 · 박지우', 'DPP 발급', 'DPP-KR-ST-2607-0142', '성공', '0x8a41…c92d'],
-      ['2026-07-30 07:12:04', 'IEUM · 김도현', 'Tier 심사 승인', '우진메탈 · Tier 3', '성공', '0x71bc…4f08'],
-      ['2026-07-29 22:08:55', '루멘셀 · 이서준', 'ZKP 증명 제출', 'DPP-KR-BT-2607-0298', '반려', '0x33ef…a1b7'],
-      ['2026-07-29 18:44:31', '시장감독기관 · 윤가람', '레지스트리 열람', 'DPP-DE-ST-2607-0088', '성공', '0x0d92…77aa'],
-      ['2026-07-29 15:20:09', '아라텍스 · 최유진', '데이터 수정', 'DPP-KR-TX-2607-0533', '성공', '0xb410…2e51'],
-      ['2026-07-29 11:03:47', 'IEUM · 시스템', '블록체인 앵커링', 'BATCH-2607-118 (240건)', '성공', '0xf7a2…9c30'],
-      ['2026-07-28 20:31:18', '우진메탈 · 초대계정', '문서 업로드', 'DOC-2607-1151', '검증 실패', '0x5511…be6f'],
-      ['2026-07-28 09:14:52', 'IEUM · 김도현', '가입 승인', 'Fibrelune SAS', '성공', '0x2cd8…10f4']
-    ].map(([at, actor, action, target, result, hash]) => ({
-      key: hash + at, at, actor, action, target, result, hash,
-      chip: result === '성공' ? ctx.chip('rgba(18,161,80,.12)', '#0E7A3D') : ctx.chip('rgba(224,59,59,.10)', '#C22B2B')
+    auditLog: (ctx.auditLogData || []).map((l, i) => ({
+      key: (l.txId || '') + l.atIso + i,
+      at: l.atIso ? l.atIso.replace('T', ' ').slice(0, 19) : '—',
+      actor: l.actor, action: l.action, target: l.target, result: l.result,
+      hash: l.txId || '—',
+      chip: l.result === '성공' ? ctx.chip('rgba(18,161,80,.12)', '#0E7A3D') : ctx.chip('rgba(224,59,59,.10)', '#C22B2B')
     }))
   };
 }

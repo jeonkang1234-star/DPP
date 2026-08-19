@@ -7,6 +7,7 @@ import com.dpp.auth.entity.CredentialType;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.auth.security.JwtTokenProvider;
+import com.dpp.audit.service.AuditLogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,13 +32,16 @@ public class PasswordAuthService {
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final AuditLogService auditLogService;
 
     public PasswordAuthService(UserAccountRepository userAccountRepository,
                                 PasswordEncoder passwordEncoder,
-                                JwtTokenProvider jwtTokenProvider) {
+                                JwtTokenProvider jwtTokenProvider,
+                                AuditLogService auditLogService) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -77,6 +81,9 @@ public class PasswordAuthService {
 
         String access = jwtTokenProvider.createAccessToken(user.getUserId().toString(), claims);
         String refresh = jwtTokenProvider.createRefreshToken(user.getUserId().toString());
+
+        auditLogService.record(user.getUserId(), "LOGIN", "USER_ACCOUNT", user.getUserId(),
+                user.getEmail(), "성공", null);
 
         return LoginResponse.of(access, refresh, user.getAccountType().name(), user.getEmail(), user.getDisplayName());
     }
