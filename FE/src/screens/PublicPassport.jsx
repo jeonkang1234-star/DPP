@@ -60,11 +60,39 @@ export default function PublicPassport() {
                 <span style={{ fontSize: '12.5px', color: '#8494AC' }}>공개된 항목이 없습니다.</span>
               ) : (state.data.fields || []).map((f, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '10px 0', borderBottom: i === state.data.fields.length - 1 ? 'none' : '1px solid rgba(16,32,64,.06)' }}>
-                  <span style={{ fontSize: '12.5px', color: '#8494AC', flex: 'none' }}>{f.labelKo}</span>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#0B1B33', textAlign: 'right' }}>{f.value}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#8494AC', flex: 'none' }}>
+                    {f.labelKo}
+                    {f.tier === 'T0' ? (<span style={{ fontSize: '9.5px', fontWeight: '600', color: '#C22B2B', border: '1px solid rgba(224,59,59,.25)', borderRadius: '5px', padding: '0 4px' }}>법정필수</span>) : null}
+                  </span>
+                  {/* 영업비밀 항목은 값 대신 "한계값 충족" 증명 결과만 온다(proofLabel).
+                      값이 비어 있는데 라벨만 뜨는 게 아니라, 무엇이 검증됐는지가 보여야 한다. */}
+                  {f.value != null && f.value !== ''
+                    ? (<span style={{ fontSize: '13px', fontWeight: '600', color: '#0B1B33', textAlign: 'right' }}>{f.value}</span>)
+                    : (<span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: '600', color: '#0E7A3D', textAlign: 'right' }}>
+                         <span style={{ width: '6px', height: '6px', borderRadius: '999px', background: '#12A150' }} />
+                         {f.proofLabel}
+                       </span>)}
                 </div>
               ))}
             </div>
+
+            {/* 공개범위 안내 - 항목이 몇 개 안 보이는 이유를 밝힌다. 값을 안 주는 것과
+                항목의 존재를 숨기는 것은 다르고, 후자는 규정이 요구하는 바가 아니다. */}
+            {(state.data.restrictedCount > 0 || state.data.tradeSecretCount > 0) ? (
+              <div style={{ background: 'rgba(0,69,169,.04)', border: '1px solid rgba(0,69,169,.14)', borderRadius: '14px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '600', color: '#0045A9' }}>공개 범위 안내</span>
+                {state.data.restrictedCount > 0 ? (
+                  <span style={{ fontSize: '12px', color: '#44546F' }}>
+                    {state.data.restrictedCount}개 항목은 정당한 이익 보유자·인증기관·시장감시당국만 조회할 수 있어 이 페이지에 표시되지 않습니다.
+                  </span>
+                ) : null}
+                {state.data.tradeSecretCount > 0 ? (
+                  <span style={{ fontSize: '12px', color: '#44546F' }}>
+                    {state.data.tradeSecretCount}개 항목은 영업비밀에 해당해 값 대신 한계값 충족 여부만 영지식증명으로 공개됩니다.
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </>
         )}
 

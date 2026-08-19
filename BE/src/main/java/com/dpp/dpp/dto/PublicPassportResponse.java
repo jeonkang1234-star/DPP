@@ -10,6 +10,11 @@ import java.util.List;
  *
  * issued=false면 아직 발급 전(DRAFT) DPP라 나머지 필드는 비워서 내려준다 - 초안 데이터를
  * 공개로 노출하지 않는다(PublicPassportService.NOT_ISSUED 참고).
+ *
+ * restrictedCount / tradeSecretCount - 2026-08-19 추가. 공개범위를 적용하고 나면 "이
+ * 여권에 항목이 3개뿐인가?"라는 오해가 생긴다. 값은 안 주되 몇 개가 왜 빠졌는지는
+ * 밝히는 게 맞다 - 배터리규정 Annex XIII도 접근 권한을 계층으로 나누지, 항목의 존재
+ * 자체를 숨기지는 않는다.
  */
 public record PublicPassportResponse(
         boolean issued,
@@ -17,6 +22,8 @@ public record PublicPassportResponse(
         String modelName,
         String domain,
         String issuedAtDate,
-        List<PublicPassportFieldDto> fields
+        List<PublicPassportFieldDto> fields,
+        int restrictedCount,
+        int tradeSecretCount
 ) {
 }
