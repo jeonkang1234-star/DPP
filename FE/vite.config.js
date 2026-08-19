@@ -32,6 +32,12 @@ export default defineConfig({
                 target: "http://localhost:".concat(backendPort),
                 changeOrigin: true,
             },
+            // com.dpp.customs.controller.CustomsClearanceController - 2026-08-19 통관 기능
+            // 추가 당시 여기 반영이 누락됐던 걸 감사 로그 작업 중 발견해서 같이 고침.
+            "/customs": {
+                target: "http://localhost:".concat(backendPort),
+                changeOrigin: true,
+            },
             "/public": {
                 target: "http://localhost:".concat(backendPort),
                 changeOrigin: true,

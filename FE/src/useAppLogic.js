@@ -12,7 +12,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -97,6 +97,13 @@ export function useAppLogic(userProps) {
   const [orgApprovalsData, setOrgApprovalsData] = useState(null);
   // EU 시장감시 레지스트리 조회 전용 - 규제기관 계정이 아니면 403으로 null 유지.
   const [euRegistryData, setEuRegistryData] = useState(null);
+  // 세관 통관 큐(GET /customs/queue) - org_type=CUSTOMS 계정이 아니면 403으로 null 유지.
+  // 심사 대기(PENDING) 목록만 담는다 - "세관마다 확인해야 할 DPP가 달라야 함"(2026-08-19
+  // 강 요청)이 실제로 동작하는지 눈에 보이는 자리.
+  const [customsQueueData, setCustomsQueueData] = useState(null);
+  // 큐에서 케이스 하나를 선택하면(state.customsId) 아래 useEffect가 상세(체크리스트 포함)를
+  // 불러와 여기 채운다. 선택 전이거나 아직 로딩 중이면 null.
+  const [customsCaseDetail, setCustomsCaseDetail] = useState(null);
   // "강재 기본 정보" 입력 폼(GET/POST /me/field-form*). requirement_field 시딩이 STEEL
   // 도메인만 있어서(V4__seed_requirement_steel.sql - battery/textile 시딩 없음) 철강
   // 역할에서만 실데이터로 불러온다 - 그 외 역할은 기존 목데이터 폼 그대로 유지.
@@ -223,9 +230,31 @@ export function useAppLogic(userProps) {
     fetchOrgApprovals().then((res) => { if (alive) setOrgApprovalsData(res || []); }).catch(() => {});
     // EU_AUTHORITY/CUSTOMS org_type이거나 ADMIN이 아니면 403 - 마찬가지로 조용히 무시.
     searchDppRegistry('').then((res) => { if (alive) setEuRegistryData(res || []); }).catch(() => {});
+    // 세관(org_type=CUSTOMS) 계정이 아니면 403 - 마찬가지로 조용히 무시.
+    fetchCustomsQueue(false).then((res) => { if (alive) setCustomsQueueData(res || []); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
+
+  /** 세관 큐 새로고침 - 승인/보류/반려 처리 직후 목록에서 방금 그 케이스를 빼기 위해 씀. */
+  const refetchCustomsQueue = useCallback(() => {
+    fetchCustomsQueue(false).then((res) => setCustomsQueueData(res || [])).catch(() => {});
+  }, []);
+
+  /** 큐에서 케이스를 선택하면(state.customsId) 체크리스트 포함 상세를 불러온다. */
+  useEffect(() => {
+    if (state.view !== 'app' || !state.customsId) { setCustomsCaseDetail(null); return; }
+    let alive = true;
+    fetchCustomsCase(state.customsId)
+      .then((res) => { if (alive) setCustomsCaseDetail(res); })
+      .catch(() => { if (alive) setCustomsCaseDetail(null); });
+    return () => { alive = false; };
+  }, [state.view, state.customsId]);
+
+  const refetchCustomsCase = useCallback((clearanceId) => {
+    if (!clearanceId) return;
+    fetchCustomsCase(clearanceId).then((res) => setCustomsCaseDetail(res)).catch(() => {});
+  }, []);
 
   /**
    * 협력사 초대 알림이 실시간이 아니라 "새로고침해야 온다"는 리포트(2026-08-18) - 원인은
@@ -917,6 +946,8 @@ export function useAppLogic(userProps) {
     meData, orgData, setOrgData, dashboardData, scansData, notifCatsData, notifsData, fmtRelative,
     orgApprovalsData, refetchOrgApprovals,
     euRegistryData, setEuRegistryData,
+    customsQueueData, customsCaseDetail, refetchCustomsQueue, refetchCustomsCase, decideCustomsCase,
+    requestCustomsClearance,
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp,
     documentFormData, setDocumentFormData, uploadDocument,

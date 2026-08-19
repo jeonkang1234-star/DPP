@@ -291,3 +291,35 @@ export function searchDppRegistry(q) {
   const query = q ? `?q=${encodeURIComponent(q)}` : '';
   return authedFetch(`/verify/dpp/search${query}`);
 }
+
+
+/**
+ * 통관 신청 - 발급 완료(status=ACTIVE)된 내 조직 DPP를 어느 나라로 수출하는지 선언한다
+ * (com.dpp.customs.controller.CustomsClearanceController). 수출국은 서버가 DPP 소유
+ * 조직의 country_code에서 알아서 채우고, 여기선 수입국/수입업체 정보만 보낸다
+ * (2026-08-19 강 요청 - 세관 관할을 수출국+수입국 둘 다로 매칭하기 위한 첫 단계).
+ */
+export function requestCustomsClearance({ dppId, importCountryCode, importerName, importerAddress, importerEori, declaredHsCode }) {
+  return authedFetch('/customs/clearance-requests', {
+    method: 'POST',
+    body: JSON.stringify({ dppId, importCountryCode, importerName, importerAddress, importerEori, declaredHsCode }),
+  });
+}
+
+/** 세관 큐 - decided=false(기본)면 심사 대기 중, true면 이미 결정 난 이력(통관 이력 탭). org_type=CUSTOMS 계정만 200. */
+export function fetchCustomsQueue(decided) {
+  return authedFetch(`/customs/queue?decided=${decided ? 'true' : 'false'}`);
+}
+
+/** 통관 케이스 상세 - 확인 항목(checks) 6종 + 종합 판정 포함. */
+export function fetchCustomsCase(clearanceId) {
+  return authedFetch(`/customs/queue/${clearanceId}`);
+}
+
+/** 통관 결정(승인/보류/반려). decision: 'APPROVE' | 'HOLD' | 'REJECT'. */
+export function decideCustomsCase(clearanceId, decision, reason) {
+  return authedFetch(`/customs/queue/${clearanceId}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
+  });
+}
