@@ -563,10 +563,18 @@ export function makerVals(ctx) {
               e.target.value = '';
               if (!file) return;
               if (zkpUploader) {
+                // 2026-08-19 수정: 이 6종(Mill Sheet/CBAM/케어라벨/OEKO-TEX/배터리탄소/재활용)
+                // 업로드는 이제 dppId가 필수다(meApi.js 주석 참고) - 예전엔 dppId 없이 보내서
+                // 백엔드가 항상 "이 조직의 첫 번째 DPP"에 붙였고, 그래서 "새 DPP 생성"으로
+                // 새 초안을 만들어도 업로드는 계속 옛날 DPP로 가 버렸다(같은 파일을 사실상
+                // 다른 DPP에 올리려던 것인데 첫 DPP 기준 content_hash 중복으로 막힌 것).
+                // 일반 9종 문서 업로드(아래 else 분기, 605번째 줄)와 동일하게 먼저 임시저장으로
+                // dppId를 만들어야 올릴 수 있다.
+                if (!state.fieldFormDppId) { ctx.say('먼저 임시저장으로 DPP를 만든 뒤 문서를 올려 주세요.'); return; }
                 ctx.say(zkpUploader.waitMsg);
                 setState({ uploadingDocTypes: [...(state.uploadingDocTypes || []), d.docTypeCode] });
                 try {
-                  const result = await zkpUploader.call(file);
+                  const result = await zkpUploader.call(state.fieldFormDppId, file);
                   zkpUploader.setResult({ ...result, fileName: file.name });
                   // 2026-08-18 강 요청: "증명에 실패했으면 데이터 파싱 안되게" - specPassed가
                   // 명시적으로 false면(=ZKP 검증 실패) 방금 올린 문서에서 새로 채워진 필드를

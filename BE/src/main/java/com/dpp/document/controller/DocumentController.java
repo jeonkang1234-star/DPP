@@ -55,49 +55,55 @@ public class DocumentController {
     @PostMapping(value = "/document/upload/steel-mill", consumes = "multipart/form-data")
     public ResponseEntity<SteelMillUploadResponse> uploadSteelMillSheet(
             @RequestParam("file") MultipartFile file,
+            @RequestParam("dppId") Long dppId,
             Authentication authentication) {
         Long userId = parseUserId(authentication);
-        return ResponseEntity.ok(documentIngestService.ingestSteelMillSheet(userId, file));
+        return ResponseEntity.ok(documentIngestService.ingestSteelMillSheet(userId, dppId, file));
     }
 
     @PostMapping(value = "/document/upload/cbam", consumes = "multipart/form-data")
     public ResponseEntity<CbamUploadResponse> uploadCbamReport(
             @RequestParam("file") MultipartFile file,
+            @RequestParam("dppId") Long dppId,
             Authentication authentication) {
         Long userId = parseUserId(authentication);
-        return ResponseEntity.ok(cbamIngestService.ingestCbamReport(userId, file));
+        return ResponseEntity.ok(cbamIngestService.ingestCbamReport(userId, dppId, file));
     }
 
     @PostMapping(value = "/document/upload/textile-care-label", consumes = "multipart/form-data")
     public ResponseEntity<CareLabelUploadResponse> uploadCareLabel(
             @RequestParam("file") MultipartFile file,
+            @RequestParam("dppId") Long dppId,
             Authentication authentication) {
         Long userId = parseUserId(authentication);
-        return ResponseEntity.ok(careLabelIngestService.ingestCareLabel(userId, file));
+        return ResponseEntity.ok(careLabelIngestService.ingestCareLabel(userId, dppId, file));
     }
 
     @PostMapping(value = "/document/upload/oekotex", consumes = "multipart/form-data")
     public ResponseEntity<OekotexUploadResponse> uploadOekotexLabel(
             @RequestParam("file") MultipartFile file,
+            @RequestParam("dppId") Long dppId,
             Authentication authentication) {
         Long userId = parseUserId(authentication);
-        return ResponseEntity.ok(oekotexIngestService.ingestOekotexLabel(userId, file));
+        return ResponseEntity.ok(oekotexIngestService.ingestOekotexLabel(userId, dppId, file));
     }
 
     @PostMapping(value = "/document/upload/battery-carbon", consumes = "multipart/form-data")
     public ResponseEntity<BatteryCarbonUploadResponse> uploadBatteryCarbonReport(
             @RequestParam("file") MultipartFile file,
+            @RequestParam("dppId") Long dppId,
             Authentication authentication) {
         Long userId = parseUserId(authentication);
-        return ResponseEntity.ok(batteryCarbonIngestService.ingestBatteryCarbonReport(userId, file));
+        return ResponseEntity.ok(batteryCarbonIngestService.ingestBatteryCarbonReport(userId, dppId, file));
     }
 
     @PostMapping(value = "/document/upload/recycling-report", consumes = "multipart/form-data")
     public ResponseEntity<RecyclingUploadResponse> uploadRecyclingReport(
             @RequestParam("file") MultipartFile file,
+            @RequestParam("dppId") Long dppId,
             Authentication authentication) {
         Long userId = parseUserId(authentication);
-        return ResponseEntity.ok(recyclingIngestService.ingestRecyclingReport(userId, file));
+        return ResponseEntity.ok(recyclingIngestService.ingestRecyclingReport(userId, dppId, file));
     }
 
     private Long parseUserId(Authentication authentication) {

@@ -780,7 +780,7 @@ export default function AppView(v) {
               <input placeholder="제품명 · DPP 식별자 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
               <span style={{ height: '36px', padding: '0 16px', display: 'grid', placeItems: 'center', borderRadius: '11px', background: '#F2F6FC', color: '#6B7A93', fontSize: '12.5px', fontWeight: '600' }}>검색</span>
             </div>
-            <button onClick={goInput} style={{ marginLeft: 'auto', height: '52px', padding: '0 22px', border: '0', borderRadius: '15px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 20px rgba(0,69,169,.26)' }}>+ 새 DPP 발급</button>
+            <button onClick={goInput} style={{ marginLeft: 'auto', height: '52px', padding: '0 22px', border: '0', borderRadius: '15px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 20px rgba(0,69,169,.26)' }}>+ 새 DPP 생성</button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
