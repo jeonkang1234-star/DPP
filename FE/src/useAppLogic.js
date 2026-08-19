@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   pill, roleCard, pillDot, domainCard, tabStyle,
   chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,
+  badgeText3d, segStyle3D, groove3d,
 } from './uiStyles.js';
 import { fetchAppData } from './api/mockApi.js';
 import { loadSession, saveSession, loadDraftDppId, saveDraftDppId, loadDraftInputs, saveDraftInputs, clearDraftInputs } from './api/session.js';
@@ -968,6 +969,7 @@ export function useAppLogic(userProps) {
     accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,
+    badgeText3d, segStyle3D, groove3d,
     makerVals, partnerVals, passportVals, approvalVals, customsVals, euVals, notifVals, dppVals, obVals,
   };
 
