@@ -12,7 +12,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, fetchAdminDashboard, fetchAdminMembers } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -57,6 +57,18 @@ function fmtDate(iso) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// 관리자 "회원 관리" 표 아바타 색 - 실 회원 목록(AdminMemberDto)엔 mock처럼 미리 정해둔
+// hue가 없어서, 회사명을 시드로 고정 팔레트에서 결정적으로 골라 쓴다(같은 회사는 항상
+// 같은 색, 새로고침해도 안 바뀜). 장식용 색일 뿐 실제 데이터가 아니므로 이 정도 유도는
+// "가짜 데이터"에 해당하지 않는다.
+const ADMIN_AVATAR_PALETTE = ['#0045A9', '#12A150', '#96660A', '#7C3AED', '#DB2777', '#0EA5E9', '#DC2626', '#059669'];
+function avatarColorFor(seed) {
+  const s = String(seed || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return ADMIN_AVATAR_PALETTE[hash % ADMIN_AVATAR_PALETTE.length];
+}
+
 /** 알림 created_at(ISO) -> "방금 전"/"N분 전"/"N시간 전"/"N일 전". */
 function fmtRelative(iso) {
   if (!iso) return '';
@@ -97,6 +109,13 @@ export function useAppLogic(userProps) {
   const [orgApprovalsData, setOrgApprovalsData] = useState(null);
   // EU 시장감시 레지스트리 조회 전용 - 규제기관 계정이 아니면 403으로 null 유지.
   const [euRegistryData, setEuRegistryData] = useState(null);
+  // 관리자 대시보드 KPI(GET /admin/dashboard) - ADMIN 계정이 아니면 403으로 null 유지.
+  // adminDashboardFetchedAt은 "최근 갱신" 표시용 - 하드코딩된 날짜("2026-07-30 09:41
+  // KST") 대신 실제로 이 데이터를 받아온 시각을 보여준다.
+  const [adminDashboardData, setAdminDashboardData] = useState(null);
+  const [adminDashboardFetchedAt, setAdminDashboardFetchedAt] = useState(null);
+  // 관리자 "회원 관리" 표(GET /admin/members) - 마찬가지로 ADMIN 전용, 그 외엔 null 유지.
+  const [adminMembersData, setAdminMembersData] = useState(null);
   // "강재 기본 정보" 입력 폼(GET/POST /me/field-form*). requirement_field 시딩이 STEEL
   // 도메인만 있어서(V4__seed_requirement_steel.sql - battery/textile 시딩 없음) 철강
   // 역할에서만 실데이터로 불러온다 - 그 외 역할은 기존 목데이터 폼 그대로 유지.
@@ -223,6 +242,9 @@ export function useAppLogic(userProps) {
     fetchOrgApprovals().then((res) => { if (alive) setOrgApprovalsData(res || []); }).catch(() => {});
     // EU_AUTHORITY/CUSTOMS org_type이거나 ADMIN이 아니면 403 - 마찬가지로 조용히 무시.
     searchDppRegistry('').then((res) => { if (alive) setEuRegistryData(res || []); }).catch(() => {});
+    // ADMIN 계정이 아니면 403 - 관리자 대시보드 KPI/회원 목록도 마찬가지로 조용히 무시.
+    fetchAdminDashboard().then((res) => { if (alive) { setAdminDashboardData(res); setAdminDashboardFetchedAt(new Date()); } }).catch(() => {});
+    fetchAdminMembers().then((res) => { if (alive) setAdminMembersData(res || []); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
@@ -579,9 +601,24 @@ export function useAppLogic(userProps) {
     const s = state;
     const p = profile();
     const isMaker = s.role === 'steel' || s.role === 'battery' || s.role === 'textile';
-    const anchorSeq = data.anchors;
+    // 관리자 KPI/스파크라인 - 예전엔 data.anchors(mock 배열)였다. ADMIN 로그인 후 위
+    // useEffect가 /admin/dashboard를 불러와 adminDashboardData를 채우기 전까지는(또는
+    // ADMIN이 아니면 계속) 빈 배열로 둔다 - mock으로 되돌아가지 않는다("real data over
+    // fake" 원칙, 2026-08-19 강 요청).
+    const admin = adminDashboardData;
+    const anchorSeq = admin ? admin.anchorSparkline14d : [];
+    // "유형별 문의"는 실제로 문의를 접수하는 기능 자체가 아직 없어서(신고/티켓 테이블,
+    // API 전무) 실데이터로 바꿀 대상이 없다 - 없는 기능을 위해 새 서브시스템을 만드는
+    // 대신 mock을 그대로 두고 화면 하단 카드 제목에 "(견본)"을 붙여 목데이터임을 밝힌다.
     const inqData = data.inquiries;
-    const memberData = data.members;
+    const adminMembersList = adminMembersData || [];
+    const adminAnchorOk = !!(admin && admin.lastAnchoredMinutesAgo != null && admin.lastAnchoredMinutesAgo < 60 * 24);
+    const adminLastAnchoredLabel = !admin || admin.lastAnchoredMinutesAgo == null
+      ? '기록 없음'
+      : admin.lastAnchoredMinutesAgo < 1 ? '방금 전'
+      : admin.lastAnchoredMinutesAgo < 60 ? `${admin.lastAnchoredMinutesAgo}분 전`
+      : admin.lastAnchoredMinutesAgo < 60 * 24 ? `${Math.floor(admin.lastAnchoredMinutesAgo / 60)}시간 전`
+      : `${Math.floor(admin.lastAnchoredMinutesAgo / (60 * 24))}일 전`;
     return {
       workspace: p.ws,
       domainLabel: p.dl,
@@ -681,14 +718,36 @@ export function useAppLogic(userProps) {
       tier1Chip: chip('rgba(16,32,64,.07)', '#44546F'),
       tier2Chip: chip('rgba(0,69,169,.10)', '#0045A9'),
       tier3Chip: chip('rgba(18,161,80,.12)', '#0E7A3D'),
-      anchorBars: anchorSeq.map((h, i) => ({ key: i, style: { display: 'block', width: 6, height: h, borderRadius: 3, background: i > 12 ? 'rgba(134,239,172,.9)' : 'rgba(255,255,255,.24)' } })),
+      // 최근 14일 앵커링 건수 스파크라인(실데이터) - 최댓값 기준으로 막대 높이를
+      // 정규화한다(BE가 건수를 그대로 내려주므로 px로 바로 쓰면 하루 몰림에 따라
+      // 막대가 너무 작거나 커질 수 있어서).
+      anchorBars: (() => {
+        const seq = anchorSeq || [];
+        const max = Math.max(1, ...seq);
+        return seq.map((h, i) => ({ key: i, style: { display: 'block', width: 6, height: Math.max(2, Math.round((h / max) * 48)), borderRadius: 3, background: i > 12 ? 'rgba(134,239,172,.9)' : 'rgba(255,255,255,.24)' } }));
+      })(),
+      adminAnchorStatusLabel: admin ? (adminAnchorOk ? '정상' : '데이터 없음') : '—',
+      adminAnchorStatusOk: adminAnchorOk,
+      adminLastAnchoredLabel,
+      adminLastAnchorBlockLabel: admin && admin.lastAnchorBlockNo != null ? `#${admin.lastAnchorBlockNo.toLocaleString()}` : '—',
+      adminAnchorSuccessLabel: admin && admin.anchorSuccessRate30d != null ? `${admin.anchorSuccessRate30d}%` : '집계 없음',
+      adminTotalUsersLabel: admin ? admin.totalUsers.toLocaleString() : '—',
+      adminUserBreakdownLabel: admin ? `기업 ${admin.businessUsers.toLocaleString()} · 개인 ${admin.personalUsers.toLocaleString()}` : '',
+      adminTotalDppsLabel: admin ? admin.totalDpps.toLocaleString() : '—',
+      adminDppBreakdownLabel: admin ? `철강 ${admin.steelDpps.toLocaleString()} · 배터리 ${admin.batteryDpps.toLocaleString()} · 섬유 ${admin.textileDpps.toLocaleString()}` : '',
+      adminPendingCountLabel: admin ? `처리 대기 ${admin.pendingApprovalCount.toLocaleString()}건` : '처리 대기 —',
+      adminPendingBadge: admin ? admin.pendingApprovalCount.toLocaleString() : '—',
+      adminRefreshedAtLabel: adminDashboardFetchedAt ? `최근 갱신 ${fmtDateTime(adminDashboardFetchedAt.toISOString())}` : '',
+      // "(견본)" - 실제 문의 접수 기능이 아직 없어 mock 그대로임을 화면에서 밝힌다(위 inqData 주석 참고).
       inquiries: inqData.map(([label, count, pct]) => ({ key: label, label, count, pct, style: bar(pct * 2.6, '#0045A9') })),
-      members: memberData.map(([name, biz, joined, country, domain, held, issued, hue, initial]) => ({
-        key: name, name, biz, joined, country, domain, held, issued, initial,
-        avatar: avatarStyle(hue), domainChip: domainChipFor(domain),
-        domainDot: { width: 8, height: 8, flex: 'none', borderRadius: 999, background: domain === '철강' ? '#0045A9' : domain === '배터리' ? '#12A150' : '#E3A008' },
-        view: () => say(name + ' 회원 상세 정보를 조회했습니다.')
+      members: adminMembersList.map((m) => ({
+        key: m.orgId, name: m.orgName, biz: m.bizRegNo, joined: m.joinedDate, country: m.countryCode,
+        domain: m.domainLabel, held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),
+        avatar: avatarStyle(avatarColorFor(m.orgName)), domainChip: domainChipFor(m.domainLabel),
+        domainDot: { width: 8, height: 8, flex: 'none', borderRadius: 999, background: m.domainLabel === '철강' ? '#0045A9' : m.domainLabel === '배터리' ? '#12A150' : '#E3A008' },
+        view: () => say(m.orgName + ' 회원 상세 정보를 조회했습니다.')
       })),
+      membersEmpty: adminMembersList.length === 0,
       isLogin: s.view === 'login',
       isSignup: s.view === 'signup',
       isApp: s.view === 'app',

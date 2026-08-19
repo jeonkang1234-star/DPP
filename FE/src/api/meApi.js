@@ -279,3 +279,19 @@ export function searchDppRegistry(q) {
   const query = q ? `?q=${encodeURIComponent(q)}` : '';
   return authedFetch(`/verify/dpp/search${query}`);
 }
+
+
+/**
+ * 관리자 대시보드 상단 KPI(가입자/DPP/앵커링 현황) - com.dpp.mypage.controller.
+ * AdminDashboardController, ADMIN 계정만 200(그 외는 403). 예전엔 AppView.jsx에
+ * "1,284"/"48,392"/"#8,412,930"/"99.98%" 같은 문자열이 그대로 박혀 있었다
+ * (2026-08-19 강 요청 "현재 전부 다 목데이터인데 전부 실데이터로 변경").
+ */
+export function fetchAdminDashboard() {
+  return authedFetch('/admin/dashboard');
+}
+
+/** 관리자 "회원 관리" 표 - 조직별 보유/발행 DPP 수 포함(예전엔 data.json members 고정 배열). */
+export function fetchAdminMembers() {
+  return authedFetch('/admin/members');
+}
