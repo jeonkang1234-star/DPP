@@ -533,7 +533,7 @@ export function makerVals(ctx) {
             : stageIdx === 0 ? '#E03B3B'
             : 'rgba(16,32,64,.07)';
           return {
-            key: d.fieldCode, label: d.labelKo, req: d.required ? '필수' : '선택',
+            key: d.fieldCode, label: d.labelKo, labelEn: d.labelEn || '', req: d.required ? '필수' : '선택',
             fileName: d.fileName || '',
             statusLabel: uploading ? '검증 중' : (DOC_STATUS_LABEL[d.status] || d.status),
             dot: ctx.pillDot(uploading ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),

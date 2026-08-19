@@ -158,8 +158,8 @@ public class DocumentSlotService {
             List<RequirementField> draftFields = fieldsFor(fieldDomains(domain), null);
             Map<String, Boolean> draftZkpTargetByDocType = zkpTargetByDocType(draftFields);
             List<DocumentSlotDto> draftSlots = draftFields.stream()
-                    .map(f -> new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.isRequired(),
-                            "NOT_UPLOADED", null, null,
+                    .map(f -> new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.getLabelEn(),
+                            f.isRequired(), "NOT_UPLOADED", null, null,
                             Boolean.TRUE.equals(draftZkpTargetByDocType.get(f.getLinkedDocType()))))
                     .toList();
             return new DocumentFormResponse(null, draftSlots);
@@ -189,9 +189,9 @@ public class DocumentSlotService {
                     Document doc = latestByDocType.get(f.getLinkedDocType());
                     String status = doc == null ? "NOT_UPLOADED" : doc.getReviewStatus();
                     boolean zkpTarget = Boolean.TRUE.equals(zkpTargetByDocType.get(f.getLinkedDocType()));
-                    return new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.isRequired(),
-                            status, doc == null ? null : doc.getDocumentId(), doc == null ? null : doc.getFileName(),
-                            zkpTarget);
+                    return new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.getLabelEn(),
+                            f.isRequired(), status, doc == null ? null : doc.getDocumentId(),
+                            doc == null ? null : doc.getFileName(), zkpTarget);
                 })
                 .toList();
 

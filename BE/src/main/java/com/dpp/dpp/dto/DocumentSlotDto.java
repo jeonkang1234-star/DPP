@@ -13,6 +13,7 @@ public record DocumentSlotDto(
         String fieldCode,
         String docTypeCode,
         String labelKo,
+        String labelEn,
         boolean required,
         String status,
         Long documentId,
