@@ -150,36 +150,43 @@ export function uploadDocument(dppId, docTypeCode, file) {
 
 /**
  * 제강 성적서(Mill Sheet) 업로드 - 파서(화학성분/기계적성질 12개 값 추출) -> ZKP 증명 생성/검증
- * -> (blockchain.enabled=true인 환경만) 블록체인 앵커링까지 한 번에 처리한다. dppId를 안
- * 받는다 - 백엔드가 "이 계정 조직의 첫 번째 DPP"에 자동으로 붙인다(product/DPP 선택 화면이
- * 아직 없어서의 임시 조치, com.dpp.document.service.DocumentIngestService 참고).
+ * -> (blockchain.enabled=true인 환경만) 블록체인 앵커링까지 한 번에 처리한다.
+ * 2026-08-19 수정: dppId를 필수로 받는다 - 예전엔 dppId 없이 백엔드가 "이 계정 조직의 첫
+ * 번째 DPP"에 무조건 붙였는데(product/DPP 선택 화면이 아직 없어서의 임시 조치), 그 결과
+ * "새 DPP 생성"으로 새 초안을 만들어도 Mill Sheet 업로드는 계속 옛날(첫) DPP로 가버려서,
+ * 그 DPP에 이미 같은 내용의 파일이 있으면 실제로는 다른 DPP에 올리는 건데도
+ * ux_document_dedup(owner_type, owner_id, doc_type_code, content_hash) 유니크 제약에 걸려
+ * "이미 업로드된 파일입니다"(409)가 났다(com.dpp.document.service.DocumentIngestService 참고).
+ * 이제 지금 작성 중인 DPP(fieldFormDppId)를 명시적으로 넘겨서 그 DPP에 붙인다.
  * /me/* 가 아니라 /document/upload/steel-mill이라 authedFetch를 경로만 다르게 재사용한다.
  */
-export function uploadSteelMillSheet(file) {
+export function uploadSteelMillSheet(dppId, file) {
   const formData = new FormData();
+  formData.append('dppId', dppId);
   formData.append('file', file);
   return authedFetch('/document/upload/steel-mill', { method: 'POST', body: formData });
 }
 
 /**
  * CBAM(Q2_06) 탄소보고서 업로드 - 파서(수입 수량) -> cbam-check ZKP(de minimis 초과 여부) ->
- * (blockchain.enabled=true인 환경만) 블록체인 앵커링. Mill Sheet와 마찬가지로 dppId를 안
- * 받고 "이 계정 조직의 첫 번째 DPP"에 자동으로 붙는다(com.dpp.document.service.CbamIngestService).
+ * (blockchain.enabled=true인 환경만) 블록체인 앵커링. Mill Sheet와 같은 이유(2026-08-19,
+ * 위 uploadSteelMillSheet 주석 참고)로 dppId를 필수로 받는다(com.dpp.document.service.CbamIngestService).
  */
-export function uploadCbamReport(file) {
+export function uploadCbamReport(dppId, file) {
   const formData = new FormData();
+  formData.append('dppId', dppId);
   formData.append('file', file);
   return authedFetch('/document/upload/cbam', { method: 'POST', body: formData });
 }
 
 /**
  * 섬유 케어라벨(Q1_04) 업로드 - 파서(섬유 혼용률표) -> fiber-sum-check ZKP(합계 ≈100% 여부)
- * -> (blockchain.enabled=true인 환경만) 블록체인 앵커링. Mill Sheet와 같은 패턴으로 dppId를
- * 안 받고 "이 계정 조직의 첫 번째 DPP"에 자동으로 붙는다(com.dpp.document.service.
- * CareLabelIngestService).
+ * -> (blockchain.enabled=true인 환경만) 블록체인 앵커링. Mill Sheet와 같은 이유(2026-08-19)로
+ * dppId를 필수로 받는다(com.dpp.document.service.CareLabelIngestService).
  */
-export function uploadCareLabel(file) {
+export function uploadCareLabel(dppId, file) {
   const formData = new FormData();
+  formData.append('dppId', dppId);
   formData.append('file', file);
   return authedFetch('/document/upload/textile-care-label', { method: 'POST', body: formData });
 }
@@ -187,9 +194,11 @@ export function uploadCareLabel(file) {
 /**
  * OEKO-TEX 라벨(Q3_10) 업로드 - 파서(pH) -> oekotex-check ZKP(4.0~7.5 범위 여부) ->
  * (blockchain.enabled=true인 환경만) 블록체인 앵커링(com.dpp.document.service.OekotexIngestService).
+ * Mill Sheet와 같은 이유(2026-08-19)로 dppId를 필수로 받는다.
  */
-export function uploadOekotexLabel(file) {
+export function uploadOekotexLabel(dppId, file) {
   const formData = new FormData();
+  formData.append('dppId', dppId);
   formData.append('file', file);
   return authedFetch('/document/upload/oekotex', { method: 'POST', body: formData });
 }
@@ -197,11 +206,12 @@ export function uploadOekotexLabel(file) {
 /**
  * 배터리 탄소발자국 선언(Q2_07) 업로드 - 파서(재생원료 Co/Li/Ni/Pb + 정격용량) ->
  * battery-check ZKP(각 임계값 충족 여부) -> (blockchain.enabled=true인 환경만) 블록체인
- * 앵커링. Mill Sheet와 같은 패턴으로 dppId를 안 받고 "이 계정 조직의 첫 번째 DPP"에
- * 자동으로 붙는다(com.dpp.document.service.BatteryCarbonIngestService).
+ * 앵커링. Mill Sheet와 같은 이유(2026-08-19)로 dppId를 필수로 받는다
+ * (com.dpp.document.service.BatteryCarbonIngestService).
  */
-export function uploadBatteryCarbonReport(file) {
+export function uploadBatteryCarbonReport(dppId, file) {
   const formData = new FormData();
+  formData.append('dppId', dppId);
   formData.append('file', file);
   return authedFetch('/document/upload/battery-carbon', { method: 'POST', body: formData });
 }
@@ -209,10 +219,12 @@ export function uploadBatteryCarbonReport(file) {
 /**
  * 재활용 처리 결과 보고서(Q4_15) 업로드 - 파서(물질별 회수 실적표) -> recycling-check
  * ZKP(구리/리튬·코발트 물질회수율 기준 충족 여부) -> (blockchain.enabled=true인 환경만)
- * 블록체인 앵커링(com.dpp.document.service.RecyclingIngestService).
+ * 블록체인 앵커링(com.dpp.document.service.RecyclingIngestService). Mill Sheet와 같은
+ * 이유(2026-08-19)로 dppId를 필수로 받는다.
  */
-export function uploadRecyclingReport(file) {
+export function uploadRecyclingReport(dppId, file) {
   const formData = new FormData();
+  formData.append('dppId', dppId);
   formData.append('file', file);
   return authedFetch('/document/upload/recycling-report', { method: 'POST', body: formData });
 }
@@ -294,4 +306,35 @@ export function fetchAdminDashboard() {
 /** 관리자 "회원 관리" 표 - 조직별 보유/발행 DPP 수 포함(예전엔 data.json members 고정 배열). */
 export function fetchAdminMembers() {
   return authedFetch('/admin/members');
+}
+
+/**
+ * 통관 신청 - 발급 완료(status=ACTIVE)된 내 조직 DPP를 어느 나라로 수출하는지 선언한다
+ * (com.dpp.customs.controller.CustomsClearanceController). 수출국은 서버가 DPP 소유
+ * 조직의 country_code에서 알아서 채우고, 여기선 수입국/수입업체 정보만 보낸다
+ * (2026-08-19 강 요청 - 세관 관할을 수출국+수입국 둘 다로 매칭하기 위한 첫 단계).
+ */
+export function requestCustomsClearance({ dppId, importCountryCode, importerName, importerAddress, importerEori, declaredHsCode }) {
+  return authedFetch('/customs/clearance-requests', {
+    method: 'POST',
+    body: JSON.stringify({ dppId, importCountryCode, importerName, importerAddress, importerEori, declaredHsCode }),
+  });
+}
+
+/** 세관 큐 - decided=false(기본)면 심사 대기 중, true면 이미 결정 난 이력(통관 이력 탭). org_type=CUSTOMS 계정만 200. */
+export function fetchCustomsQueue(decided) {
+  return authedFetch(`/customs/queue?decided=${decided ? 'true' : 'false'}`);
+}
+
+/** 통관 케이스 상세 - 확인 항목(checks) 6종 + 종합 판정 포함. */
+export function fetchCustomsCase(clearanceId) {
+  return authedFetch(`/customs/queue/${clearanceId}`);
+}
+
+/** 통관 결정(승인/보류/반려). decision: 'APPROVE' | 'HOLD' | 'REJECT'. */
+export function decideCustomsCase(clearanceId, decision, reason) {
+  return authedFetch(`/customs/queue/${clearanceId}/decision`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, reason }),
+  });
 }

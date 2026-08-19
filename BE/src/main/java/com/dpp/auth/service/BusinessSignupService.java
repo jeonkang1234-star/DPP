@@ -25,11 +25,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 기업(BUSINESS) 계정 가입 확정. 이메일 인증(EmailVerificationService)과
@@ -74,8 +76,10 @@ public class BusinessSignupService {
         this.notificationRepository = notificationRepository;
     }
 
+    private static final Set<String> PUBLIC_AUTHORITY_ORG_TYPES = Set.of("CUSTOMS", "EU_AUTHORITY");
+
     @Transactional
-    public LoginResponse signup(BusinessSignupRequest request) {
+    public LoginResponse signup(BusinessSignupRequest request, MultipartFile bizRegCert) {
         if (userAccountRepository.existsByEmail(request.email())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 가입된 이메일입니다.");
         }
@@ -86,10 +90,31 @@ public class BusinessSignupService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전화번호 인증을 먼저 완료해 주세요.");
         }
 
+        // orgTypeHint가 있으면 세관/시장감독기관(공적 기관) 계정 - domain 대신 org_type이
+        // 즉시 확정되고, 사업자등록증 자동승인 없이 항상 관리자 수동심사로 간다(2026-08-19
+        // 강 요청 3번). 그 외(제조사/협력사)는 domain이 필수고, 사업자등록증 파일도
+        // 필수다(가입 시 업로드 필수화 - 4번 항목).
+        boolean isPublicAuthority = request.orgTypeHint() != null && !request.orgTypeHint().isBlank();
+        if (isPublicAuthority) {
+            if (!PUBLIC_AUTHORITY_ORG_TYPES.contains(request.orgTypeHint())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "orgTypeHint 값이 올바르지 않습니다 (CUSTOMS 또는 EU_AUTHORITY만 허용).");
+            }
+        } else {
+            if (request.domain() == null || request.domain().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "domain은 필수입니다.");
+            }
+            if (bizRegCert == null || bizRegCert.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사업자등록증을 첨부해 주세요.");
+            }
+        }
+
         // com.dpp.mypage.OrganizationService가 (country, bizRegNo) 기준으로 기존 조직이 있으면
-        // 합류시키고, 없으면 새로 만든다(org_type은 비워둠 - 마이페이지 PUT /me/organization에서 확정).
+        // 합류시키고, 없으면 새로 만든다. 공적 기관이 아니면 여기서 사업자등록증 형식·데이터를
+        // 검증해서 완전히 일치할 때만 즉시 ACTIVE로 승인한다(OrganizationService.verifyBizCert).
         Organization org = organizationService.findOrCreateForSignup(
-                request.companyName(), request.businessRegNo(), request.country(), request.domain());
+                request.companyName(), request.businessRegNo(), request.country(), request.domain(),
+                request.orgTypeHint(), bizRegCert);
 
         UserAccount user = new UserAccount();
         user.setAccountType(AccountType.BUSINESS);

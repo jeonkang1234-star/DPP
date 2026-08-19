@@ -36,6 +36,12 @@ export default function AppView(v) {
     cDoc,
     cDownloadAll,
     showQr,
+    cQueueEmpty,
+    cQueueRows,
+    cCanDecide,
+    cApprove,
+    cHold,
+    cReject,
     cEori,
     cExporter,
     cHs,
@@ -89,6 +95,21 @@ export default function AppView(v) {
     dppPct,
     dppSpec,
     dppStatusChip,
+    dppCanRequestClearance,
+    openClearanceRequest,
+    closeClearanceRequest,
+    crOpen,
+    crImportCountryCode,
+    onCrImportCountryCode,
+    crImporterName,
+    onCrImporterName,
+    crImporterAddress,
+    onCrImporterAddress,
+    crImporterEori,
+    onCrImporterEori,
+    crDeclaredHsCode,
+    onCrDeclaredHsCode,
+    submitClearanceRequest,
     ecoCarbon,
     ecoCarbonUnit,
     ecoRecycled,
@@ -234,6 +255,7 @@ export default function AppView(v) {
     onEditUrl,
     onLoginEmail,
     onLoginPassword,
+    onSuBizRegCert,
     onSuBizRegNo,
     onSuCompanyName,
     onSuCountry,
@@ -257,7 +279,6 @@ export default function AppView(v) {
     passportName,
     passportOrigin,
     passportValid,
-    pickAdmin,
     pickCustoms,
     pickEu,
     pickMaker,
@@ -310,6 +331,7 @@ export default function AppView(v) {
     showTabs,
     singleBtn,
     snsLogin,
+    suBizRegCertName,
     suBizRegNo,
     suCompanyName,
     suCompanyTab,
@@ -336,9 +358,9 @@ export default function AppView(v) {
     suRequestCode,
     suRequestPhoneCode,
     suConfirmPhoneCode,
-    suRoleAdmin,
     suRoleCustoms,
     suRoleEu,
+    suRoleIsPublicAuthority,
     suRoleMaker,
     suRolePartner,
     suVerified,
@@ -495,8 +517,7 @@ export default function AppView(v) {
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '20px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '30px 32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
                 <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#0B1B33' }}>계정 유형 <span style={{ fontWeight: '500', color: '#8494AC' }}>· 등록된 도메인이면 자동 선택, 아니면 직접 선택</span></span>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '10px' }}>
-                  <button onClick={pickAdmin} style={suRoleAdmin}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>관리자</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>플랫폼 운영·심사</span></button>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
                   <button onClick={pickMaker} style={suRoleMaker}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>제조사</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>DPP 등록·발급</span></button>
                   <button onClick={pickPartner} style={suRolePartner}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>협력사</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>원자재공급 등 제출</span></button>
                   <button onClick={pickCustoms} style={suRoleCustoms}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>세관</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>통관 적법성 검증</span></button>
@@ -549,11 +570,20 @@ export default function AppView(v) {
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호</span><input type="password" value={suPassword} onChange={onSuPassword} placeholder="8자 이상" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호 확인</span><input type="password" value={suPasswordConfirm} onChange={onSuPasswordConfirm} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
                 </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
-            
-            
-            
-            
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
+                    사업자등록증{suRoleIsPublicAuthority ? ' (선택)' : ''}
+                  </span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px', height: '50px', padding: '0 15px', border: '1px dashed rgba(16,32,64,.22)', borderRadius: '12px', fontSize: '13.5px', color: '#44546F', cursor: 'pointer', background: '#FAFBFD' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '30px', padding: '0 12px', borderRadius: '9px', background: 'rgba(0,69,169,.08)', color: '#0045A9', fontSize: '12px', fontWeight: '600', flex: 'none' }}>파일 선택</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{suBizRegCertName || 'PDF/이미지 파일을 첨부해 주세요'}</span>
+                    <input type="file" accept=".pdf,image/*" onChange={onSuBizRegCert} style={{ display: 'none' }} />
+                  </label>
+                  <span style={{ fontSize: '11.5px', color: '#8494AC' }}>
+                    {suRoleIsPublicAuthority
+                      ? '세관·시장감독기관 계정은 관리자 수동 심사로만 승인되며, 첨부는 참고용입니다.'
+                      : '문서에서 사업자등록번호·상호를 자동으로 확인해 가입 입력값과 완전히 일치할 때만 즉시 승인됩니다. 일치하지 않으면 관리자 수동 심사로 넘어갑니다.'}
+                  </span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
@@ -787,7 +817,7 @@ export default function AppView(v) {
               <input placeholder="제품명 · DPP 식별자 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
               <span style={{ height: '36px', padding: '0 16px', display: 'grid', placeItems: 'center', borderRadius: '11px', background: '#F2F6FC', color: '#6B7A93', fontSize: '12.5px', fontWeight: '600' }}>검색</span>
             </div>
-            <button onClick={goInput} style={{ marginLeft: 'auto', height: '52px', padding: '0 22px', border: '0', borderRadius: '15px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 20px rgba(0,69,169,.26)' }}>+ 새 DPP 발급</button>
+            <button onClick={goInput} style={{ marginLeft: 'auto', height: '52px', padding: '0 22px', border: '0', borderRadius: '15px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 20px rgba(0,69,169,.26)' }}>+ 새 DPP 생성</button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
@@ -1440,6 +1470,22 @@ export default function AppView(v) {
             <button onClick={r.pick} style={{ height: '34px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '999px', background: '#fff', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv29">{r.label}</button>
             </React.Fragment>))}
           </div>
+
+          <div style={{ width: '100%', maxWidth: '760px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <span style={{ fontSize: '13px', fontWeight: '700' }}>내 세관 심사 대기 큐</span>
+            {cQueueEmpty ? (
+              <span style={{ fontSize: '12.5px', color: '#8494AC' }}>현재 배정된 심사 대기 건이 없습니다. 수출/수입 관할이 이 세관과 일치하는 통관 신청이 들어오면 여기에 표시됩니다.</span>
+            ) : (
+              (cQueueRows || []).map((q, $index) => (<React.Fragment key={$index}>
+              <button onClick={q.open} style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr 1fr auto', gap: '10px', alignItems: 'center', height: '48px', padding: '0 12px', border: '1px solid rgba(16,32,64,.07)', borderRadius: '12px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv29">
+                <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '600', color: '#0045A9' }}>{q.idLabel}</span>
+                <span style={{ fontSize: '12.5px' }}>{q.name}</span>
+                <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{q.sideLabel} · {q.route}</span>
+                <span style={{ fontSize: '11px', color: '#6B7A93' }}>{q.importer}</span>
+              </button>
+              </React.Fragment>))
+            )}
+          </div>
         </div>
         </>) : null}
 
@@ -1475,6 +1521,13 @@ export default function AppView(v) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
               <span style={cVerdictDot}></span>
               <span style={cVerdictTextStyle}>{cVerdict}</span>
+              {cCanDecide ? (
+              <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+                <button onClick={cApprove} style={{ height: '42px', padding: '0 18px', border: '0', borderRadius: '12px', background: '#12A150', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>승인</button>
+                <button onClick={cHold} style={{ height: '42px', padding: '0 18px', border: '1px solid rgba(227,160,8,.32)', borderRadius: '12px', background: 'rgba(227,160,8,.10)', color: '#96660A', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>보류</button>
+                <button onClick={cReject} style={{ height: '42px', padding: '0 18px', border: '1px solid rgba(224,59,59,.28)', borderRadius: '12px', background: 'rgba(224,59,59,.08)', color: '#C22B2B', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>반려</button>
+              </div>
+              ) : null}
             </div>
           </div>
 
@@ -1661,6 +1714,34 @@ export default function AppView(v) {
                 <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>{dppPct === 100 ? 'QR을 스캔하면 이 DPP의 조회 화면으로 바로 연결됩니다.' : '발급 완료(완성도 100%) 후 QR이 자동으로 생성됩니다.'}</span>
               </span>
             </div>
+
+            {dppCanRequestClearance ? (<>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '13px', padding: '18px', borderRadius: '16px', background: '#FBFCFE', border: '1px solid rgba(16,32,64,.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '700' }}>통관 신청</span>
+                  <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>수입국을 선언하면 수출/수입 관할 세관에 이 DPP가 심사 대기 건으로 배정됩니다.</span>
+                </span>
+                {!crOpen ? (<button onClick={openClearanceRequest} style={{ height: '38px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '11px', background: '#fff', color: '#0045A9', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>신청하기</button>) : null}
+              </div>
+              {crOpen ? (<>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>수입국</span><input value={crImportCountryCode} onChange={onCrImportCountryCode} placeholder="독일" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px' }} /></label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>신고 HS 코드</span><input value={crDeclaredHsCode} onChange={onCrDeclaredHsCode} placeholder="7208.39" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
+                </div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>수입업체명</span><input value={crImporterName} onChange={onCrImporterName} placeholder="Nordwerk GmbH" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>수입업체 주소</span><input value={crImporterAddress} onChange={onCrImporterAddress} placeholder="독일 뒤스부르크 · Hafenstraße 22" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>EORI 번호(선택)</span><input value={crImporterEori} onChange={onCrImporterEori} placeholder="DE7412880033100" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                  <button onClick={closeClearanceRequest} style={{ height: '38px', padding: '0 16px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '11px', background: '#fff', color: '#44546F', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }}>취소</button>
+                  <button onClick={submitClearanceRequest} style={{ height: '38px', padding: '0 18px', border: '0', borderRadius: '11px', background: '#0045A9', color: '#fff', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>신청 제출</button>
+                </div>
+              </div>
+              </>) : null}
+            </div>
+            </>) : null}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <span style={{ fontSize: '14px', fontWeight: '700' }}>생애주기 진행상태</span>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
