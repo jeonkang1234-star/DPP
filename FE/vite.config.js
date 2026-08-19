@@ -38,6 +38,11 @@ export default defineConfig({
                 target: "http://localhost:".concat(backendPort),
                 changeOrigin: true,
             },
+            // com.dpp.audit.controller.AuditLogController - EU 시장감시 감사 로그 조회.
+            "/audit-log": {
+                target: "http://localhost:".concat(backendPort),
+                changeOrigin: true,
+            },
             "/public": {
                 target: "http://localhost:".concat(backendPort),
                 changeOrigin: true,
