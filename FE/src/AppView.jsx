@@ -935,7 +935,10 @@ export default function AppView(v) {
                   {(documentSlots || []).map((d, $index) => (<React.Fragment key={$index}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '13px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1.5px solid ' + d.tileBorderColor }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', flexWrap: 'wrap' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: '500', color: '#8494AC' }}>{d.req}</span></span>
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', flexWrap: 'wrap' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: '500', color: '#8494AC' }}>{d.req}</span></span>
+                        {d.labelEn ? (<span style={{ fontSize: '11px', color: '#8494AC' }}>{d.labelEn}</span>) : null}
+                      </span>
                       <label htmlFor={d.inputId} style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '9px', background: '#fff', color: '#0045A9', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>{d.fileName ? '재업로드' : '업로드'}</label>
                       <input id={d.inputId} type="file" onChange={d.onFileChange} style={{ display: 'none' }} />
                     </div>
@@ -1194,6 +1197,7 @@ export default function AppView(v) {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)' }}>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: '500', color: '#8494AC' }}>{d.req}</span></span>
+                    {d.labelEn ? (<span style={{ fontSize: '11px', color: '#8494AC' }}>{d.labelEn}</span>) : null}
                     <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#8494AC' }}><span style={d.dot}></span>{d.statusLabel}{d.fileName ? (' · ' + d.fileName) : ''}</span>
                   </span>
                   <label htmlFor={d.inputId} style={{ height: '36px', padding: '0 14px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '10px', background: '#fff', color: '#0045A9', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>업로드</label>

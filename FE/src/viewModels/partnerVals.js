@@ -68,7 +68,7 @@ export function partnerVals(ctx) {
     // 담당 문서만 내려주므로 FE는 필터링 없이 그대로 보여준다.
     partnerDocumentSlots: df
       ? df.documents.map(d => ({
-          key: d.fieldCode, label: d.labelKo, req: d.required ? '필수' : '선택',
+          key: d.fieldCode, label: d.labelKo, labelEn: d.labelEn || '', req: d.required ? '필수' : '선택',
           fileName: d.fileName || '',
           statusLabel: DOC_STATUS_LABEL[d.status] || d.status,
           dot: ctx.pillDot(DOC_STATUS_COLOR[d.status] || '#9AA8BE'),

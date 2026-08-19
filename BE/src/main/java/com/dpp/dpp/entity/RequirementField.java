@@ -37,6 +37,14 @@ public class RequirementField {
     @Column(name = "label_ko", nullable = false, length = 200)
     private String labelKo;
 
+    // 2026-08-19 강 요청: "문서 영문명이랑 한글명 매치도 시켜줘" - DB엔 진작부터 label_en
+    // 컬럼이 있었는데(V1__schema.sql, V4/V13/V16/V17 시딩 데이터도 전부 채워져 있음) 엔티티에
+    // 매핑이 안 돼 있어서 FE에 한 번도 내려간 적이 없었다. nullable로 둔 이유: 이론상
+    // label_en이 비어있는 행이 생겨도(향후 관리자가 필드 추가) 문서 화면 자체가 깨지면
+    // 안 되기 때문 - FE 쪽에서 없으면 그냥 한글명만 보여준다.
+    @Column(name = "label_en", length = 200)
+    private String labelEn;
+
     @Column(name = "field_kind", nullable = false, length = 20)
     private String fieldKind;
 
