@@ -11,11 +11,14 @@ import com.dpp.auth.service.EmailVerificationService;
 import com.dpp.auth.service.PhoneVerificationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 기업 회원가입: 이메일 인증코드 발급/검증, 전화번호 인증코드 발급/검증, 가입 확정.
@@ -65,9 +68,18 @@ public class BusinessSignupController {
         return ResponseEntity.ok().build();
     }
 
-    /** 이메일·전화번호 인증이 모두 끝난 상태에서 실제 계정 생성. 성공 시 바로 로그인 토큰 발급. */
-    @PostMapping
-    public ResponseEntity<LoginResponse> signup(@Valid @RequestBody BusinessSignupRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(businessSignupService.signup(request));
+    /**
+     * 이메일·전화번호 인증이 모두 끝난 상태에서 실제 계정 생성. multipart/form-data로 받는다 -
+     * "data" part는 BusinessSignupRequest 그대로의 JSON, "bizRegCert" part는 사업자등록증
+     * 파일이다(2026-08-19 강 요청 - 체크섬 단독 자동승인 대신 문서 형식·데이터 확인으로
+     * 대체하면서 파일 업로드가 필요해짐). 세관/시장감독기관(orgTypeHint 존재) 계정은
+     * bizRegCert가 없어도 되며 항상 관리자 수동심사로 간다 - 필수 여부는
+     * BusinessSignupService.signup에서 판단한다. 성공 시 바로 로그인 토큰 발급.
+     */
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<LoginResponse> signup(
+            @Valid @RequestPart("data") BusinessSignupRequest request,
+            @RequestPart(value = "bizRegCert", required = false) MultipartFile bizRegCert) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(businessSignupService.signup(request, bizRegCert));
     }
 }

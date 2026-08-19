@@ -122,7 +122,7 @@ public class OekotexIngestService {
     }
 
     @Transactional
-    public OekotexUploadResponse ingestOekotexLabel(Long userId, MultipartFile file) {
+    public OekotexUploadResponse ingestOekotexLabel(Long userId, Long dppId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "업로드된 파일이 없습니다.");
         }
@@ -133,9 +133,17 @@ public class OekotexIngestService {
         if (orgId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이 계정에 연결된 조직이 없습니다.");
         }
-        Dpp dpp = dppRepository.findFirstByOwnerOrgId(orgId)
+        if (dppId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "dppId가 필요합니다.");
+        }
+        // 2026-08-19 수정: 예전엔 findFirstByOwnerOrgId로 "이 조직의 첫 번째 DPP"에 항상
+        // 붙였다 - 그래서 새 DPP를 새로 만들어도 업로드는 계속 옛날 DPP로 가고, 그 DPP에
+        // 이미 있는 문서와 content_hash가 겹치면 실제로는 다른 DPP에 올리는 건데도
+        // ux_document_dedup 제약에 걸려 "이미 업로드된 파일입니다"가 났다. 이제 dppId를
+        // 명시적으로 받아서 그 DPP가 실제로 이 조직 소유인지까지 확인한다.
+        Dpp dpp = dppRepository.findByDppIdAndOwnerOrgId(dppId, orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "이 조직에 연결된 DPP가 없습니다. (테스트 시드가 적용됐는지 확인하세요)"));
+                        "지정한 DPP를 찾을 수 없거나 이 조직 소유가 아닙니다. (dppId=" + dppId + ")"));
 
         Map<String, Object> parsed;
         try {

@@ -9,6 +9,10 @@ import java.util.List;
  */
 public record DashboardResponse(
         int totalCount,
+        // "이번 달 신규" - 2026-08-19 수정: 예전엔 실데이터(dash!=null)일 때 대응하는 집계가
+        // 없어서 항상 0을 내려보냈다(FE 대시보드의 "등록 DPP 수" 카드 옆 +N 배지가 실제
+        // 숫자를 반영하지 못하던 버그) - dpp.created_at이 이번 달 1일 0시 이후인 건수로 계산.
+        int newThisMonthCount,
         int incompleteCount,
         double averageCompleteness,
         List<DppSummaryDto> dpps,
