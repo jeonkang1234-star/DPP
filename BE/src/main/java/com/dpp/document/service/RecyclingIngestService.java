@@ -21,6 +21,7 @@ import com.dpp.document.zkp.RecyclingZkpMapper;
 import com.dpp.dpp.entity.DppFieldValue;
 import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
+import com.dpp.dpp.service.SpecFieldAutoFillService;
 import com.dpp.notify.entity.Notification;
 import com.dpp.notify.entity.NotificationCategory;
 import com.dpp.notify.repository.NotificationRepository;
@@ -76,6 +77,7 @@ public class RecyclingIngestService {
     private final DppFieldValueRepository dppFieldValueRepository;
     private final BlockchainAnchorRepository blockchainAnchorRepository;
     private final ParserClient parserClient;
+    private final SpecFieldAutoFillService specFieldAutoFillService;
     private final ZkpClient zkpClient;
     private final Optional<BlockchainClient> blockchainClient;
     private final DocumentIntegrationProperties properties;
@@ -91,6 +93,7 @@ public class RecyclingIngestService {
                                    DppFieldValueRepository dppFieldValueRepository,
                                    BlockchainAnchorRepository blockchainAnchorRepository,
                                    ParserClient parserClient,
+                                   SpecFieldAutoFillService specFieldAutoFillService,
                                    ZkpClient zkpClient,
                                    Optional<BlockchainClient> blockchainClient,
                                    DocumentIntegrationProperties properties,
@@ -105,6 +108,7 @@ public class RecyclingIngestService {
         this.dppFieldValueRepository = dppFieldValueRepository;
         this.blockchainAnchorRepository = blockchainAnchorRepository;
         this.parserClient = parserClient;
+        this.specFieldAutoFillService = specFieldAutoFillService;
         this.zkpClient = zkpClient;
         this.blockchainClient = blockchainClient;
         this.properties = properties;
@@ -138,7 +142,7 @@ public class RecyclingIngestService {
 
         Map<String, Object> parsed;
         try {
-            parsed = parserClient.parse(file, REGISTRY_CODE);
+            parsed = parserClient.parse(file, REGISTRY_CODE, dpp.getDomain());
         } catch (RestClientException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "문서 파서 서비스 호출에 실패했습니다: " + e.getMessage(), e);
@@ -264,6 +268,17 @@ public class RecyclingIngestService {
         setFieldValue(dpp.getDppId(), orgId, userId, "RECYCLED_COBALT_RECOVERY_RATE", String.valueOf(zkpInput.coDerived()));
         if (zkpInput.overallRecyclingRatePercent() != null) {
             setFieldValue(dpp.getDppId(), orgId, userId, "OVERALL_RECYCLING_EFFICIENCY", String.valueOf(zkpInput.overallRecyclingRatePercent()));
+        }
+
+        // 라벨 사전 기반 일괄 채움 - 위 개별 매핑(ZKP 입력값 그대로)과 달리 문서 본문의
+        // 라벨에서 뽑는다. 둘 다 "비어 있을 때만" 쓰므로 먼저 채운 쪽이 이긴다.
+        //
+        // 위 setFieldValue들과 달리 specPassed 게이트를 건다. 저쪽은 회로가 이미 검증한
+        // 입력값이라 판정 결과와 무관하게 "그 문서가 주장한 값"으로 남길 의미가 있지만,
+        // 이쪽은 문서 본문 아무 데서나 라벨로 긁어오는 경로다. 반려한 문서는 안 믿기로
+        // 한 문서인데 거기서 추가 데이터를 더 꺼내오는 건 앞뒤가 안 맞는다.
+        if (specPassed) {
+            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId());
         }
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
@@ -399,4 +414,24 @@ public class RecyclingIngestService {
             throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", e);
         }
     }
+
+    /**
+     * 라벨 사전 기반 일괄 채움(parser/spec_extractor.py -> spec_fields).
+     * requirement_field.data_source='PARSER'인 필드를 문서에서 뽑아 field_code 그대로
+     * 돌려주므로 문서 유형별 분기 없이 그대로 넘긴다. 이 서비스가 원래부터 채우던 필드와
+     * 겹쳐도 양쪽 다 "비어 있을 때만" 쓰기 때문에 먼저 채운 쪽이 이긴다.
+     *
+     * 규격 판정에 실패한 문서(specPassed=false)에서는 호출하지 않는다 - "증명에 실패했으면
+     * 데이터 파싱 안되게"(2026-08-18 피드백)라는 기존 원칙 그대로다.
+     */
+    @SuppressWarnings("unchecked")
+    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed, Long documentId) {
+        Object raw = parsed.get("spec_fields");
+        if (!(raw instanceof Map)) {
+            return;
+        }
+        specFieldAutoFillService.apply(dpp.getDppId(), dpp.getDomain(), orgId, userId,
+                (Map<String, Object>) raw, documentId);
+    }
+
 }

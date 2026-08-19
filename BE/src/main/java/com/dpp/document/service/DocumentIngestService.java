@@ -23,6 +23,7 @@ import com.dpp.document.zkp.SteelZkpMapper;
 import com.dpp.dpp.entity.DppFieldValue;
 import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
+import com.dpp.dpp.service.SpecFieldAutoFillService;
 import com.dpp.notify.entity.Notification;
 import com.dpp.notify.entity.NotificationCategory;
 import com.dpp.notify.repository.NotificationRepository;
@@ -80,6 +81,7 @@ public class DocumentIngestService {
     private final MaterialCompositionRepository materialCompositionRepository;
     private final DppFieldValueRepository dppFieldValueRepository;
     private final ParserClient parserClient;
+    private final SpecFieldAutoFillService specFieldAutoFillService;
     private final ZkpClient zkpClient;
     private final Optional<BlockchainClient> blockchainClient;
     private final DocumentIntegrationProperties properties;
@@ -96,6 +98,7 @@ public class DocumentIngestService {
                                   MaterialCompositionRepository materialCompositionRepository,
                                   DppFieldValueRepository dppFieldValueRepository,
                                   ParserClient parserClient,
+                                  SpecFieldAutoFillService specFieldAutoFillService,
                                   ZkpClient zkpClient,
                                   Optional<BlockchainClient> blockchainClient,
                                   DocumentIntegrationProperties properties,
@@ -111,6 +114,7 @@ public class DocumentIngestService {
         this.materialCompositionRepository = materialCompositionRepository;
         this.dppFieldValueRepository = dppFieldValueRepository;
         this.parserClient = parserClient;
+        this.specFieldAutoFillService = specFieldAutoFillService;
         this.zkpClient = zkpClient;
         this.blockchainClient = blockchainClient;
         this.properties = properties;
@@ -145,7 +149,7 @@ public class DocumentIngestService {
         // 1) 파서 호출 - 텍스트 추출 + 필드 파싱 + 해시
         Map<String, Object> parsed;
         try {
-            parsed = parserClient.parse(file, REGISTRY_CODE);
+            parsed = parserClient.parse(file, REGISTRY_CODE, dpp.getDomain());
         } catch (RestClientException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "문서 파서 서비스 호출에 실패했습니다: " + e.getMessage(), e);
@@ -267,6 +271,7 @@ public class DocumentIngestService {
         // 덮어쓰지 않는다.
         if (specPassed) {
             persistIdentityFields(dpp.getDppId(), orgId, userId, steelMillValues);
+            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId());
         }
 
         // 7) zkp_proof 행 저장 - 실측값(private input)은 어디에도 저장하지 않는다.
@@ -540,4 +545,24 @@ public class DocumentIngestService {
             throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", e);
         }
     }
+
+    /**
+     * 라벨 사전 기반 일괄 채움(parser/spec_extractor.py -> spec_fields).
+     * requirement_field.data_source='PARSER'인 필드를 문서에서 뽑아 field_code 그대로
+     * 돌려주므로 문서 유형별 분기 없이 그대로 넘긴다. 이 서비스가 원래부터 채우던 필드와
+     * 겹쳐도 양쪽 다 "비어 있을 때만" 쓰기 때문에 먼저 채운 쪽이 이긴다.
+     *
+     * 규격 판정에 실패한 문서(specPassed=false)에서는 호출하지 않는다 - "증명에 실패했으면
+     * 데이터 파싱 안되게"(2026-08-18 피드백)라는 기존 원칙 그대로다.
+     */
+    @SuppressWarnings("unchecked")
+    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed, Long documentId) {
+        Object raw = parsed.get("spec_fields");
+        if (!(raw instanceof Map)) {
+            return;
+        }
+        specFieldAutoFillService.apply(dpp.getDppId(), dpp.getDomain(), orgId, userId,
+                (Map<String, Object>) raw, documentId);
+    }
+
 }

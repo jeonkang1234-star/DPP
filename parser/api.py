@@ -60,7 +60,11 @@ async def parse_document(
     file: UploadFile = File(...),
     registry_code: str = Form(...),
     include_raw_text: bool = Form(False),
+    domain: str = Form(None),
 ):
+    """domain(STEEL/TEXTILE/BATTERY)은 선택 - 주면 spec_fields 추출이 그 도메인 필드만
+    본다. BE가 업로드 대상 DPP의 domain을 그대로 넘긴다. 안 넘어와도 동작은 하고,
+    도메인이 갈라야 하는 라벨만 비게 된다."""
     entry = next((e for e in registry.REGISTRY if e["code"] == registry_code), None)
     if entry is None:
         raise HTTPException(status_code=400, detail=f"알 수 없는 registry_code: {registry_code}")
@@ -92,7 +96,7 @@ async def parse_document(
         )
 
     common = extractor.extract_common_fields(raw_text)
-    extended = extractor.extract_extended_fields(entry["code"], raw_text)
+    extended = extractor.extract_extended_fields(entry["code"], raw_text, domain)
     text_sha256 = hasher.sha256_of_text(raw_text)
 
     record = {

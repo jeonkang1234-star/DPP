@@ -110,6 +110,7 @@ public class DocumentSlotService {
     private final DppFieldValueRepository dppFieldValueRepository;
     private final ParserClient parserClient;
     private final ParticipantSubmitStatusService participantSubmitStatusService;
+    private final SpecFieldAutoFillService specFieldAutoFillService;
     private final DocumentIntegrationProperties properties;
 
     public DocumentSlotService(UserAccountRepository userAccountRepository,
@@ -122,6 +123,7 @@ public class DocumentSlotService {
                                 DppFieldValueRepository dppFieldValueRepository,
                                 ParserClient parserClient,
                                 ParticipantSubmitStatusService participantSubmitStatusService,
+                                SpecFieldAutoFillService specFieldAutoFillService,
                                 DocumentIntegrationProperties properties) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
@@ -133,6 +135,7 @@ public class DocumentSlotService {
         this.dppFieldValueRepository = dppFieldValueRepository;
         this.parserClient = parserClient;
         this.participantSubmitStatusService = participantSubmitStatusService;
+        this.specFieldAutoFillService = specFieldAutoFillService;
         this.properties = properties;
     }
 
@@ -264,7 +267,8 @@ public class DocumentSlotService {
         link.setLinkType("DIRECT");
         documentLinkRepository.save(link);
 
-        autoFillFieldsFromParsedDocument(dppId, orgId, userId, docTypeCode, file);
+        autoFillFieldsFromParsedDocument(dppId, dpp.getDomain(), orgId, userId, docTypeCode, file,
+                document.getDocumentId());
 
         // 참여 협력사가 담당 문서를 올린 경우 submit_status도 다시 계산한다 - FIELD_VALUE만
         // 보던 예전 로직으로는 문서만 올리는 역할(TEST_LAB 등)이 다 제출해도 계속
@@ -290,19 +294,30 @@ public class DocumentSlotService {
      * 성공해야 한다 - 그래서 예외를 전부 삼키고 로그만 남긴다(관리자 승인 화면이 없어서
      * 업로드=승인인 이 서비스에서, 자동 채움 실패로 업로드까지 막히면 안 됨).
      */
-    private void autoFillFieldsFromParsedDocument(Long dppId, Long orgId, Long userId, String docTypeCode, MultipartFile file) {
+    private void autoFillFieldsFromParsedDocument(Long dppId, String domain, Long orgId, Long userId,
+                                                   String docTypeCode, MultipartFile file, Long documentId) {
         String registryCode = REGISTRY_CODE_BY_DOC_TYPE.get(docTypeCode);
         if (registryCode == null) {
             return;
         }
         Map<String, Object> parsed;
         try {
-            parsed = parserClient.parse(file, registryCode);
+            parsed = parserClient.parse(file, registryCode, domain);
         } catch (RestClientException | IOException e) {
             log.warn("dppId={} docTypeCode={} 파서 자동 채움 시도 실패(업로드는 정상 진행): {}",
                     dppId, docTypeCode, e.getMessage());
             return;
         }
+
+        // 2026-08-19: 라벨 사전 기반 일괄 채움(parser/spec_extractor.py -> spec_fields).
+        // requirement_field.data_source='PARSER'인 필드 192개를 문서에서 뽑아 field_code
+        // 그대로 돌려주므로, 문서 유형별 switch 없이 그대로 넘긴다. 아래의 문서유형별
+        // 개별 매핑은 그대로 남긴다 - 그쪽은 라벨이 아니라 문서 구조(GRS 박스 합산,
+        // EORI 위치 등)에서 뽑는 것이라 라벨 사전으로 대체되지 않는다. 두 경로가 같은
+        // 필드를 노려도 둘 다 "비어 있을 때만" 쓰기 때문에 먼저 채운 쪽이 이긴다.
+        @SuppressWarnings("unchecked")
+        Map<String, Object> specFields = (Map<String, Object>) parsed.get("spec_fields");
+        specFieldAutoFillService.apply(dppId, domain, orgId, userId, specFields, documentId);
 
         fillIfEmpty(dppId, orgId, userId, "GTIN", asTrimmedString(parsed.get("gtin")));
 

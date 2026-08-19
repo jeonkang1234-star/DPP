@@ -12,10 +12,25 @@ import qr
 import hasher
 
 
+# 목데이터 폴더 구조가 docker/mock-documents/{steel,textile,battery}/ 라서, 배치 처리에서는
+# 경로에서 도메인을 알아낼 수 있다. 실 업로드 경로(api.py /parse)는 BE가 DPP의 domain을
+# 직접 넘긴다.
+DOMAIN_BY_PATH_SEGMENT = {"steel": "STEEL", "textile": "TEXTILE", "battery": "BATTERY"}
+
+
+def domain_from_path(path: str):
+    parts = {p.lower() for p in os.path.normpath(path).split(os.sep)}
+    for segment, domain in DOMAIN_BY_PATH_SEGMENT.items():
+        if segment in parts:
+            return domain
+    return None
+
+
 def process_pdf(path: str):
     """하나의 합본 PDF -> (레코드 리스트, 파일수준 통계 dict)"""
     filename = os.path.basename(path)
     entry = registry.classify_filename(filename)
+    domain = domain_from_path(path)
 
     doc = fitz.open(path)
     ranges, split_method, split_warning = splitter.split_pages(doc)
@@ -32,7 +47,7 @@ def process_pdf(path: str):
 
         common = extractor.extract_common_fields(raw_text)
         code = entry["code"] if entry else None
-        extended = extractor.extract_extended_fields(code, raw_text)
+        extended = extractor.extract_extended_fields(code, raw_text, domain)
 
         record = {
             "source_file": filename,
@@ -71,6 +86,7 @@ def process_pdf(path: str):
             if any(v is not None for v in r["sustainability_metrics"].values())
         ),
         "numbered_sections_found": sum(1 for r in records if r["numbered_sections"]),
+        "spec_fields_found": sum(len(r["spec_fields"]) for r in records),
     }
     return records, stats
 
@@ -93,7 +109,7 @@ def _format_report(all_stats, all_codes, matched_codes, total_files):
             f"{s['registry_code']:8s} {s['file']:45s} {s['total_pages']:6d} "
             f"{str(s['instances_produced']) + '/' + str(s['instances_expected']):>10s} "
             f"{s['document_id_found']:>4d} {s['mock_id_found']:>5d} {s['dpp_annotation_found']:>7d} {s['qr_found']:>4d} "
-            f"{s['sustainability_metric_found']:>4d} {s['numbered_sections_found']:>4d}  "
+            f"{s['sustainability_metric_found']:>4d} {s['numbered_sections_found']:>4d} {s['spec_fields_found']:>7d}  "
             f"{s['split_warning'] or ''}"
         )
     return "\n".join(lines)
