@@ -2,6 +2,7 @@ package com.dpp.mypage.service;
 
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
+import com.dpp.document.client.ParserClient;
 import com.dpp.mypage.dto.OrganizationResponse;
 import com.dpp.mypage.dto.OrganizationUpdateRequest;
 import com.dpp.mypage.entity.OrgApprovalStatus;
@@ -9,16 +10,20 @@ import com.dpp.mypage.entity.OrgProfileStatus;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
 import com.dpp.mypage.repository.RoleRepository;
-import com.dpp.mypage.util.KoreanBizRegNoValidator;
 
+import java.io.IOException;
 import java.time.OffsetDateTime;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -31,10 +36,16 @@ import java.util.Set;
  *     조회/보완. org_type(가입 시엔 NULL)·주소·담당자 정보는 여기서 채운다.
  *
  * approval_status(관리자 승인)는 두 경로로만 바뀐다: (1) 이 서비스의 신규 가입 시점
- * 자동 심사(국내 사업자등록번호 체크섬 통과 시 즉시 ACTIVE, 그 외엔 PENDING으로 남겨
- * 관리자 수동 심사 대기 - 2026-08-16), (2) AdminOrgApprovalService의 관리자 승인/반려
- * API. 여기 findOrCreateForSignup 이외의 메서드(마이페이지 프로필 CRUD)는 여전히
- * approval_status를 건드리지 않는다.
+ * 자동 심사, (2) AdminOrgApprovalService의 관리자 승인/반려 API. (1)의 자동 심사 로직은
+ * 2026-08-19 강 요청으로 재설계됨 - 예전엔 국내 사업자등록번호 체크섬(형식 검증만, 국세청
+ * 실제 DB 대조 아님) 통과만으로 즉시 ACTIVE 처리했으나, "첨부 여부만 확인하는 건 자동심사로
+ * 볼 수 없다"는 지적에 따라 폐지했다. 지금은: 세관/시장감독기관(orgTypeHint 있음) 계정은
+ * 공적 기관 신원 확인이 필요하므로 자동승인 자체를 시도하지 않고 항상 PENDING(관리자 수동
+ * 심사)으로 남긴다. 그 외(제조사/협력사) 계정은 첨부된 사업자등록증을 parser 서비스
+ * (ParserClient.verifyBizCert)로 실제 텍스트 추출 후 사업자등록번호·상호가 가입 입력값과
+ * 완전히 일치할 때만 즉시 ACTIVE 처리하고, 조금이라도 어긋나면 역시 PENDING으로 남긴다
+ * (verifyBizCert 메서드 참고). 여기 findOrCreateForSignup 이외의 메서드(마이페이지 프로필
+ * CRUD)는 여전히 approval_status를 건드리지 않는다.
  */
 @Service
 public class OrganizationService {
@@ -48,24 +59,52 @@ public class OrganizationService {
 
     private static final Set<String> ALLOWED_DOMAINS = Set.of("STEEL", "TEXTILE", "BATTERY");
 
+    /** 세관/시장감독기관처럼 공적 성격의 계정 유형 - 가입 시점부터 org_type을 확정하고
+     * (일반 기업과 달리 마이페이지까지 기다리지 않는다), 사업자등록증 검증 결과와 무관하게
+     * 항상 관리자 수동 심사로 보낸다(2026-08-19 강 요청 "세관, 시장감독기관 같은 공적인
+     * 계정은 수동 심사가 필요"). */
+    private static final Set<String> PUBLIC_AUTHORITY_ORG_TYPES = Set.of("CUSTOMS", "EU_AUTHORITY");
+
     private final OrganizationRepository organizationRepository;
     private final UserAccountRepository userAccountRepository;
     private final RoleRepository roleRepository;
+    private final ParserClient parserClient;
 
     public OrganizationService(OrganizationRepository organizationRepository,
                                 UserAccountRepository userAccountRepository,
-                                RoleRepository roleRepository) {
+                                RoleRepository roleRepository,
+                                ParserClient parserClient) {
         this.organizationRepository = organizationRepository;
         this.userAccountRepository = userAccountRepository;
         this.roleRepository = roleRepository;
+        this.parserClient = parserClient;
     }
 
-    /** BusinessSignupService 전용. 반드시 그쪽의 @Transactional 안에서 호출될 것. */
+    /** parser(FastAPI) POST /verify-biz-cert 응답 요약. */
+    private record BizCertVerdict(boolean autoApprovable, List<String> reasons) {
+    }
+
+    /** BusinessSignupService 전용. 반드시 그쪽의 @Transactional 안에서 호출될 것.
+     *
+     * @param orgTypeHint    FE 가입 화면에서 고른 계정 유형 힌트("CUSTOMS"/"EU_AUTHORITY"/
+     *                       null) - 세관·시장감독기관이면 항상 수동 심사로 보내기 위함
+     *                       (2026-08-19). 그 외(제조사/협력사)는 null이고, org_type은 종전과
+     *                       동일하게 가입 시점엔 비워둔 채 마이페이지에서 확정한다.
+     * @param bizRegCertFile 사업자등록증 파일(제조사/협력사 가입 시 필수) - parser 서비스로
+     *                       형식·데이터를 확인해 체크섬 단독 검증을 대체한다(2026-08-19 강
+     *                       요청). 공적 계정(orgTypeHint 있음)은 어차피 수동 심사라 검증하지
+     *                       않는다.
+     */
     @Transactional
-    public Organization findOrCreateForSignup(String companyName, String bizRegNo,
-                                               String countryInput, String domainInput) {
+    public Organization findOrCreateForSignup(String companyName, String bizRegNo, String countryInput,
+                                               String domainInput, String orgTypeHint, MultipartFile bizRegCertFile) {
         String countryCode = normalizeCountryCode(countryInput);
-        String domain = normalizeDomain(domainInput);
+        boolean isPublicAuthority = orgTypeHint != null
+                && PUBLIC_AUTHORITY_ORG_TYPES.contains(orgTypeHint.trim().toUpperCase());
+        // 세관/시장감독기관은 산업 도메인(STEEL/TEXTILE/BATTERY) 개념이 없다 - domain 컬럼은
+        // nullable이라 그냥 비워둔다(V1__schema.sql: CHECK (domain IN (...))는 NULL을 막지
+        // 않음). 제조사/협력사만 기존처럼 필수로 검증한다.
+        String domain = isPublicAuthority ? null : normalizeDomain(domainInput);
 
         Optional<Organization> existing = organizationRepository
                 .findByCountryCodeAndBizRegNoAndDeletedAtIsNull(countryCode, bizRegNo);
@@ -80,25 +119,59 @@ public class OrganizationService {
         org.setCountryCode(countryCode);
         org.setBizRegNo(bizRegNo);
         org.setDomain(domain);
-        // org_type은 일부러 비워둔다 - "가입 직후에는 NULL, 마이페이지에서 확정" (V1 스키마 주석).
 
-        // 자동 심사: 국세청/EU VIES 실시간 조회 API는 이 프로토타입 범위 밖이라(자격/계약
-        // 필요), 국내(KR) 사업자등록번호는 공개 체크섬 알고리즘만으로 형식 유효성을 확인해
-        // 즉시 승인한다(KoreanBizRegNoValidator). 그 외(체크섬 불일치 KR, 국내 밖 모든
-        // 국가)는 organization.approval_status 기본값(PENDING)을 그대로 두고 관리자 수동
-        // 심사로 보낸다 - AdminOrgApprovalService가 그 큐를 다룬다(2026-08-16).
-        if ("KR".equals(countryCode) && KoreanBizRegNoValidator.isValid(bizRegNo)) {
-            org.setApprovalStatus(OrgApprovalStatus.ACTIVE);
-            org.setApprovedAt(OffsetDateTime.now());
-            // approvedBy는 비워둔다 - NULL이 "관리자가 아니라 자동 심사로 승인됨"의 표식
-            // (AdminOrgApprovalService가 목록 응답에서 이 값으로 자동/수동을 구분한다).
-            log.info("자동 승인: countryCode={}, bizRegNo={} 체크섬 통과", countryCode, bizRegNo);
+        if (isPublicAuthority) {
+            // org_type은 이미 알고 있으므로(가입 화면에서 세관/시장감독기관을 직접 선택)
+            // 마이페이지까지 기다리지 않고 여기서 바로 확정한다. approval_status는 기본값
+            // PENDING을 그대로 둬서 항상 관리자 수동 심사로 보낸다 - 사업자등록증 검증을
+            // 아예 시도하지 않는다(공적 기관은 사업자등록증 개념 자체가 안 맞는 경우가 많음).
+            org.setOrgType(orgTypeHint.trim().toUpperCase());
+            log.info("공적 계정 가입: orgType={}, countryCode={}, bizRegNo={} - 자동승인 대상 제외, "
+                    + "관리자 수동 심사로 전환", org.getOrgType(), countryCode, bizRegNo);
+        } else {
+            BizCertVerdict verdict = verifyBizCert(bizRegCertFile, bizRegNo, companyName);
+            if (verdict.autoApprovable()) {
+                org.setApprovalStatus(OrgApprovalStatus.ACTIVE);
+                org.setApprovedAt(OffsetDateTime.now());
+                // approvedBy는 비워둔다 - NULL이 "관리자가 아니라 자동 심사로 승인됨"의 표식
+                // (AdminOrgApprovalService가 목록 응답에서 이 값으로 자동/수동을 구분한다).
+                log.info("자동 승인: countryCode={}, bizRegNo={} 사업자등록증 형식·데이터 확인 통과",
+                        countryCode, bizRegNo);
+            } else {
+                log.info("수동 심사 대기: countryCode={}, bizRegNo={} 사업자등록증 검증 미통과 - {}",
+                        countryCode, bizRegNo, verdict.reasons());
+            }
         }
 
         Organization saved = organizationRepository.save(org);
         log.info("신규 조직 생성: org_id={}, countryCode={}, bizRegNo={}, approvalStatus={}",
                 saved.getOrgId(), countryCode, bizRegNo, saved.getApprovalStatus());
         return saved;
+    }
+
+    /**
+     * parser(FastAPI) POST /verify-biz-cert 호출 - "첨부 여부만 확인"이 아니라 문서에서
+     * 실제로 사업자등록번호·상호를 읽어 가입 입력값과 대조한 결과를 받는다(biz_reg.py 참고).
+     * 파일이 없거나 파서 서비스 호출이 실패하면(장애·타임아웃) 가입 자체를 막지 않고
+     * 관리자 수동 심사로 안전하게 폴백한다 - DocumentSlotService.autoFillFieldsFromParsedDocument
+     * 와 동일한 "파서 장애가 핵심 흐름을 막으면 안 된다" 원칙.
+     */
+    private BizCertVerdict verifyBizCert(MultipartFile bizRegCertFile, String bizRegNo, String companyName) {
+        if (bizRegCertFile == null || bizRegCertFile.isEmpty()) {
+            log.warn("사업자등록증 파일 없음 - bizRegNo={} 자동승인 불가, 관리자 수동 심사로 전환", bizRegNo);
+            return new BizCertVerdict(false, List.of("사업자등록증 파일이 첨부되지 않았습니다."));
+        }
+        try {
+            Map<String, Object> result = parserClient.verifyBizCert(bizRegCertFile, bizRegNo, companyName);
+            boolean autoApprovable = Boolean.TRUE.equals(result.get("auto_approvable"));
+            @SuppressWarnings("unchecked")
+            List<String> reasons = (List<String>) result.getOrDefault("reasons", List.of());
+            return new BizCertVerdict(autoApprovable, reasons);
+        } catch (RestClientException | IOException e) {
+            log.warn("사업자등록증 검증 서비스 호출 실패(bizRegNo={}) - 관리자 수동 심사로 전환: {}",
+                    bizRegNo, e.getMessage());
+            return new BizCertVerdict(false, List.of("사업자등록증 검증 서비스를 호출하지 못했습니다: " + e.getMessage()));
+        }
     }
 
     @Transactional(readOnly = true)

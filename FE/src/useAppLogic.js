@@ -495,7 +495,6 @@ export function useAppLogic(userProps) {
     if (/^(gmail|naver|daum|hanmail|kakao|outlook|hotmail|yahoo|nate|icloud)\./.test(domain + '.')) return 'personal';
     if (/(^|\.)customs\.go\.kr$|(^|\.)kcs\.go\.kr$/.test(domain)) return 'customs';
     if (/(^|\.)korea\.kr$|(^|\.)kats\.go\.kr$|(^|\.)motie\.go\.kr$/.test(domain)) return 'eu';
-    if (/(^|\.)ieum\.io$/.test(domain)) return 'admin';
     return 'unknown';
   }
 
@@ -707,23 +706,24 @@ export function useAppLogic(userProps) {
       suCompanyTab: pill(s.suTab === 'company'),
       setSuPersonal: () => setState({ suTab: 'personal' }),
       setSuCompany: () => setState({ suTab: 'company' }),
-      suRoleAdmin: roleCard(s.suRole === 'admin'),
       suRoleMaker: roleCard(s.suRole === 'maker'),
       suRolePartner: roleCard(s.suRole === 'partner'),
       suRoleEu: roleCard(s.suRole === 'eu'),
       suRoleCustoms: roleCard(s.suRole === 'customs'),
-      pickAdmin: () => setState({ suRole: 'admin' }),
       pickMaker: () => setState({ suRole: 'maker' }),
       pickPartner: () => setState({ suRole: 'partner' }),
       pickEu: () => setState({ suRole: 'eu' }),
       pickCustoms: () => setState({ suRole: 'customs' }),
+      // 세관/시장감독기관(공적 기관) 계정 - 사업자등록증 자동승인 없이 항상 관리자
+      // 수동심사로 감(2026-08-19 강 요청 3번). 첨부 파일 UI 문구 분기에 사용.
+      suRoleIsPublicAuthority: s.suRole === 'customs' || s.suRole === 'eu',
       suEmail: s.suEmail || '',
       onSuEmail: e => {
         const v = e.target.value;
         const at = v.indexOf('@');
         const domain = at >= 0 ? v.slice(at + 1).toLowerCase().trim() : '';
         const hint = domainHint(v);
-        const map = { customs: 'customs', eu: 'eu', admin: 'admin' };
+        const map = { customs: 'customs', eu: 'eu' };
         const role = map[hint] || null;
         // 이메일을 바꾸면 이전 인증 상태는 무효화 (다른 이메일로 인증코드 재요청 필요).
         setState({ suEmail: v, suDetected: domain ? (hint === 'unknown' ? 'unknown' : hint) : null, suRole: role || s.suRole, suCodeSent: false, suVerified: false, suVerifyCode: '' });
@@ -731,9 +731,8 @@ export function useAppLogic(userProps) {
       suDetectedShow: !!s.suDetected && s.suDetected !== 'personal' && s.suDetected !== 'unknown',
       suDetectedPersonal: s.suDetected === 'personal',
       suDetectedUnknown: s.suDetected === 'unknown',
-      suDetectedLabel: { admin: '관리자', maker: '제조사', customs: '세관', eu: '시장감독기관' }[s.suDetected] || '',
+      suDetectedLabel: { maker: '제조사', customs: '세관', eu: '시장감독기관' }[s.suDetected] || '',
       suDetectedNote: {
-        admin: '등록된 운영 도메인 · 관리자 계정으로 제안되었습니다',
         customs: '등록된 세관 도메인 · 세관 계정으로 제안되었습니다',
         eu: '등록된 기관 도메인 · 시장감독기관 계정으로 제안되었습니다'
       }[s.suDetected] || '',
@@ -749,6 +748,11 @@ export function useAppLogic(userProps) {
       onSuPassword: e => setState({ suPassword: e.target.value }),
       suPasswordConfirm: s.suPasswordConfirm || '',
       onSuPasswordConfirm: e => setState({ suPasswordConfirm: e.target.value }),
+      // --- 사업자등록증 첨부 (자동승인 심사용, 2026-08-19 강 요청) ---
+      // 제조사/협력사는 필수(submitSignup에서 검증). 세관/시장감독기관은 자동승인을 타지
+      // 않아 항상 관리자 수동심사로 가므로 선택 첨부.
+      suBizRegCertName: s.suBizRegCert ? s.suBizRegCert.name : '',
+      onSuBizRegCert: e => setState({ suBizRegCert: (e.target.files && e.target.files[0]) || null }),
 
       // --- 이메일 인증 2단계 (요청 → 검증) ---
       suCodeSent: !!s.suCodeSent,
@@ -849,16 +853,25 @@ export function useAppLogic(userProps) {
         if (!s.suCompanyName || !s.suBizRegNo) { say('회사명과 사업자등록번호를 입력해 주세요.'); return; }
         if (!s.suPassword || s.suPassword.length < 8) { say('비밀번호는 8자 이상이어야 합니다.'); return; }
         if (s.suPassword !== s.suPasswordConfirm) { say('비밀번호가 일치하지 않습니다.'); return; }
+        const isPublicAuthority = s.suRole === 'customs' || s.suRole === 'eu';
+        // 제조사/협력사는 사업자등록증 첨부가 필수다(2026-08-19 강 요청 4번 - 가입 시
+        // 업로드 필수화). 세관/시장감독기관은 자동승인을 아예 시도하지 않고 항상 관리자
+        // 수동심사로 가므로(강 요청 3번) 파일이 없어도 통과시킨다.
+        if (!isPublicAuthority && !s.suBizRegCert) { say('사업자등록증 파일을 첨부해 주세요.'); return; }
         // partner(협력사)도 domain='steel'로 가입시킨다 - requirement_field가 아직 STEEL만
         // 시딩돼 있어서(V4__seed_requirement_steel.sql) RAW_SUPPLIER 등 협력사 역할이 실제로
         // 뭘 제출할 수 있는 케이스가 철강뿐이다. 배터리/섬유 협력사가 필요해지면 그때
         // 시딩부터 늘리고 이 분기도 확장할 것.
-        const domain = (s.suRole === 'maker' || s.suRole === 'partner') ? 'steel' : s.suRole;
+        // 세관/시장감독기관은 산업 도메인 개념이 없으므로 domain을 보내지 않고 orgTypeHint로
+        // 보낸다 - 예전엔 여기서 'customs'/'eu' 문자열을 그대로 domain에 넣어 보내던 버그가
+        // 있었다(BE normalizeDomain이 STEEL/TEXTILE/BATTERY만 받아 400이 났을 것).
+        const domain = (s.suRole === 'maker' || s.suRole === 'partner') ? 'steel' : null;
+        const orgTypeHint = s.suRole === 'customs' ? 'CUSTOMS' : s.suRole === 'eu' ? 'EU_AUTHORITY' : null;
         try {
           const res = await completeBusinessSignup({
             email, password: s.suPassword, companyName: s.suCompanyName,
-            businessRegNo: s.suBizRegNo, country: s.suCountry || '대한민국', domain,
-            phone: (s.suPhone || '').trim()
+            businessRegNo: s.suBizRegNo, country: s.suCountry || '대한민국', domain, orgTypeHint,
+            phone: (s.suPhone || '').trim(), bizRegCert: s.suBizRegCert
           });
           const sessionExtra = { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType };
           if (s.suRole === 'maker') { saveSession({ role: 'steel', at: Date.now(), ...sessionExtra }); setState({ view: 'app', role: 'steel', tab: 'dash', obKind: 'maker', obOpen: true, obStep: 1, obSaved: 1 }); }
@@ -868,7 +881,6 @@ export function useAppLogic(userProps) {
           // 대시보드로 보낸다 - 협력사 초대를 받아서 가입한 경우라 대개 자기가 담당한
           // DPP가 이미 연결돼 있을 것(BusinessSignupService.linkPendingCollaborations).
           else if (s.suRole === 'partner') { go('partner', sessionExtra); }
-          else go('admin', sessionExtra);
         } catch (err) {
           say(err.message || '회원가입에 실패했습니다.');
         }

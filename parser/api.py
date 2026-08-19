@@ -9,6 +9,7 @@ import registry
 import extractor
 import qr
 import hasher
+import biz_reg
 
 app = FastAPI(title="DPP Document Parser", version="0.1.0")
 
@@ -16,6 +17,26 @@ app = FastAPI(title="DPP Document Parser", version="0.1.0")
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/verify-biz-cert")
+async def verify_biz_cert(
+    file: UploadFile = File(...),
+    biz_reg_no: str = Form(...),
+    company_name: str = Form(...),
+):
+    """가입 자동승인용 - 업로드된 사업자등록증에서 사업자등록번호/상호를 뽑아 가입 입력값과
+    대조한다(2026-08-19 강 요청 - 체크섬 단독 자동승인 대신 문서 형식·데이터 확인으로 대체).
+    실제 국세청 DB 실시간 대조는 이 프로토타입 범위 밖이라 여전히 안 하지만, "파일 첨부
+    여부"만 보는 것보다는 실질적인 검증이다. BE(OrganizationService)가 이 결과를 보고
+    auto_approvable=true일 때만 즉시 승인하고, 그 외엔 관리자 수동 심사(PENDING)로 보낸다."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+
+    extracted = biz_reg.extract_biz_reg_fields(content)
+    verdict = biz_reg.verify_against_signup(extracted, biz_reg_no, company_name)
+    return verdict
 
 
 @app.get("/registry")
