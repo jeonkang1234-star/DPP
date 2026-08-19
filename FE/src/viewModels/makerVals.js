@@ -190,6 +190,11 @@ export function makerVals(ctx) {
     // DashboardResponse.newThisMonthCount(BE, dpp.created_at 기준 집계)를 그대로 쓴다.
     // "서류 대기"는 여전히 대응하는 집계가 없어서 0으로 남겨둔다.
     kpiNew: dash ? dash.newThisMonthCount : kpi[1],
+    // "등록 DPP 수"/"작성중인 DPP 수" 옆 배지(2026-08-19, 강 요청) - 예전엔 둥근 배경 pill로
+    // 표시돼서 "너무 AI스럽다"는 피드백을 받았다. 배경을 없애고 텍스트에 살짝 입체감만
+    // 주는 badgeText3d로 교체(색은 기존과 동일하게 유지: 초록/빨강).
+    kpiNewBadgeStyle: ctx.badgeText3d('#0E7A3D'),
+    kpiActionBadgeStyle: ctx.badgeText3d('#C22B2B'),
     kpiIncomplete: dash ? dash.incompleteCount : kpi[2],
     kpiMissing: dash ? dash.missingFields.length : kpi[3],
     kpiWaiting: dash ? 0 : kpi[4],
@@ -229,11 +234,12 @@ export function makerVals(ctx) {
       serial: displayId,
       productName: name || '(이름 없음)',
       statusLabel: done === 100 ? '발급 완료' : done === 0 ? '입력 대기' : (done + '% 작성 중'),
-      statusChip: done === 100
-        ? ctx.chip('rgba(18,161,80,.12)', '#0E7A3D')
-        : done === 0
-          ? ctx.chip('rgba(132,148,172,.16)', '#6B7A93')
-          : ctx.chip('rgba(227,160,8,.16)', '#96660A'),
+      // 2026-08-19 강 요청: "제품명 오른쪽에 있는 ~% 작성 중의 UI가 너무 AI스럽다" - 배경
+      // pill을 없애고 badgeText3d(입체감 있는 텍스트만)로 교체, 색은 기존 그대로.
+      statusChip: {
+        ...(done === 100 ? ctx.badgeText3d('#0E7A3D') : done === 0 ? ctx.badgeText3d('#6B7A93') : ctx.badgeText3d('#96660A')),
+        fontSize: '11.5px'
+      },
       open: () => setState({ tab: 'input', fieldFormDppId: openId, parsedFieldSources: {}, unlockedFields: {}, qrModal: null })
     })),
     recentDppsEmpty: completenessRows.length === 0,
@@ -243,7 +249,10 @@ export function makerVals(ctx) {
     completeness: completenessRows.map(([openId, displayId, name, done, prog, none]) => ({
       key: openId, id: displayId, name, pct: done,
       pctStyle: ctx.pctStyle(done),
-      segs: [{ key: 'a', style: ctx.segStyle(done, '#12A150') }, { key: 'b', style: ctx.segStyle(prog, '#E3A008') }, { key: 'c', style: ctx.segStyle(none, '#E03B3B') }],
+      // 2026-08-19 강 요청: "DPP 입력률 그래프가 너무 2D라 생동감 없고 재미없음" - 단색
+      // 평면 세그먼트를 광택+음영이 있는 segStyle3D로 교체(색은 기존과 동일).
+      segs: [{ key: 'a', style: ctx.segStyle3D(done, '#12A150') }, { key: 'b', style: ctx.segStyle3D(prog, '#E3A008') }, { key: 'c', style: ctx.segStyle3D(none, '#E03B3B') }],
+      trackStyle: ctx.groove3d('#EEF2F8'),
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
     // KPI 카드 줄의 "평균 완성도" 자리에 들어갈 정적 규정 업데이트 안내 - 카드 폭이 좁아서
