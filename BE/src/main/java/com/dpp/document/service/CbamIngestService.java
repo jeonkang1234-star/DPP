@@ -274,8 +274,9 @@ public class CbamIngestService {
         dppFieldValueRepository.save(applicable);
 
         // 라벨 사전 기반 일괄 채움. CBAM 보고서는 de minimis(50t) 초과 여부가 정보성
-        // 플래그라 반려 케이스 자체가 없다 - specPassed 게이트 없이 항상 적용한다.
-        applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId());
+        // 플래그라 반려 케이스 자체가 없다 - 게이트 없이 항상 적용하고, 영업비밀 필드의
+        // 판정도 "충족"으로 본다(반려가 없으니 미충족 케이스가 존재하지 않는다).
+        applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId(), Boolean.TRUE);
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
 
@@ -403,13 +404,14 @@ public class CbamIngestService {
      * 데이터 파싱 안되게"(2026-08-18 피드백)라는 기존 원칙 그대로다.
      */
     @SuppressWarnings("unchecked")
-    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed, Long documentId) {
+    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed,
+                                 Long documentId, Boolean zkpPassed) {
         Object raw = parsed.get("spec_fields");
         if (!(raw instanceof Map)) {
             return;
         }
         specFieldAutoFillService.apply(dpp.getDppId(), dpp.getDomain(), orgId, userId,
-                (Map<String, Object>) raw, documentId);
+                (Map<String, Object>) raw, documentId, zkpPassed);
     }
 
 }

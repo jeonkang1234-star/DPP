@@ -272,7 +272,7 @@ public class OekotexIngestService {
 
         // 라벨 사전 기반 일괄 채움 - 규격 판정(pH 4.0~7.5)을 통과한 문서에서만 값을 가져온다.
         if (specPassed) {
-            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId());
+            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId(), specPassed);
         }
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
@@ -442,13 +442,14 @@ public class OekotexIngestService {
      * 데이터 파싱 안되게"(2026-08-18 피드백)라는 기존 원칙 그대로다.
      */
     @SuppressWarnings("unchecked")
-    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed, Long documentId) {
+    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed,
+                                 Long documentId, Boolean zkpPassed) {
         Object raw = parsed.get("spec_fields");
         if (!(raw instanceof Map)) {
             return;
         }
         specFieldAutoFillService.apply(dpp.getDppId(), dpp.getDomain(), orgId, userId,
-                (Map<String, Object>) raw, documentId);
+                (Map<String, Object>) raw, documentId, zkpPassed);
     }
 
 }

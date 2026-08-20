@@ -251,7 +251,7 @@ public class CareLabelIngestService {
         // 위쪽 fillIfEmpty(FABRIC_LOT_NO/RECYCLED_FIBER_RATE)보다 아래에 있는 이유: specPassed는
         // ZKP 증명 결과를 받은 뒤에야 정해진다. 위에 두면 선언 전에 참조하게 된다.
         if (specPassed) {
-            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId());
+            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId(), specPassed);
         }
 
         ZkpProof zkpProof = new ZkpProof();
@@ -512,13 +512,14 @@ public class CareLabelIngestService {
      * 데이터 파싱 안되게"(2026-08-18 피드백)라는 기존 원칙 그대로다.
      */
     @SuppressWarnings("unchecked")
-    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed, Long documentId) {
+    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed,
+                                 Long documentId, Boolean zkpPassed) {
         Object raw = parsed.get("spec_fields");
         if (!(raw instanceof Map)) {
             return;
         }
         specFieldAutoFillService.apply(dpp.getDppId(), dpp.getDomain(), orgId, userId,
-                (Map<String, Object>) raw, documentId);
+                (Map<String, Object>) raw, documentId, zkpPassed);
     }
 
 }

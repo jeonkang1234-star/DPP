@@ -484,12 +484,27 @@ public class FieldFormService {
                 : fieldsFor(fieldDomains(domain), participantRoleCode).stream()
                         .map(RequirementField::getFieldCode).collect(Collectors.toSet());
 
+        // 영업비밀(TRADE_SECRET) 필드는 사람이 직접 값을 넣을 수 없다 - 그 칸의 값은
+        // 성적서에서 파싱한 실측치이고, 실측치는 저장하지 않는 게 원칙이다. 저장되는 건
+        // ZKP 판정("충족"/"미충족")뿐이며 그건 문서 업로드 경로에서만 쓰인다
+        // (SpecFieldAutoFillService 주석 참고, 2026-08-20 강 지적). FE도 이 칸을 읽기
+        // 전용으로 그리지만, 요청을 직접 만들어 보내는 경우까지 여기서 막는다.
+        Set<String> tradeSecretCodes = fieldsFor(fieldDomains(domain), participantRoleCode).stream()
+                .filter(f -> "TRADE_SECRET".equals(f.getDisclosureScope()))
+                .map(RequirementField::getFieldCode)
+                .collect(Collectors.toSet());
+
         for (Map.Entry<String, String> entry : values.entrySet()) {
             String text = entry.getValue();
             if (text == null || text.isBlank()) {
                 continue;
             }
             if (allowedFieldCodes != null && !allowedFieldCodes.contains(entry.getKey())) {
+                continue;
+            }
+            if (tradeSecretCodes.contains(entry.getKey())) {
+                log.debug("dppId={} field={} 영업비밀 필드 직접 입력 무시 - 값은 문서 파싱+ZKP 판정으로만 채운다",
+                        dppId, entry.getKey());
                 continue;
             }
             DppFieldValue value = fieldValueRepository.findByDppIdAndFieldCode(dppId, entry.getKey())

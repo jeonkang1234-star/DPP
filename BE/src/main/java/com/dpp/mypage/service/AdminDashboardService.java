@@ -139,7 +139,16 @@ public class AdminDashboardService {
         long held = ((Number) row[6]).longValue();
         long issued = ((Number) row[7]).longValue();
         return new AdminMemberDto(orgId, orgName, bizRegNo == null || bizRegNo.isBlank() ? "—" : bizRegNo,
-                joinedDate, countryCode, domainLabel(domain), held, issued);
+                joinedDate, countryCode, domainLabel(domain), held, issued,
+                dash(row.length > 8 ? row[8] : null),
+                dash(row.length > 9 ? row[9] : null),
+                dash(row.length > 10 ? row[10] : null));
+    }
+
+    /** 빈 값은 화면에서 빈칸이 아니라 '—'로 보이게 한다 - 조회는 됐는데 값이 없다는 뜻. */
+    private String dash(Object raw) {
+        String v = raw == null ? null : String.valueOf(raw).trim();
+        return v == null || v.isEmpty() ? "—" : v;
     }
 
     private String domainLabel(String domain) {

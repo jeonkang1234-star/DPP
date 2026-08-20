@@ -159,6 +159,32 @@ function optionsFor(f, codeOptions) {
 }
 
 /**
+ * 영업비밀(TRADE_SECRET) 필드의 O/X 표시값. 그 외 필드는 zkpOnly:false만 돌려준다.
+ *
+ * 저장된 값은 실측치가 아니라 판정 토큰이다("충족"/"미충족", SpecFieldAutoFillService).
+ * 혹시 예전 데이터에 숫자가 남아 있어도 화면에는 절대 숫자를 그리지 않는다 - 값이
+ * 비어 있지 않으면 "충족"으로만 본다(미충족은 정확히 그 토큰일 때만).
+ */
+function zkpVerdictOf(f) {
+  if (f.disclosureScope !== 'TRADE_SECRET') {
+    return { zkpOnly: false };
+  }
+  const v = (f.value || '').trim();
+  const failed = v === '미충족';
+  const passed = !!v && !failed;
+  return {
+    zkpOnly: true,
+    zkpMark: passed ? 'O' : failed ? 'X' : '–',
+    zkpLabel: passed ? '한계값 충족' : failed ? '한계값 미충족' : '미제출',
+    zkpFg: passed ? '#0E7A3D' : failed ? '#C22B2B' : '#6B7A93',
+    zkpBg: passed ? 'rgba(18,161,80,.14)' : failed ? 'rgba(194,43,43,.12)' : 'rgba(132,148,172,.14)',
+    zkpHint: passed ? '영지식증명으로 검증됨 · 실측값은 저장하지 않습니다'
+      : failed ? '성적서 규격 미달 · 문서를 다시 제출해 주세요'
+      : '성적서를 업로드하면 영지식증명으로 판정됩니다'
+  };
+}
+
+/**
  * 섹션별로 필드를 묶는다. 서버가 sections를 주면 그 순서를 그대로 따르고(code_master의
  * FIELD_SECTION sort_order), 안 주면 필드에 나온 순서대로 만든다.
  *
@@ -359,6 +385,11 @@ export function makerVals(ctx) {
             .filter(Boolean).join(' / '),
           restricted: f.disclosureScope && f.disclosureScope !== 'PUBLIC',
           disclosureLabel: DISCLOSURE_LABEL[f.disclosureScope] || '',
+          // 영업비밀(ZKP 대체) 항목은 실측값을 아예 다루지 않는다(2026-08-20 강 지적:
+          // "규정을 검수하는 데이터면 O, X만 보여줘야 하는 것 아닌지"). 서버도 이 필드에는
+          // 값 대신 판정 토큰("충족"/"미충족")만 저장한다 - SpecFieldAutoFillService 참고.
+          // 그래서 화면도 입력칸 대신 O/X 배지로 그린다.
+          ...zkpVerdictOf(f),
           // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
           inputBorderColor: value ? '#12A150' : '#E03B3B',
           locked,

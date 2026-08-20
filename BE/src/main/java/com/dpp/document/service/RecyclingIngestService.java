@@ -282,7 +282,7 @@ public class RecyclingIngestService {
         // 이쪽은 문서 본문 아무 데서나 라벨로 긁어오는 경로다. 반려한 문서는 안 믿기로
         // 한 문서인데 거기서 추가 데이터를 더 꺼내오는 건 앞뒤가 안 맞는다.
         if (specPassed) {
-            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId());
+            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId(), specPassed);
         }
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
@@ -458,13 +458,14 @@ public class RecyclingIngestService {
      * 데이터 파싱 안되게"(2026-08-18 피드백)라는 기존 원칙 그대로다.
      */
     @SuppressWarnings("unchecked")
-    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed, Long documentId) {
+    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed,
+                                 Long documentId, Boolean zkpPassed) {
         Object raw = parsed.get("spec_fields");
         if (!(raw instanceof Map)) {
             return;
         }
         specFieldAutoFillService.apply(dpp.getDppId(), dpp.getDomain(), orgId, userId,
-                (Map<String, Object>) raw, documentId);
+                (Map<String, Object>) raw, documentId, zkpPassed);
     }
 
 }

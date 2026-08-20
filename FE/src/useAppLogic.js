@@ -203,6 +203,8 @@ export function useAppLogic(userProps) {
       // { orgId, name } | null. 2026-08-17: window.prompt 대신 팝업으로 교체.
       rejectModal: null,
       rejectReasonInput: '',
+      // 회원 관리 "상세" 모달에 표시할 조직(AdminMemberDto) | null.
+      memberModal: null,
       // 제품조회 "상세" 모달에서 발급완료 DPP의 QR을 그 자리에서 바로 볼 수 있게(2026-08-17).
       // 세션 캐시가 아니라 표시할 때마다 필요한 식별자로 새로 생성해서 dppId에 매핑해 둔다.
       dppQrCache: {},
@@ -790,9 +792,25 @@ export function useAppLogic(userProps) {
         domain: m.domainLabel, held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),
         avatar: avatarStyle(avatarColorFor(m.orgName)), domainChip: domainChipFor(m.domainLabel),
         domainDot: { width: 8, height: 8, flex: 'none', borderRadius: 999, background: m.domainLabel === '철강' ? '#0045A9' : m.domainLabel === '배터리' ? '#12A150' : '#E3A008' },
-        view: () => say(m.orgName + ' 회원 상세 정보를 조회했습니다.')
+        // 예전엔 토스트 한 줄만 띄우고 끝이었다("...회원 상세 정보를 조회했습니다").
+        // 2026-08-20 강 요청으로 실제 상세 모달을 띄운다.
+        view: () => setState({ memberModal: m })
       })),
       membersEmpty: adminMembersList.length === 0,
+      memberModalOpen: !!s.memberModal,
+      memberModalName: s.memberModal ? s.memberModal.orgName : '',
+      memberModalRows: s.memberModal ? [
+        { key: 'biz', label: '사업자등록번호', value: s.memberModal.bizRegNo || '—', mono: true },
+        { key: 'country', label: '국가', value: s.memberModal.countryCode || '—', mono: true },
+        { key: 'phone', label: '전화번호', value: s.memberModal.contactPhone || '—', mono: true },
+        { key: 'contact', label: '담당자', value: s.memberModal.contactName || '—', mono: false },
+        { key: 'email', label: '이메일', value: s.memberModal.contactEmail || '—', mono: false },
+        { key: 'domain', label: '도메인', value: s.memberModal.domainLabel || '—', mono: false },
+        { key: 'joined', label: '가입일', value: s.memberModal.joinedDate || '—', mono: true },
+        { key: 'dpp', label: '보유 / 발행 DPP',
+          value: (s.memberModal.heldDppCount ?? 0) + '건 / ' + (s.memberModal.issuedDppCount ?? 0) + '건', mono: true }
+      ] : [],
+      closeMemberModal: () => setState({ memberModal: null }),
       isLogin: s.view === 'login',
       isSignup: s.view === 'signup',
       isApp: s.view === 'app',

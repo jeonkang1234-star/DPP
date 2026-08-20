@@ -317,7 +317,9 @@ public class DocumentSlotService {
         // 필드를 노려도 둘 다 "비어 있을 때만" 쓰기 때문에 먼저 채운 쪽이 이긴다.
         @SuppressWarnings("unchecked")
         Map<String, Object> specFields = (Map<String, Object>) parsed.get("spec_fields");
-        specFieldAutoFillService.apply(dppId, domain, orgId, userId, specFields, documentId);
+        // 마지막 인자 null: 이 일반 업로드 경로에는 ZKP 검증이 없다. 영업비밀 필드는
+        // 판정이 있어야만 채우므로 여기서는 건드리지 않는다(SpecFieldAutoFillService 주석).
+        specFieldAutoFillService.apply(dppId, domain, orgId, userId, specFields, documentId, null);
 
         fillIfEmpty(dppId, orgId, userId, "GTIN", asTrimmedString(parsed.get("gtin")));
 

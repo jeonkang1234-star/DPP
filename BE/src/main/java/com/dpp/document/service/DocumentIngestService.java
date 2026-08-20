@@ -275,7 +275,7 @@ public class DocumentIngestService {
         // 덮어쓰지 않는다.
         if (specPassed) {
             persistIdentityFields(dpp.getDppId(), orgId, userId, steelMillValues);
-            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId());
+            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId(), specPassed);
         }
 
         // 7) zkp_proof 행 저장 - 실측값(private input)은 어디에도 저장하지 않는다.
@@ -589,13 +589,14 @@ public class DocumentIngestService {
      * 데이터 파싱 안되게"(2026-08-18 피드백)라는 기존 원칙 그대로다.
      */
     @SuppressWarnings("unchecked")
-    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed, Long documentId) {
+    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed,
+                                 Long documentId, Boolean zkpPassed) {
         Object raw = parsed.get("spec_fields");
         if (!(raw instanceof Map)) {
             return;
         }
         specFieldAutoFillService.apply(dpp.getDppId(), dpp.getDomain(), orgId, userId,
-                (Map<String, Object>) raw, documentId);
+                (Map<String, Object>) raw, documentId, zkpPassed);
     }
 
 }

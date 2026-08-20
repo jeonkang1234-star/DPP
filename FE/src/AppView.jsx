@@ -392,6 +392,7 @@ export default function AppView(v) {
     qrModalTitle,
     qrModalHint,
     qrModalUrl, qrModalUrlWarning,
+    memberModalOpen, memberModalName, memberModalRows, closeMemberModal,
     qrBaseEditing, qrBaseInput, qrBaseOnChange, openQrBaseEditor, cancelQrBaseEditor, saveQrBase,
     closeQrModal,
     goToProductsFromQr,
@@ -1027,6 +1028,19 @@ export default function AppView(v) {
                   // 방식으로 그대로 그린다.
                   const renderInput = (f) => {
                     const base = { height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: f.locked ? '#F2F4F8' : '#fff', color: f.locked ? '#6B7A93' : '#0B1B33', cursor: f.locked ? 'not-allowed' : 'text', width: '100%', boxSizing: 'border-box' };
+                    // 영업비밀(ZKP 대체) 항목은 입력칸을 아예 두지 않는다. 실측값은 저장하지도
+                    // 표시하지도 않고, 한계값 충족 여부(O/X)만 보여준다(2026-08-20 강 지적).
+                    if (f.zkpOnly) {
+                      return (
+                        <span style={{ ...base, display: 'flex', alignItems: 'center', gap: '10px', background: '#F7F9FD', borderStyle: 'dashed', cursor: 'default' }}>
+                          <span style={{ width: '26px', height: '26px', flex: 'none', display: 'grid', placeItems: 'center', borderRadius: '999px', background: f.zkpBg, color: f.zkpFg, fontSize: '14px', fontWeight: '800' }}>{f.zkpMark}</span>
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0 }}>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: f.zkpFg }}>{f.zkpLabel}</span>
+                            <span style={{ fontSize: '10.5px', color: '#8494AC' }}>{f.zkpHint}</span>
+                          </span>
+                        </span>
+                      );
+                    }
                     if (!f.onChange) {
                       return <input placeholder={f.ph} defaultValue={f.value} style={{ ...base, background: '#fff' }} />;
                     }
@@ -2094,6 +2108,27 @@ export default function AppView(v) {
             <button onClick={goToProductsFromQr} style={{ flex: 1, height: '44px', border: '0', borderRadius: '12px', background: '#0045A9', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>제품 조회에서 보기</button>
             </>) : null}
           </div>
+        </div>
+      </div>
+      </>) : null}
+
+      {memberModalOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '90', display: 'grid', placeItems: 'center', padding: '40px' }}>
+        <div onClick={closeMemberModal} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.55)' }}></div>
+        <div style={{ position: 'relative', width: '460px', maxHeight: '80vh', overflowY: 'auto', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', padding: '26px 28px', gap: '18px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#0045A9' }}>회원 상세</span>
+            <span style={{ fontSize: '19px', fontWeight: '700' }}>{memberModalName}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+            {(memberModalRows || []).map((r) => (
+              <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '12px', padding: '11px 0', borderTop: '1px solid rgba(16,32,64,.07)', alignItems: 'baseline' }}>
+                <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{r.label}</span>
+                <span style={{ fontSize: '13.5px', fontWeight: '600', color: '#0B1B33', wordBreak: 'break-all', fontFamily: r.mono ? '\'JetBrains Mono\',monospace' : 'inherit' }}>{r.value}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={closeMemberModal} style={{ height: '44px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
         </div>
       </div>
       </>) : null}

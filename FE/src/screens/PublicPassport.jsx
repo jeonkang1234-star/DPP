@@ -32,8 +32,25 @@ export default function PublicPassport() {
         {state.loading ? (
           <div style={{ padding: '40px 0', textAlign: 'center', color: '#8494AC', fontSize: '14px' }}>불러오는 중…</div>
         ) : state.error ? (
-          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', padding: '28px', textAlign: 'center', color: '#C22B2B', fontSize: '14px' }}>
-            {state.error}
+          /*
+           * "해당 DPP를 찾을 수 없습니다."만 덩그러니 띄우면 원인을 알 수가 없다
+           * (2026-08-20 강 리포트). 실제로 가장 흔한 원인은 QR이 가리키는 서버와
+           * 그 DPP가 저장된 서버가 다른 것이다 - PC에서 http://localhost로 열어 발급하면
+           * QR에는 폴백 주소(EC2)가 박히고, EC2 DB에는 그 DPP가 없다. 그래서 지금 조회를
+           * 시도한 서버 주소와 식별자를 같이 보여준다.
+           */
+          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <span style={{ textAlign: 'center', color: '#C22B2B', fontSize: '14px', fontWeight: '600' }}>{state.error}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '14px', borderRadius: '12px', background: '#F7F9FD' }}>
+              <span style={{ fontSize: '11.5px', color: '#6B7A93' }}>조회한 서버</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12.5px', color: '#0B1B33', wordBreak: 'break-all' }}>{window.location.origin}</span>
+              <span style={{ fontSize: '11.5px', color: '#6B7A93', marginTop: '6px' }}>DPP 식별자</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12.5px', color: '#0B1B33', wordBreak: 'break-all' }}>{publicUuid}</span>
+            </div>
+            <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.7' }}>
+              이 서버에 해당 DPP가 없습니다. DPP를 발급한 화면의 주소와 위 주소가 다르다면,
+              발급한 그 서버에서 만든 QR을 사용해야 합니다.
+            </span>
           </div>
         ) : !state.data || !state.data.issued ? (
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', padding: '28px', textAlign: 'center', color: '#6B7A93', fontSize: '14px' }}>

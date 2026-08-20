@@ -78,11 +78,13 @@ public interface AdminStatsRepository extends Repository<Organization, Long> {
      */
     @Query(value = "SELECT o.org_id, o.org_name, o.biz_reg_no, o.created_at, o.country_code, o.domain, "
             + "COUNT(d.dpp_id) FILTER (WHERE d.deleted_at IS NULL) AS held, "
-            + "COUNT(d.dpp_id) FILTER (WHERE d.deleted_at IS NULL AND d.status = 'ACTIVE') AS issued "
+            + "COUNT(d.dpp_id) FILTER (WHERE d.deleted_at IS NULL AND d.status = 'ACTIVE') AS issued, "
+            + "o.contact_name, o.contact_phone, o.contact_email "
             + "FROM organization o "
             + "LEFT JOIN dpp d ON d.owner_org_id = o.org_id "
             + "WHERE o.deleted_at IS NULL AND o.approval_status = 'ACTIVE' "
-            + "GROUP BY o.org_id, o.org_name, o.biz_reg_no, o.created_at, o.country_code, o.domain "
+            + "GROUP BY o.org_id, o.org_name, o.biz_reg_no, o.created_at, o.country_code, o.domain, "
+            + "o.contact_name, o.contact_phone, o.contact_email "
             + "ORDER BY o.created_at DESC", nativeQuery = true)
     List<Object[]> findMembersWithDppCounts();
 }
