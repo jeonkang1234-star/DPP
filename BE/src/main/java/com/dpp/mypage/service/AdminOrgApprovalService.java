@@ -1,5 +1,6 @@
 package com.dpp.mypage.service;
 
+import com.dpp.audit.service.AuditLogService;
 import com.dpp.auth.entity.AccountType;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
@@ -37,13 +38,16 @@ public class AdminOrgApprovalService {
     private final OrganizationRepository organizationRepository;
     private final UserAccountRepository userAccountRepository;
     private final NotificationRepository notificationRepository;
+    private final AuditLogService auditLogService;
 
     public AdminOrgApprovalService(OrganizationRepository organizationRepository,
                                     UserAccountRepository userAccountRepository,
-                                    NotificationRepository notificationRepository) {
+                                    NotificationRepository notificationRepository,
+                                    AuditLogService auditLogService) {
         this.organizationRepository = organizationRepository;
         this.userAccountRepository = userAccountRepository;
         this.notificationRepository = notificationRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -65,6 +69,7 @@ public class AdminOrgApprovalService {
         Organization saved = organizationRepository.save(org);
         notifyOrg(orgId, "가입 승인이 완료되었습니다", org.getOrgName() + " 조직의 가입 신청이 승인되었습니다.");
         log.info("관리자 {} 가 조직 {} 가입을 승인", adminUserId, orgId);
+        auditLogService.record(adminUserId, "APPROVE", "ORGANIZATION", orgId, org.getOrgName(), "성공", null);
         return OrgApprovalItemResponse.of(saved);
     }
 
@@ -79,6 +84,7 @@ public class AdminOrgApprovalService {
         Organization saved = organizationRepository.save(org);
         notifyOrg(orgId, "가입 신청이 반려되었습니다", org.getOrgName() + " 조직의 가입 신청이 반려되었습니다: " + saved.getRejectReason());
         log.info("관리자 {} 가 조직 {} 가입을 반려 (사유: {})", adminUserId, orgId, saved.getRejectReason());
+        auditLogService.record(adminUserId, "REJECT", "ORGANIZATION", orgId, org.getOrgName(), saved.getRejectReason(), null);
         return OrgApprovalItemResponse.of(saved);
     }
 

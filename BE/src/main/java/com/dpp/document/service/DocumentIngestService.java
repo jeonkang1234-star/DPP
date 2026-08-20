@@ -1,5 +1,6 @@
 package com.dpp.document.service;
 
+import com.dpp.audit.service.AuditLogService;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.blockchain.client.BlockchainClient;
@@ -87,6 +88,7 @@ public class DocumentIngestService {
     private final DocumentIntegrationProperties properties;
     private final ObjectMapper objectMapper;
     private final NotificationRepository notificationRepository;
+    private final AuditLogService auditLogService;
 
     public DocumentIngestService(UserAccountRepository userAccountRepository,
                                   DppRepository dppRepository,
@@ -103,7 +105,8 @@ public class DocumentIngestService {
                                   Optional<BlockchainClient> blockchainClient,
                                   DocumentIntegrationProperties properties,
                                   ObjectMapper objectMapper,
-                                  NotificationRepository notificationRepository) {
+                                  NotificationRepository notificationRepository,
+                                  AuditLogService auditLogService) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.documentRepository = documentRepository;
@@ -120,6 +123,7 @@ public class DocumentIngestService {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.notificationRepository = notificationRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -319,6 +323,9 @@ public class DocumentIngestService {
         documentLinkRepository.save(link);
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
+
+        auditLogService.record(userId, "CREATE", "DOCUMENT", document.getDocumentId(),
+                "MILL_SHEET (DOC-" + document.getDocumentId() + ")", specPassed ? "성공" : "검증 실패", documentAnchorTxId);
 
         return new SteelMillUploadResponse(
                 document.getDocumentId(),

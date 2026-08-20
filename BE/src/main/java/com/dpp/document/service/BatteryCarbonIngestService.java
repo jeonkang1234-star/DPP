@@ -1,5 +1,6 @@
 package com.dpp.document.service;
 
+import com.dpp.audit.service.AuditLogService;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.blockchain.client.BlockchainClient;
@@ -82,6 +83,7 @@ public class BatteryCarbonIngestService {
     private final DocumentIntegrationProperties properties;
     private final ObjectMapper objectMapper;
     private final NotificationRepository notificationRepository;
+    private final AuditLogService auditLogService;
 
     public BatteryCarbonIngestService(UserAccountRepository userAccountRepository,
                                        DppRepository dppRepository,
@@ -97,7 +99,8 @@ public class BatteryCarbonIngestService {
                                        Optional<BlockchainClient> blockchainClient,
                                        DocumentIntegrationProperties properties,
                                        ObjectMapper objectMapper,
-                                       NotificationRepository notificationRepository) {
+                                       NotificationRepository notificationRepository,
+                                       AuditLogService auditLogService) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.documentRepository = documentRepository;
@@ -113,6 +116,7 @@ public class BatteryCarbonIngestService {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.notificationRepository = notificationRepository;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -300,6 +304,9 @@ public class BatteryCarbonIngestService {
         }
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
+
+        auditLogService.record(userId, "CREATE", "DOCUMENT", document.getDocumentId(),
+                "BATTERY_CARBON_REPORT (DOC-" + document.getDocumentId() + ")", specPassed ? "성공" : "검증 실패", documentAnchorTxId);
 
         return new BatteryCarbonUploadResponse(
                 document.getDocumentId(),

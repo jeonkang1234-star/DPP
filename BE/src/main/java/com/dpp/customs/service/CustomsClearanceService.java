@@ -1,5 +1,6 @@
 package com.dpp.customs.service;
 
+import com.dpp.audit.service.AuditLogService;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.customs.dto.CustomsCaseDetailDto;
@@ -59,17 +60,20 @@ public class CustomsClearanceService {
     private final DppRepository dppRepository;
     private final OrganizationRepository organizationRepository;
     private final UserAccountRepository userAccountRepository;
+    private final AuditLogService auditLogService;
 
     public CustomsClearanceService(CustomsClearanceRepository customsClearanceRepository,
                                     CustomsCaseReadRepository customsCaseReadRepository,
                                     DppRepository dppRepository,
                                     OrganizationRepository organizationRepository,
-                                    UserAccountRepository userAccountRepository) {
+                                    UserAccountRepository userAccountRepository,
+                                    AuditLogService auditLogService) {
         this.customsClearanceRepository = customsClearanceRepository;
         this.customsCaseReadRepository = customsCaseReadRepository;
         this.dppRepository = dppRepository;
         this.organizationRepository = organizationRepository;
         this.userAccountRepository = userAccountRepository;
+        this.auditLogService = auditLogService;
     }
 
     /**
@@ -196,6 +200,9 @@ public class CustomsClearanceService {
         row.setDecidedAt(OffsetDateTime.now());
         customsClearanceRepository.save(row);
         log.info("통관 결정: clearanceId={}, decision={}, customsOrgId={}", clearanceId, decision, myOrg.getOrgId());
+        String auditAction = "APPROVE".equals(decision) ? "APPROVE" : "REJECT".equals(decision) ? "REJECT" : "UPDATE";
+        auditLogService.record(userId, auditAction, "CUSTOMS_CLEARANCE", clearanceId,
+                "DPP-" + row.getDppId() + " (" + myOrg.getOrgName() + ")", decision, null);
         return toDetail(row);
     }
 

@@ -338,3 +338,12 @@ export function decideCustomsCase(clearanceId, decision, reason) {
     body: JSON.stringify({ decision, reason }),
   });
 }
+
+/**
+ * EU 시장감시 감사 로그 조회 - com.dpp.audit.controller.AuditLogController, ADMIN이거나
+ * org_type=EU_AUTHORITY인 계정만 200(그 외는 403). 예전엔 euVals.js에 하드코딩된 배열
+ * 8건이 그대로였다(2026-08-19 강 요청 "얘도 지금 감사로그 싹 다 목데이터인데 실데이터로 바꿔").
+ */
+export function fetchAuditLog() {
+  return authedFetch('/audit-log');
+}

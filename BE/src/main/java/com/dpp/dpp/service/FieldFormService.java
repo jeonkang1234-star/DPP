@@ -1,5 +1,6 @@
 package com.dpp.dpp.service;
 
+import com.dpp.audit.service.AuditLogService;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.blockchain.client.BlockchainClient;
@@ -97,6 +98,7 @@ public class FieldFormService {
     private final ParticipantSubmitStatusService participantSubmitStatusService;
     private final BlockchainAnchorRepository blockchainAnchorRepository;
     private final Optional<BlockchainClient> blockchainClient;
+    private final AuditLogService auditLogService;
 
     public FieldFormService(UserAccountRepository userAccountRepository,
                              ProductModelRepository productModelRepository,
@@ -107,7 +109,8 @@ public class FieldFormService {
                              DppParticipantRepository participantRepository,
                              ParticipantSubmitStatusService participantSubmitStatusService,
                              BlockchainAnchorRepository blockchainAnchorRepository,
-                             Optional<BlockchainClient> blockchainClient) {
+                             Optional<BlockchainClient> blockchainClient,
+                             AuditLogService auditLogService) {
         this.userAccountRepository = userAccountRepository;
         this.productModelRepository = productModelRepository;
         this.dppRepository = dppRepository;
@@ -118,6 +121,7 @@ public class FieldFormService {
         this.participantSubmitStatusService = participantSubmitStatusService;
         this.blockchainAnchorRepository = blockchainAnchorRepository;
         this.blockchainClient = blockchainClient;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional(readOnly = true)
@@ -228,7 +232,9 @@ public class FieldFormService {
         dpp.setIssuedAt(OffsetDateTime.now());
         dppRepository.save(dpp);
         recalc(dpp.getDppId());
-        anchorDppSnapshot(dpp, userId, orgId);
+        String anchorTxId = anchorDppSnapshot(dpp, userId, orgId);
+        auditLogService.record(userId, "CREATE", "DPP", dpp.getDppId(),
+                String.valueOf(dpp.getPublicUuid()), "성공", anchorTxId);
         return getForm(userId, dpp.getDppId());
     }
 
@@ -245,25 +251,25 @@ public class FieldFormService {
      *
      * 실패해도 발급 자체를 막지 않는다 - 앵커링은 부가 증빙이지 발급의 필요조건이 아니다.
      */
-    private void anchorDppSnapshot(Dpp dpp, Long userId, Long orgId) {
+    private String anchorDppSnapshot(Dpp dpp, Long userId, Long orgId) {
         Long snapshotId;
         try {
             snapshotId = dppRepository.createSnapshot(dpp.getDppId(), "ISSUE", userId);
         } catch (Exception e) {
             log.warn("dppId={} 발급 스냅샷 생성 실패 - 발급 자체는 계속 진행: {}", dpp.getDppId(), e.getMessage(), e);
-            return;
+            return null;
         }
         if (snapshotId == null || blockchainClient.isEmpty()) {
-            return;
+            return null;
         }
         String contentHash = dppRepository.findSnapshotContentHash(snapshotId);
         if (contentHash == null) {
-            return;
+            return null;
         }
         Optional<BlockchainAnchor> anchorOpt =
                 blockchainAnchorRepository.findFirstByTargetTypeAndTargetIdOrderByAnchorIdDesc("DPP_SNAPSHOT", snapshotId);
         if (anchorOpt.isEmpty()) {
-            return;
+            return null;
         }
         BlockchainAnchor anchor = anchorOpt.get();
         try {
@@ -277,11 +283,13 @@ public class FieldFormService {
             anchor.setStatus("CONFIRMED");
             anchor.setAnchoredAt(OffsetDateTime.now());
             blockchainAnchorRepository.save(anchor);
+            return result.txId();
         } catch (Exception e) {
             log.warn("snapshotId={} 블록체인 앵커링 실패: {}", snapshotId, e.getMessage(), e);
             anchor.setStatus("FAILED");
             anchor.setErrorMessage(truncate(e.getMessage(), 500));
             blockchainAnchorRepository.save(anchor);
+            return null;
         }
     }
 

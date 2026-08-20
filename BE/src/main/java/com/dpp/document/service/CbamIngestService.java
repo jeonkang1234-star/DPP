@@ -1,5 +1,6 @@
 package com.dpp.document.service;
 
+import com.dpp.audit.service.AuditLogService;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.blockchain.client.BlockchainClient;
@@ -77,6 +78,7 @@ public class CbamIngestService {
     private final Optional<BlockchainClient> blockchainClient;
     private final DocumentIntegrationProperties properties;
     private final ObjectMapper objectMapper;
+    private final AuditLogService auditLogService;
 
     public CbamIngestService(UserAccountRepository userAccountRepository,
                               DppRepository dppRepository,
@@ -91,7 +93,8 @@ public class CbamIngestService {
                               ZkpClient zkpClient,
                               Optional<BlockchainClient> blockchainClient,
                               DocumentIntegrationProperties properties,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              AuditLogService auditLogService) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.documentRepository = documentRepository;
@@ -106,6 +109,7 @@ public class CbamIngestService {
         this.blockchainClient = blockchainClient;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -274,6 +278,9 @@ public class CbamIngestService {
         applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId());
 
         dppQueryRepository.recalcCompleteness(dpp.getDppId());
+
+        auditLogService.record(userId, "CREATE", "DOCUMENT", document.getDocumentId(),
+                "CBAM_REPORT (DOC-" + document.getDocumentId() + ")", "성공", documentAnchorTxId);
 
         return new CbamUploadResponse(
                 document.getDocumentId(),
