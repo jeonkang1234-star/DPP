@@ -10,6 +10,18 @@ import './hover.css';
 export default function AppView(v) {
   const {
     anchorBars,
+    adminAnchorStatusLabel,
+    adminLastAnchoredLabel,
+    adminLastAnchorBlockLabel,
+    adminAnchorSuccessLabel,
+    adminTotalUsersLabel,
+    adminUserBreakdownLabel,
+    adminTotalDppsLabel,
+    adminDppBreakdownLabel,
+    adminPendingCountLabel,
+    adminPendingBadge,
+    adminRefreshedAtLabel,
+    membersEmpty,
     apTabs,
     apEmpty,
     approvals,
@@ -658,27 +670,27 @@ export default function AppView(v) {
               <input placeholder="회사명으로 회원 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
               <span style={{ height: '36px', padding: '0 16px', display: 'grid', placeItems: 'center', borderRadius: '11px', background: '#F2F6FC', color: '#6B7A93', fontSize: '12.5px', fontWeight: '600' }}>검색</span>
             </div>
-            <span style={{ marginLeft: 'auto', fontSize: '12.5px', color: '#8494AC' }}>최근 갱신 2026-07-30 09:41 KST</span>
+            <span style={{ marginLeft: 'auto', fontSize: '12.5px', color: '#8494AC' }}>{adminRefreshedAtLabel}</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.6fr', gap: '16px' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>전체 가입자 수</span></div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>1,284</span><span style={{ padding: '3px 8px', borderRadius: '8px', background: 'rgba(18,161,80,.12)', color: '#0E7A3D', fontSize: '12px', fontWeight: '700' }}>+4.2%</span></div>
-              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>기업 1,097 · 개인 187</span>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalUsersLabel}</span></div>
+              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminUserBreakdownLabel}</span>
             </div>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>48,392</span><span style={{ padding: '3px 8px', borderRadius: '8px', background: 'rgba(18,161,80,.12)', color: '#0E7A3D', fontSize: '12px', fontWeight: '700' }}>+1,204</span></div>
-              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>철강 26,110 · 배터리 13,482 · 섬유 8,800</span>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalDppsLabel}</span></div>
+              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminDppBreakdownLabel}</span>
             </div>
             <div style={{ background: '#0B1B33', borderRadius: '18px', padding: '20px 22px', color: '#fff', display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '8px', height: '8px', borderRadius: '5px', background: '#4ADE80', boxShadow: '0 0 0 4px rgba(74,222,128,.20)' }}></span><span style={{ fontSize: '14px', fontWeight: '600' }}>블록체인 앵커 상태</span><span style={{ padding: '3px 9px', borderRadius: '8px', background: 'rgba(74,222,128,.16)', color: '#86EFAC', fontSize: '11.5px', fontWeight: '700' }}>정상</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '8px', height: '8px', borderRadius: '5px', background: adminAnchorStatusLabel === '정상' ? '#4ADE80' : '#8494AC', boxShadow: adminAnchorStatusLabel === '정상' ? '0 0 0 4px rgba(74,222,128,.20)' : 'none' }}></span><span style={{ fontSize: '14px', fontWeight: '600' }}>블록체인 앵커 상태</span><span style={{ padding: '3px 9px', borderRadius: '8px', background: adminAnchorStatusLabel === '정상' ? 'rgba(74,222,128,.16)' : 'rgba(255,255,255,.16)', color: adminAnchorStatusLabel === '정상' ? '#86EFAC' : 'rgba(255,255,255,.8)', fontSize: '11.5px', fontWeight: '700' }}>{adminAnchorStatusLabel}</span></div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,auto)', gap: '22px', justifyContent: 'start' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>2분 전</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>최근 앵커링</span></div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>#8,412,930</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>블록 높이</span></div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>99.98%</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>30일 성공률</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>{adminLastAnchoredLabel}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>최근 앵커링</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>{adminLastAnchorBlockLabel}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>블록 높이</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>{adminAnchorSuccessLabel}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>30일 성공률</span></div>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '64px' }}>
@@ -689,11 +701,11 @@ export default function AppView(v) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '16px', alignItems: 'start' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>운영현황</span><span style={{ fontSize: '12px', color: '#8494AC' }}>처리 대기 37건</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>운영현황</span><span style={{ fontSize: '12px', color: '#8494AC' }}>{adminPendingCountLabel}</span></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button onClick={goApprove} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: '14px', padding: '16px 18px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv8">
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>가입 승인 대기</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>증빙서류 검토 후 승인 필요</span></span>
-                  <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '22px', fontWeight: '700', color: '#0045A9' }}>18</span>
+                  <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '22px', fontWeight: '700', color: '#0045A9' }}>{adminPendingBadge}</span>
                   <span style={{ fontSize: '12px', color: '#8494AC' }}>→</span>
                 </button>
               </div>
@@ -701,7 +713,7 @@ export default function AppView(v) {
 
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>유형별 문의</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>유형별 문의</span><span style={{ fontSize: '11px', color: '#8494AC' }}>(견본 - 문의 접수 기능 미구현)</span></div>
                 <span style={{ height: '32px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>최근 30일 · 412건</span>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -724,6 +736,9 @@ export default function AppView(v) {
                 <button style={{ height: '40px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv12">국가 전체</button>
               </div>
             </div>
+            {membersEmpty ? (<>
+            <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>승인된 회원이 없습니다.</div>
+            </>) : (<>
             <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr .8fr 1fr .9fr .9fr 64px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
               <span>회사명</span><span>가입시기</span><span>국가</span><span>도메인</span><span style={{ textAlign: 'right' }}>보유 DPP</span><span style={{ textAlign: 'right' }}>발행 DPP</span><span></span>
             </div>
@@ -740,6 +755,7 @@ export default function AppView(v) {
               </div>
               </React.Fragment>))}
             </div>
+            </>)}
           </div>
         </div>
         </>) : null}
