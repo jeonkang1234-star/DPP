@@ -1,5 +1,7 @@
 package com.dpp.notify.entity;
 
+import java.util.Set;
+
 /** V1__schema.sql의 notification.category CHECK 제약과 1:1로 맞춘다. */
 public enum NotificationCategory {
     CERT,
@@ -21,6 +23,38 @@ public enum NotificationCategory {
             case ACCOUNT -> "계정";
             case SECURITY -> "보안";
             case INQUIRY -> "문의";
+        };
+    }
+
+    /**
+     * 이 카테고리를 보여줄 역할.
+     *
+     * 2026-08-20 강 요청 - 계정 종류와 상관없이 8개 탭이 전부 뜨다 보니, 운영자 화면에
+     * "통관"·"Tier 신청"처럼 그 계정에서 영영 알림이 오지 않는 탭이 빈 채로 남아 있었다.
+     * 세관은 통관/계정/문의만, EU 시장감시는 ZKP/계정/문의만 보면 된다.
+     *
+     * 여기 없는 역할(제조사·협력사 등)은 전부 보여준다 - 그쪽은 어떤 알림이 올지 아직
+     * 확정되지 않아서 섣불리 좁히면 실제로 온 알림을 못 보게 된다.
+     *
+     * 값은 organization.org_type(세관=CUSTOMS, EU=EU_AUTHORITY) 또는 계정 종류(ADMIN)다.
+     */
+    private static final Set<NotificationCategory> ADMIN_VISIBLE =
+            Set.of(CERT, SYSTEM, ZKP, ACCOUNT, SECURITY, INQUIRY);
+    private static final Set<NotificationCategory> CUSTOMS_VISIBLE =
+            Set.of(CUSTOMS, ACCOUNT, INQUIRY);
+    private static final Set<NotificationCategory> EU_AUTHORITY_VISIBLE =
+            Set.of(ZKP, ACCOUNT, INQUIRY);
+
+    /** viewerRole이 null이거나 규칙이 없는 역할이면 전부 보여준다. */
+    public boolean visibleTo(String viewerRole) {
+        if (viewerRole == null) {
+            return true;
+        }
+        return switch (viewerRole) {
+            case "ADMIN" -> ADMIN_VISIBLE.contains(this);
+            case "CUSTOMS" -> CUSTOMS_VISIBLE.contains(this);
+            case "EU_AUTHORITY" -> EU_AUTHORITY_VISIBLE.contains(this);
+            default -> true;
         };
     }
 

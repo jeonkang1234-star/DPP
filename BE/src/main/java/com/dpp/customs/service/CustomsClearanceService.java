@@ -51,6 +51,16 @@ public class CustomsClearanceService {
 
     private static final Logger log = LoggerFactory.getLogger(CustomsClearanceService.class);
 
+    /**
+     * 발급 자동 통관의 수입국. 데모에서는 "모든 물건이 프랑스로 나간다"고 전제한다
+     * (2026-08-20 강 요청, "일단은"). 실제 수출국이 여럿이 되면 제품/주문 정보에서 끌어와야
+     * 하는 값이라, 그때 지울 자리를 남기려고 상수로 한 곳에 모아둔다.
+     */
+    private static final String DEMO_DEFAULT_IMPORT_COUNTRY = "FR";
+
+    /** 발급 시점엔 수입업체가 정해져 있지 않다. 빈칸 대신 그 사실을 적어둔다. */
+    private static final String AUTO_IMPORTER_NAME = "발급 시 자동 생성 (수입업체 미정)";
+
     private static final Set<String> DECIDABLE = Set.of("APPROVE", "HOLD", "REJECT");
     /** EU EORI 번호 형식 - ISO 국가코드 2자 + 영숫자 최대 15자. 실제 등록 여부 조회는 하지 않는다. */
     private static final Pattern EORI_FORMAT = Pattern.compile("^[A-Z]{2}[0-9A-Z]{1,15}$");
@@ -130,6 +140,56 @@ public class CustomsClearanceService {
         log.info("통관 신청 생성: dppId={}, exportCc={}, importCc={}, 생성된 행={}건",
                 dppId, exportCc, importCc, created.size());
         return created;
+    }
+
+    /**
+     * DPP 발급 직후 통관 케이스를 자동으로 만든다 (2026-08-20 강 요청 - "완성된 DPP는 바로
+     * 세관 큐로 모이게").
+     *
+     * ■ 왜 별도 메서드인가
+     * createRequest는 제조사가 화면에서 수입국·수입업체를 직접 채워 넣는 경로다. 발급 자동
+     * 생성은 그 정보가 아직 없다 - 무엇을 어디로 팔지는 발급 시점에 정해지지 않는다.
+     * 그래서 "일단 프랑스로 나간다"는 데모 전제를 여기 한 곳에만 박아두고, 실제 수출이
+     * 확정되면 제조사가 화면에서 다시 신청하는 흐름은 그대로 둔다.
+     *
+     * ■ 중복 방지
+     * 같은 DPP로 이미 만들어진 케이스가 있으면 아무것도 하지 않는다. 발급을 두 번 눌러도
+     * 세관 큐에 같은 건이 쌓이면 안 된다.
+     *
+     * ■ 실패해도 발급은 성공해야 한다
+     * 예외를 던지지 않고 0을 돌려준다. 통관 케이스는 발급의 부가 결과이지 발급의 필요조건이
+     * 아니다(앵커링과 같은 원칙 - FieldFormService.anchorDppSnapshot 주석 참고).
+     */
+    @Transactional
+    public int autoCreateOnIssue(Long dppId, Long requesterUserId, Long requesterOrgId) {
+        try {
+            if (!customsClearanceRepository.findByDppIdOrderByCreatedAtDesc(dppId).isEmpty()) {
+                return 0;
+            }
+            Dpp dpp = dppRepository.findById(dppId).orElse(null);
+            if (dpp == null) {
+                return 0;
+            }
+            Organization ownerOrg = organizationRepository.findById(dpp.getOwnerOrgId()).orElse(null);
+            String exportCc = ownerOrg == null ? null : ownerOrg.getCountryCode();
+            if (exportCc == null || exportCc.isBlank()) {
+                log.warn("dppId={} 발급 자동 통관 생략 - 수출 조직에 국가 정보가 없음", dppId);
+                return 0;
+            }
+            String importCc = DEMO_DEFAULT_IMPORT_COUNTRY;
+
+            List<CustomsClearance> created = new ArrayList<>(createSideRows("EXPORT", exportCc, dpp,
+                    exportCc, importCc, AUTO_IMPORTER_NAME, null, null, null, requesterOrgId));
+            if (!exportCc.equalsIgnoreCase(importCc)) {
+                created.addAll(createSideRows("IMPORT", importCc, dpp, exportCc, importCc,
+                        AUTO_IMPORTER_NAME, null, null, null, requesterOrgId));
+            }
+            log.info("발급 자동 통관 생성: dppId={}, {}->{}, {}건", dppId, exportCc, importCc, created.size());
+            return created.size();
+        } catch (RuntimeException e) {
+            log.warn("dppId={} 발급 자동 통관 생성 실패(발급은 정상 처리): {}", dppId, e.getMessage());
+            return 0;
+        }
     }
 
     private List<CustomsClearance> createSideRows(String side, String matchCountry, Dpp dpp,

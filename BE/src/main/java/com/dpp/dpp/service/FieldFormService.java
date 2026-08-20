@@ -6,6 +6,7 @@ import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.blockchain.client.BlockchainClient;
 import com.dpp.blockchain.entity.BlockchainAnchor;
 import com.dpp.blockchain.repository.BlockchainAnchorRepository;
+import com.dpp.customs.service.CustomsClearanceService;
 import com.dpp.dpp.dto.CodeOptionDto;
 import com.dpp.dpp.dto.FieldFormItemDto;
 import com.dpp.dpp.dto.FieldFormSectionDto;
@@ -98,6 +99,7 @@ public class FieldFormService {
     private final ParticipantSubmitStatusService participantSubmitStatusService;
     private final BlockchainAnchorRepository blockchainAnchorRepository;
     private final Optional<BlockchainClient> blockchainClient;
+    private final CustomsClearanceService customsClearanceService;
     private final AuditLogService auditLogService;
 
     public FieldFormService(UserAccountRepository userAccountRepository,
@@ -121,6 +123,7 @@ public class FieldFormService {
         this.participantSubmitStatusService = participantSubmitStatusService;
         this.blockchainAnchorRepository = blockchainAnchorRepository;
         this.blockchainClient = blockchainClient;
+        this.customsClearanceService = customsClearanceService;
         this.auditLogService = auditLogService;
     }
 
@@ -228,13 +231,22 @@ public class FieldFormService {
         if (!orgId.equals(dpp.getOwnerOrgId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP를 발급할 권한이 없습니다.");
         }
-        dpp.setStatus("PENDING");
+        // 발급 완료 = ACTIVE. 전에는 PENDING으로 뒀는데, 그 상태를 ACTIVE로 올리는 코드가
+        // 어디에도 없어서 DPP가 영원히 PENDING에 머물렀다. 그 결과 "발급 완료(ACTIVE)된 DPP만
+        // 통관 신청할 수 있습니다"를 요구하는 통관 신청 버튼이 실제로는 한 번도 통과하지
+        // 못했다(2026-08-20 발견). 스키마의 status CHECK도 DRAFT/PENDING/ACTIVE/SUSPENDED/EOL
+        // 이고 ACTIVE가 "유통 중인 여권"을 뜻한다.
+        dpp.setStatus("ACTIVE");
         dpp.setIssuedAt(OffsetDateTime.now());
         dppRepository.save(dpp);
         recalc(dpp.getDppId());
         String anchorTxId = anchorDppSnapshot(dpp, userId, orgId);
         auditLogService.record(userId, "CREATE", "DPP", dpp.getDppId(),
                 String.valueOf(dpp.getPublicUuid()), "성공", anchorTxId);
+        // 발급된 DPP를 세관 심사 큐로 바로 흘려보낸다(2026-08-20 강 요청). 수입국은 데모
+        // 전제상 프랑스 고정 - 자세한 사정은 CustomsClearanceService.autoCreateOnIssue 참고.
+        // 여기서 실패해도 발급은 이미 끝난 일이라 되돌리지 않는다(메서드가 예외를 안 던진다).
+        customsClearanceService.autoCreateOnIssue(dpp.getDppId(), userId, orgId);
         return getForm(userId, dpp.getDppId());
     }
 

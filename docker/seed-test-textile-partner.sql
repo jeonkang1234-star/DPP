@@ -14,6 +14,11 @@
 --
 -- 로그인: POST /auth/login  { "email": "partner-test@cheongwoo.test", "password": "Partner1234!" }
 --
+-- 2026-08-20 수정: 사업자등록번호가 seed-test-testlab.sql의 한국시험인증(테스트)과 똑같은
+-- '222-22-22222'라서, 두 시드를 같이 넣으면 ux_org_biz_reg_no(country_code, biz_reg_no
+-- 유니크)에 걸려 이 파일이 통째로 실패했다. 실패하면 청우섬유 조직도 계정도 안 생겨서
+-- partner-test@cheongwoo.test 로그인이 아예 안 된다. 번호를 '666-22-66666'으로 분리한다.
+--
 -- seed-test-partner.sql(철강)은 "협력사 초대" 탭에서 먼저 실제로 초대를 보내둬야
 -- dpp_participant/invitation이 이 계정과 연결됐는데, 여기서는 그 수동 단계 없이 초대
 -- 발송 + 수락까지 이 스크립트 하나로 직접 만든다(InvitationService.send() +
@@ -38,7 +43,7 @@ ON CONFLICT (email) WHERE deleted_at IS NULL DO NOTHING;
 
 INSERT INTO organization (org_name, org_type, domain, country_code, biz_reg_no,
                            tier_level, profile_status, approval_status)
-SELECT '청우섬유(테스트)', 'RAW_SUPPLIER', 'TEXTILE', 'KR', '222-22-22222',
+SELECT '청우섬유(테스트)', 'RAW_SUPPLIER', 'TEXTILE', 'KR', '666-22-66666',
        2, 'APPROVED', 'ACTIVE'
 WHERE NOT EXISTS (SELECT 1 FROM organization WHERE org_name = '청우섬유(테스트)');
 

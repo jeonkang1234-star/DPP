@@ -335,9 +335,8 @@ export function makerVals(ctx) {
           // 구분이 안 됐다.
           tier: f.tier || '',
           tierLabel: TIER_LABEL[f.tier] || '',
-          tierStyle: f.tier === 'T0' ? ctx.chip('rgba(224,59,59,.10)', '#C22B2B')
-            : f.tier === 'T1' ? ctx.chip('rgba(0,69,169,.10)', '#0045A9')
-            : ctx.chip('rgba(132,148,172,.16)', '#6B7A93'),
+          // 배경 없는 입체 글자(2026-08-20 강 요청) - 색만으로 등급을 구분한다.
+          tierStyle: ctx.badgeText3d(f.tier === 'T0' ? '#C22B2B' : f.tier === 'T1' ? '#0045A9' : '#6B7A93'),
           // 근거 조항 + T1 발동 조건. 항상 펼쳐두면 폼이 법령 인용으로 뒤덮이니
           // 툴팁(title 속성)으로만 붙인다.
           basisTip: [f.legalBasis, f.t1Condition ? '발동 조건: ' + f.t1Condition : '']

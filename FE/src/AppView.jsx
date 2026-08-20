@@ -1056,7 +1056,7 @@ export default function AppView(v) {
                       <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '7px' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
                           {f.label}{f.req === '필수' ? (<span style={{ color: '#C22B2B' }}>*</span>) : null}
-                          {f.tierLabel ? (<span title={f.basisTip} style={{ ...f.tierStyle, fontSize: '10px', padding: '1px 6px', borderRadius: '6px', fontWeight: '600', cursor: f.basisTip ? 'help' : 'default' }}>{f.tierLabel}</span>) : null}
+                          {f.tierLabel ? (<span title={f.basisTip} style={{ ...f.tierStyle, fontSize: '10px', cursor: f.basisTip ? 'help' : 'default' }}>{f.tierLabel}</span>) : null}
                           {f.disclosureLabel ? (<span style={{ fontSize: '10px', color: '#8494AC' }}>· {f.disclosureLabel}</span>) : null}
                         </span>
                         {f.locked ? (<button type="button" onClick={f.unlock} style={{ height: '22px', padding: '0 9px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '7px', background: '#fff', fontSize: '10.5px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', flex: 'none' }}>수정</button>) : null}
@@ -1538,7 +1538,7 @@ export default function AppView(v) {
           </div>
 
           <div style={{ width: '100%', maxWidth: '760px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <span style={{ fontSize: '13px', fontWeight: '700' }}>내 세관 심사 대기 큐</span>
+            <span style={{ fontSize: '13px', fontWeight: '700' }}>심사를 기다리는 DPP</span>
             {cQueueEmpty ? (
               <span style={{ fontSize: '12.5px', color: '#8494AC' }}>현재 배정된 심사 대기 건이 없습니다. 수출/수입 관할이 이 세관과 일치하는 통관 신청이 들어오면 여기에 표시됩니다.</span>
             ) : (
