@@ -23,18 +23,24 @@ sudo mkdir -p /opt/fabric-tools && cd /opt/fabric-tools
 curl -sSL https://raw.githubusercontent.com/hyperledger/fabric/main/scripts/install-fabric.sh | bash -s -- --fabric-version 2.5.9 docker samples binaries
 ```
 
-## 1. 체인코드 빌드
+## 1. 체인코드 빌드 (선택 - 배포에는 필수가 아니다)
 
-이 저장소 루트에서:
+3단계의 `network.sh deployCC -ccl java`를 쓰면 **peer가 자기 빌더 이미지 안에서 직접
+빌드**한다. 그래서 EC2 호스트에 JDK나 Gradle을 깔 필요가 없다.
+
+다만 컴파일 에러가 있으면 배포 도중에야 터지므로, 먼저 한 번 빌드해 보는 쪽이 낫다.
+호스트에 Gradle이 없으면 도커로 일회성 실행:
 
 ```bash
-cd chaincode
-./gradlew clean build          # 단위테스트 20건 포함
-./gradlew installDist          # build/install/dpp-ledger-chaincode/ 생성 (Dockerfile이 이걸 쓴다)
+cd /opt/app/chaincode                      # 저장소가 클론된 경로 (ls /opt/app 로 확인)
+docker run --rm -v "$PWD":/w -w /w gradle:8.7-jdk17 gradle clean build --no-daemon
 ```
 
+단위테스트 22건이 같이 돈다. `BUILD SUCCESSFUL`이 나오면 3단계로 넘어가면 된다.
+(`chaincode/Dockerfile`은 CCaaS 방식으로 배포할 때만 쓰인다 - `deployCC`를 쓰면 필요 없다.)
+
 > `recordZkpVerification`은 2026-08-20에 인자가 하나 늘었다(`proofHash`).
-> 예전 버전을 이미 채널에 커밋해 뒀다면 **시퀀스를 올려서 다시 커밋**해야 한다(4단계 참고).
+> 예전 버전을 이미 채널에 커밋해 뒀다면 **시퀀스를 올려서 다시 커밋**해야 한다(3단계 `-ccs`).
 
 ## 2. 네트워크 기동 + 채널 생성
 
