@@ -641,10 +641,12 @@ export function useAppLogic(userProps) {
     // fake" 원칙, 2026-08-19 강 요청).
     const admin = adminDashboardData;
     const anchorSeq = admin ? admin.anchorSparkline14d : [];
-    // "유형별 문의"는 실제로 문의를 접수하는 기능 자체가 아직 없어서(신고/티켓 테이블,
-    // API 전무) 실데이터로 바꿀 대상이 없다 - 없는 기능을 위해 새 서브시스템을 만드는
-    // 대신 mock을 그대로 두고 화면 하단 카드 제목에 "(견본)"을 붙여 목데이터임을 밝힌다.
-    const inqData = data.inquiries;
+    // "유형별 문의"도 mock(data.json inquiries: 계정·인증 140건 / Tier 심사 78건 ...)을
+    // 버리고 /admin/dashboard의 실집계(notification category='INQUIRY', 최근 30일,
+    // sub_type별)로 바꿨다(2026-08-20 강 요청). 문의 접수 기능이 아직 없어서 지금은
+    // 항상 빈 배열이고, 화면은 그대로 "접수된 문의가 없습니다"를 보여준다 - 없는 숫자를
+    // 지어내지 않는 게 이 코드베이스 원칙이다. Tier 심사 유형은 BE 쿼리에서 제외된다.
+    const inqData = admin ? admin.inquiriesByType : [];
     const adminMembersList = adminMembersData || [];
     const adminAnchorOk = !!(admin && admin.lastAnchoredMinutesAgo != null && admin.lastAnchoredMinutesAgo < 60 * 24);
     const adminLastAnchoredLabel = !admin || admin.lastAnchoredMinutesAgo == null
@@ -772,8 +774,16 @@ export function useAppLogic(userProps) {
       adminPendingCountLabel: admin ? `처리 대기 ${admin.pendingApprovalCount.toLocaleString()}건` : '처리 대기 —',
       adminPendingBadge: admin ? admin.pendingApprovalCount.toLocaleString() : '—',
       adminRefreshedAtLabel: adminDashboardFetchedAt ? `최근 갱신 ${fmtDateTime(adminDashboardFetchedAt.toISOString())}` : '',
-      // "(견본)" - 실제 문의 접수 기능이 아직 없어 mock 그대로임을 화면에서 밝힌다(위 inqData 주석 참고).
-      inquiries: inqData.map(([label, count, pct]) => ({ key: label, label, count, pct, style: bar(pct * 2.6, '#0045A9') })),
+      // 막대 길이는 최다 유형을 100%로 놓고 상대 비교한다. 예전 mock 시절엔 pct*2.6이라는
+      // 고정 배율이었는데(최대값이 34%인 걸 전제로 눈대중으로 맞춘 수), 실데이터에서
+      // 한 유형이 100%면 폭이 260%가 되어 막대가 트랙 밖으로 잘려 나간다.
+      inquiries: (() => {
+        const max = inqData.reduce((m, q) => Math.max(m, q.count), 0);
+        return inqData.map((q) => ({ key: q.key, label: q.label, count: q.count, pct: q.pct,
+          style: bar(max > 0 ? Math.round(q.count * 100 / max) : 0, '#0045A9') }));
+      })(),
+      inquiriesEmpty: inqData.length === 0,
+      inquiryTotalLabel: admin ? `최근 30일 · ${admin.inquiryTotal30d.toLocaleString()}건` : '최근 30일 · —',
       members: adminMembersList.map((m) => ({
         key: m.orgId, name: m.orgName, biz: m.bizRegNo, joined: m.joinedDate, country: m.countryCode,
         domain: m.domainLabel, held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),

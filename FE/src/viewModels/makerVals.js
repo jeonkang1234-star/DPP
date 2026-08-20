@@ -120,7 +120,12 @@ const AUTO_FILL_DOC_NAME = {
 // 아래 4개는 전부 "서버가 준 값이 있으면 그걸 쓰고, 없으면 예전처럼 동작한다" 구조다.
 // 구버전 BE와 붙어도 화면이 깨지지 않게 하기 위한 것.
 
-const TIER_LABEL = { T0: '법정필수', T1: '조건부', T2: '예정', T3: '자체', T4: '제외권장' };
+// 배지는 T0(법정필수)에만 붙인다. T1(조건부)·T2·T3·T4는 "써도 되고 안 써도 되는" 칸이라
+// 굳이 라벨을 달 이유가 없고, 361개 필드 옆에 파란 "조건부"가 줄줄이 붙으면 정작 눈에
+// 띄어야 할 빨간 "법정필수"가 묻힌다(2026-08-20 강 요청 "조건부 = 적어도 되고 안 적어도
+// 되는 항목이라면 굳이 표시할 필요 X"). 등급 자체는 f.tier로 남아 있어서 정렬(법정필수
+// 우선)과 근거 조항 툴팁은 그대로 동작한다.
+const TIER_LABEL = { T0: '법정필수' };
 const DISCLOSURE_LABEL = { RESTRICTED: '권한자 한정', TRADE_SECRET: '영업비밀(ZKP 대체)' };
 
 /** 이 필드가 문서 파싱으로 채워지는가. 서버의 data_source가 정답, 없으면 구 화이트리스트. */
@@ -167,8 +172,18 @@ function groupBySection(fields, sections, openMap, setState) {
   const labelOf = {};
   (sections || []).forEach(sec => { labelOf[sec.section] = sec.labelKo || sec.section; });
 
-  return order.map((key, idx) => {
-    const mine = fields.filter(f => f.section === key);
+  // 법정필수(T0)를 맨 위로(2026-08-20 강 요청). 섹션 사이에서는 T0 필수 항목을 가진
+  // 섹션이 먼저 오고, 섹션 안에서는 T0 필드가 먼저 온다. 같은 등급끼리는 서버가 준
+  // sort_order 순서를 그대로 지킨다(안정 정렬).
+  const t0First = (a, b) => (a.tier === 'T0' ? 0 : 1) - (b.tier === 'T0' ? 0 : 1);
+  const hasT0 = key => fields.some(f => f.section === key && f.tier === 'T0');
+  const sortedOrder = order
+    .map((key, idx) => ({ key, idx }))
+    .sort((a, b) => (hasT0(a.key) ? 0 : 1) - (hasT0(b.key) ? 0 : 1) || a.idx - b.idx)
+    .map(o => o.key);
+
+  return sortedOrder.map((key, idx) => {
+    const mine = fields.filter(f => f.section === key).slice().sort(t0First);
     const required = mine.filter(f => f.req === '필수');
     const filled = required.filter(f => f.value && String(f.value).trim());
     // 첫 섹션만 기본으로 열어둔다. 21개 섹션이 전부 펼쳐진 채로 뜨면 스크롤이 수백 줄이다.

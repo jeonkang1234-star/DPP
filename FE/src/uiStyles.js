@@ -88,7 +88,11 @@ export function badgeText3d(color) {
   return {
     display: 'inline-flex', alignItems: 'center', fontWeight: 800, letterSpacing: '.01em',
     color,
-    textShadow: '0 1px 0 rgba(255,255,255,.65), 0 2px 1px rgba(16,32,64,.20), 0 4px 8px rgba(16,32,64,.14)'
+    // 그림자는 '글자가 살짝 튀어나온' 정도까지만. 예전엔 0 4px 8px 짜리 넓은 드롭섀도가
+    // 한 겹 더 깔려 있어서 글자 밑이 번져 지저분해 보였다(2026-08-20 강 리포트
+    // "밑에 있는 그림자로 인해 지저분해 보인다"). 위쪽 하이라이트(0 -1px 0 흰색)와
+    // 1px 짜리 아래 음영만 남겨 오프셋을 최소화한다.
+    textShadow: '0 -1px 0 rgba(255,255,255,.85), 0 1px 1px rgba(16,32,64,.18)'
   };
 }
 

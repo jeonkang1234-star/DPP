@@ -371,16 +371,27 @@ public class BatteryCarbonIngestService {
     }
 
     private String anchorDocumentHash(Document document, Long orgId) {
-        if (blockchainClient.isEmpty()) {
-            log.info("blockchain.enabled=false - documentId={} 해시 앵커링 생략", document.getDocumentId());
-            return null;
-        }
         BlockchainAnchor anchor = new BlockchainAnchor();
         anchor.setTargetType("DOCUMENT");
         anchor.setTargetId(document.getDocumentId());
         anchor.setContentHash(document.getContentHash());
         anchor.setChannelName("dppchannel");
         anchor.setChaincode("dpp-ledger-chaincode");
+        if (blockchainClient.isEmpty()) {
+            // blockchain.enabled=false(로컬·데모)여도 앵커 기록 자체는 남긴다 - 해시는 진짜고
+            // tx_id만 가상이다(V1__schema.sql: "MOCK = 1차 프로토타입(해시는 실제, tx_id는 가상)",
+            // fn_create_dpp_snapshot의 p_mock=true와 같은 원칙). 예전엔 여기서 그냥 return null
+            // 이라 문서를 아무리 올려도 blockchain_anchor에 행이 하나도 안 생겼고, 그래서 관리자
+            // 대시보드의 "최근 앵커링"이 항상 "기록 없음", "30일 성공률"이 항상 빈칸이었다
+            // (2026-08-20 강 리포트). 체인이 켜진 환경에서는 이 분기를 타지 않는다.
+            anchor.setStatus("MOCK");
+            anchor.setTxId("mock-" + anchor.getContentHash());
+            anchor.setAnchoredAt(OffsetDateTime.now());
+            blockchainAnchorRepository.save(anchor);
+            log.info("blockchain.enabled=false - targetType={} targetId={} MOCK 앵커로 기록",
+                    anchor.getTargetType(), anchor.getTargetId());
+            return anchor.getTxId();
+        }
         try {
             BlockchainClient.ChainResult result = blockchainClient.get().recordDocumentHash(
                     document.getDocumentId().toString(),
@@ -404,16 +415,27 @@ public class BatteryCarbonIngestService {
 
     private String anchorZkpVerification(Document document, ZkpProof zkpProof, String publicSignalsJson,
                                           boolean verified, Long orgId) {
-        if (blockchainClient.isEmpty()) {
-            log.info("blockchain.enabled=false - proofId={} 검증결과 앵커링 생략", zkpProof.getProofId());
-            return null;
-        }
         BlockchainAnchor anchor = new BlockchainAnchor();
         anchor.setTargetType("EVENT");
         anchor.setTargetId(zkpProof.getProofId());
         anchor.setContentHash(sha256Hex(zkpProof.getProofData()));
         anchor.setChannelName("dppchannel");
         anchor.setChaincode("dpp-ledger-chaincode");
+        if (blockchainClient.isEmpty()) {
+            // blockchain.enabled=false(로컬·데모)여도 앵커 기록 자체는 남긴다 - 해시는 진짜고
+            // tx_id만 가상이다(V1__schema.sql: "MOCK = 1차 프로토타입(해시는 실제, tx_id는 가상)",
+            // fn_create_dpp_snapshot의 p_mock=true와 같은 원칙). 예전엔 여기서 그냥 return null
+            // 이라 문서를 아무리 올려도 blockchain_anchor에 행이 하나도 안 생겼고, 그래서 관리자
+            // 대시보드의 "최근 앵커링"이 항상 "기록 없음", "30일 성공률"이 항상 빈칸이었다
+            // (2026-08-20 강 리포트). 체인이 켜진 환경에서는 이 분기를 타지 않는다.
+            anchor.setStatus("MOCK");
+            anchor.setTxId("mock-" + anchor.getContentHash());
+            anchor.setAnchoredAt(OffsetDateTime.now());
+            blockchainAnchorRepository.save(anchor);
+            log.info("blockchain.enabled=false - targetType={} targetId={} MOCK 앵커로 기록",
+                    anchor.getTargetType(), anchor.getTargetId());
+            return anchor.getTxId();
+        }
         try {
             BlockchainClient.ChainResult result = blockchainClient.get().recordZkpVerification(
                     document.getDocumentId().toString(),

@@ -15,6 +15,8 @@ public record AdminDashboardResponse(
         Long lastAnchoredMinutesAgo,
         Long lastAnchorBlockNo,
         Double anchorSuccessRate30d,
-        List<Long> anchorSparkline14d
+        List<Long> anchorSparkline14d,
+        long inquiryTotal30d,
+        List<AdminInquiryStatDto> inquiriesByType
 ) {
 }

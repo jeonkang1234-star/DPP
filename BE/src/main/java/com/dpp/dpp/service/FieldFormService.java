@@ -272,7 +272,7 @@ public class FieldFormService {
             log.warn("dppId={} 발급 스냅샷 생성 실패 - 발급 자체는 계속 진행: {}", dpp.getDppId(), e.getMessage(), e);
             return null;
         }
-        if (snapshotId == null || blockchainClient.isEmpty()) {
+        if (snapshotId == null) {
             return null;
         }
         String contentHash = dppRepository.findSnapshotContentHash(snapshotId);
@@ -285,6 +285,12 @@ public class FieldFormService {
             return null;
         }
         BlockchainAnchor anchor = anchorOpt.get();
+        if (blockchainClient.isEmpty()) {
+            // fn_create_dpp_snapshot이 p_mock=true로 이미 status='MOCK', tx_id='mock-'||해시인
+            // 앵커 행을 만들어 놓은 상태다. 예전엔 여기서 blockchainClient가 비면 곧장 null을
+            // 반환해서, 감사 로그의 tx_id 칸만 비어 보였다(앵커 행 자체는 있었다).
+            return anchor.getTxId();
+        }
         try {
             BlockchainClient.ChainResult result = blockchainClient.get().recordDocumentHash(
                     "snapshot:" + snapshotId,

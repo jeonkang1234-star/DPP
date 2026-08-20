@@ -47,6 +47,21 @@ public interface AdminStatsRepository extends Repository<Organization, Long> {
     List<Object[]> dailyAnchorCounts14d();
 
     /**
+     * 최근 30일 문의 유형별 건수 - Object[]: [sub_type, count]. 문의는 별도 테이블 없이
+     * notification(category='INQUIRY')로만 남는다. 문의 접수 기능이 아직 없어서 지금은
+     * 늘 0행이 나오고, 화면은 그걸 그대로 "접수된 문의가 없습니다"로 보여준다 - 예전엔
+     * data.json의 고정 배열(계정·인증 140건 / Tier 심사 78건 ...)을 그리고 있었다
+     * (2026-08-20 강 요청 "유형별 문의 역시 일단 실데이터로 전환, Tier 심사 항목 삭제").
+     * TIER는 문의 유형에서 제외한다.
+     */
+    @Query(value = "SELECT COALESCE(NULLIF(sub_type, ''), 'ETC') AS t, COUNT(*) "
+            + "FROM notification "
+            + "WHERE category = 'INQUIRY' AND created_at >= now() - INTERVAL '30 days' "
+            + "AND COALESCE(sub_type, '') <> 'TIER' "
+            + "GROUP BY 1 ORDER BY 2 DESC, 1", nativeQuery = true)
+    List<Object[]> countInquiriesByType30d();
+
+    /**
      * 회원(조직) 목록 + 보유/발행 DPP 수 - "보유"는 삭제되지 않은 전체 DPP, "발행"은
      * status='ACTIVE'(공개 발급 완료)만. LEFT JOIN이라 DPP가 하나도 없는 조직도 0건으로
      * 나온다(가짜 숫자를 채우지 않는 게 이 코드베이스 관례 - DashboardService 주석 참고).

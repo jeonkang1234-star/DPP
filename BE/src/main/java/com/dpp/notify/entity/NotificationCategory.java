@@ -44,6 +44,14 @@ public enum NotificationCategory {
             Set.of(CUSTOMS, ACCOUNT, INQUIRY);
     private static final Set<NotificationCategory> EU_AUTHORITY_VISIBLE =
             Set.of(ZKP, ACCOUNT, INQUIRY);
+    /**
+     * 제조사(org_type='MANUFACTURER')는 TIER(Tier 신청)·ZKP를 뺀 나머지를 본다
+     * (2026-08-20 강 요청). Tier 신청은 운영자가 심사하는 절차라 제조사 알림함에 탭만
+     * 남고 알림은 오지 않았고, ZKP 검증 결과는 문서 업로드 화면에서 바로 보여주므로
+     * 알림함에 따로 둘 이유가 없다.
+     */
+    private static final Set<NotificationCategory> MANUFACTURER_VISIBLE =
+            Set.of(CERT, SYSTEM, CUSTOMS, ACCOUNT, SECURITY, INQUIRY);
 
     /** viewerRole이 null이거나 규칙이 없는 역할이면 전부 보여준다. */
     public boolean visibleTo(String viewerRole) {
@@ -54,6 +62,7 @@ public enum NotificationCategory {
             case "ADMIN" -> ADMIN_VISIBLE.contains(this);
             case "CUSTOMS" -> CUSTOMS_VISIBLE.contains(this);
             case "EU_AUTHORITY" -> EU_AUTHORITY_VISIBLE.contains(this);
+            case "MANUFACTURER" -> MANUFACTURER_VISIBLE.contains(this);
             default -> true;
         };
     }

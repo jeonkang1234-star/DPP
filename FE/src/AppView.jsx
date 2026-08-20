@@ -140,7 +140,7 @@ export default function AppView(v) {
     hazardRisk,
     hazardSafe,
     inputTitle,
-    inquiries,
+    inquiries, inquiriesEmpty, inquiryTotalLabel,
     addInviteRow,
     inviteRows,
     inviteRoleOptions,
@@ -713,9 +713,12 @@ export default function AppView(v) {
 
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>유형별 문의</span><span style={{ fontSize: '11px', color: '#8494AC' }}>(견본 - 문의 접수 기능 미구현)</span></div>
-                <span style={{ height: '32px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>최근 30일 · 412건</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>유형별 문의</span></div>
+                <span style={{ height: '32px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>{inquiryTotalLabel}</span>
               </div>
+              {inquiriesEmpty ? (
+              <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>접수된 문의가 없습니다.</div>
+              ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {(inquiries || []).map((q, $index) => (<React.Fragment key={$index}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
@@ -724,6 +727,7 @@ export default function AppView(v) {
                 </div>
                 </React.Fragment>))}
               </div>
+              )}
             </div>
           </div>
 

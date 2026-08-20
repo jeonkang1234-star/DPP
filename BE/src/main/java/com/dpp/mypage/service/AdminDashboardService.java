@@ -4,6 +4,7 @@ import com.dpp.auth.entity.AccountType;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.mypage.dto.AdminDashboardResponse;
+import com.dpp.mypage.dto.AdminInquiryStatDto;
 import com.dpp.mypage.dto.AdminMemberDto;
 import com.dpp.mypage.repository.AdminStatsRepository;
 import org.springframework.http.HttpStatus;
@@ -84,8 +85,38 @@ public class AdminDashboardService {
 
         List<Long> sparkline = buildSparkline(adminStatsRepository.dailyAnchorCounts14d());
 
+        List<Object[]> inquiryRows = adminStatsRepository.countInquiriesByType30d();
+        long inquiryTotal = inquiryRows.stream().mapToLong(r -> ((Number) r[1]).longValue()).sum();
+        List<AdminInquiryStatDto> inquiries = inquiryRows.stream()
+                .map(r -> {
+                    String key = String.valueOf(r[0]);
+                    long count = ((Number) r[1]).longValue();
+                    int pct = inquiryTotal > 0 ? (int) Math.round(count * 100.0 / inquiryTotal) : 0;
+                    return new AdminInquiryStatDto(key, inquiryLabel(key), count, pct);
+                })
+                .toList();
+
         return new AdminDashboardResponse(totalUsers, business, personal, totalDpps, steel, battery, textile,
-                pending, lastAnchoredMinutesAgo, lastAnchorBlockNo, successRate, sparkline);
+                pending, lastAnchoredMinutesAgo, lastAnchorBlockNo, successRate, sparkline,
+                inquiryTotal, inquiries);
+    }
+
+    /**
+     * notification.sub_type 코드를 화면 라벨로. 모르는 코드는 코드 그대로 보여준다 -
+     * 없는 유형을 임의로 "기타"에 합치면 집계가 왜곡되기 때문. TIER(Tier 심사)는 애초에
+     * 쿼리에서 제외되므로 여기에도 없다(2026-08-20 강 요청).
+     */
+    private String inquiryLabel(String subType) {
+        if (subType == null) return "기타";
+        return switch (subType) {
+            case "ACCOUNT" -> "계정·인증";
+            case "DPP" -> "DPP 등록";
+            case "DATA" -> "데이터 검증";
+            case "CUSTOMS" -> "통관";
+            case "ZKP" -> "영지식증명";
+            case "ETC" -> "기타";
+            default -> subType;
+        };
     }
 
     @Transactional(readOnly = true)
