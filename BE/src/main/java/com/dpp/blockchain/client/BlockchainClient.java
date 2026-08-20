@@ -43,10 +43,18 @@ public class BlockchainClient {
         return toChainResult(result);
     }
 
+    /**
+     * proofHash = zkp_proof.proof_data의 SHA-256(2026-08-20 추가, 강 지적 "문서 해시만
+     * 하는 것 같은데 영지식증명 쪽도 해야 하지 않냐"). 실측 수치는 여전히 넘기지 않는다 -
+     * 수치는 경우의 수가 좁아 해시만으로도 전수 대입이 되기 때문이고, 증명 산출물은
+     * blinding 난수를 포함해 그 문제가 없다. 자세한 사정은 체인코드의
+     * ZkpVerificationRecord 주석 참고.
+     */
     public ChainResult recordZkpVerification(String docId, String proofId, String publicInputsJson,
-                                              boolean verified, String verifier, String timestamp) throws Exception {
+                                              boolean verified, String verifier, String timestamp,
+                                              String proofHash) throws Exception {
         byte[] result = contract.submitTransaction("recordZkpVerification",
-                docId, proofId, publicInputsJson, String.valueOf(verified), verifier, timestamp);
+                docId, proofId, publicInputsJson, String.valueOf(verified), verifier, timestamp, proofHash);
         return toChainResult(result);
     }
 

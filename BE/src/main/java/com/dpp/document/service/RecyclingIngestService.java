@@ -412,7 +412,11 @@ public class RecyclingIngestService {
                     publicSignalsJson,
                     verified,
                     orgId.toString(),
-                    OffsetDateTime.now().format(TIMESTAMP_FORMAT));
+                    OffsetDateTime.now().format(TIMESTAMP_FORMAT),
+                    // 증명 산출물(proof_data)의 SHA-256 - 이 앵커 행의 content_hash와 같은 값이다.
+                    // 원장에 판정(기준값/참거짓)만 남기면 뒷받침한 증명이 나중에 바뀌어도
+                    // 확인할 수 없어서 함께 기록한다(2026-08-20 강 지적).
+                    anchor.getContentHash());
             anchor.setTxId(result.txId());
             anchor.setStatus("CONFIRMED");
             anchor.setAnchoredAt(OffsetDateTime.now());

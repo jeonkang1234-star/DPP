@@ -81,16 +81,26 @@ public final class DppLedgerContract implements ContractInterface {
      * 오프체인에서 이미 완료된 ZKP 검증 결과를 원장에 기록한다.
      * 증명 대상 문서(docId)의 해시가 먼저 기록되어 있어야 한다 - 존재하지 않는 문서에 대한
      * 검증결과를 기록하는 걸 막기 위함.
+     *
+     * proofHash = 증명 산출물(zkp_proof.proof_data)의 SHA-256 (2026-08-20 추가).
+     * 이게 없으면 원장에는 "기준값 30% / 통과" 같은 판정만 남고, 그 판정을 뒷받침한 증명이
+     * 나중에 오프체인에서 교체돼도 확인할 방법이 없다. 실측 수치 자체는 여전히 원장에도
+     * 백엔드 DB에도 남기지 않는다 - ZkpVerificationRecord 주석 참고.
      */
     @Transaction()
     public ZkpVerificationRecord recordZkpVerification(final Context ctx, final String docId, final String proofId,
                                                           final String publicInputsJson, final boolean verified,
-                                                          final String verifier, final String timestamp) {
+                                                          final String verifier, final String timestamp,
+                                                          final String proofHash) {
         ChaincodeStub stub = ctx.getStub();
 
         String docJson = stub.getStringState(DOC_KEY_PREFIX + docId);
         if (docJson == null || docJson.isEmpty()) {
             throw new ChaincodeException("먼저 문서 해시를 기록해야 합니다: " + docId, "DOC_NOT_FOUND");
+        }
+
+        if (proofHash == null || proofHash.trim().isEmpty()) {
+            throw new ChaincodeException("증명 해시(proofHash)가 비어 있습니다: " + proofId, "PROOF_HASH_REQUIRED");
         }
 
         String key = ZKP_KEY_PREFIX + docId + "_" + proofId;
@@ -100,7 +110,8 @@ public final class DppLedgerContract implements ContractInterface {
         }
 
         ZkpVerificationRecord record = new ZkpVerificationRecord(
-                docId, proofId, publicInputsJson, verified, verifier, timestamp, stub.getTxId());
+                docId, proofId, publicInputsJson, verified, verifier, timestamp,
+                proofHash.trim(), stub.getTxId());
         stub.putStringState(key, gson.toJson(record));
         return record;
     }
