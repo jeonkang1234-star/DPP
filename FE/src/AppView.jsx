@@ -164,6 +164,8 @@ export default function AppView(v) {
     kpiIncomplete,
     kpiMissing,
     kpiNew,
+    kpiNewBadgeStyle,
+    kpiActionBadgeStyle,
     kpiTotal,
     kpiWaiting,
     lifecycle,
@@ -808,12 +810,12 @@ export default function AppView(v) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em' }}>{kpiTotal}</span><span style={{ padding: '3px 8px', borderRadius: '8px', background: 'rgba(18,161,80,.12)', color: '#0E7A3D', fontSize: '12px', fontWeight: '700' }}>+{kpiNew}</span></div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em' }}>{kpiTotal}</span><span style={{ ...kpiNewBadgeStyle, fontSize: '13px' }}>+{kpiNew}</span></div>
               <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>이번 달 신규 {kpiNew}건</span>
             </div>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>작성중인 DPP 수</span></div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em', color: '#C22B2B' }}>{kpiIncomplete}</span><span style={{ padding: '3px 8px', borderRadius: '8px', background: 'rgba(224,59,59,.10)', color: '#C22B2B', fontSize: '12px', fontWeight: '700' }}>조치 필요</span></div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em', color: '#C22B2B' }}>{kpiIncomplete}</span><span style={{ ...kpiActionBadgeStyle, fontSize: '12.5px' }}>조치 필요</span></div>
               <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>필드 누락 {kpiMissing}건 · 서류 대기 {kpiWaiting}건</span>
             </div>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -867,7 +869,7 @@ export default function AppView(v) {
                     <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', fontWeight: '600', color: '#0045A9', textDecoration: 'underline', textUnderlineOffset: '3px' }}>{c.id}</span>
                     <span style={{ fontSize: '12.5px', color: '#44546F', lineHeight: '1.35' }}>{c.name}</span>
                   </button>
-                  <div style={{ display: 'flex', height: '22px', borderRadius: '7px', overflow: 'hidden', background: '#EEF2F8' }}>
+                  <div style={{ display: 'flex', height: '22px', borderRadius: '7px', overflow: 'hidden', ...c.trackStyle }}>
                     {(c.segs || []).map((g, $index) => (<React.Fragment key={$index}><span style={g.style}></span></React.Fragment>))}
                   </div>
                   <span style={c.pctStyle}>{c.pct}%</span>

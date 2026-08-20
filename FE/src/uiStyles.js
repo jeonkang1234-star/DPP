@@ -64,3 +64,42 @@ export function pctStyle(pct) {
 export function segStyle(w, color) { return { display: 'block', width: w + '%', height: '100%', background: color }; }
 
 export function dot(color) { return { width: 9, height: 9, marginTop: 5, flex: 'none', borderRadius: 5, background: color }; }
+
+/**
+ * "배경 없는 3D 텍스트" 배지(2026-08-19, 강 요청) - 예전엔 pill(둥근 배경 박스)로 표시되던
+ * 작은 숫자/라벨 배지가 "너무 AI스럽다"는 피드백을 받아서, 배경을 걷어내고 글자 자체에
+ * 살짝 입체감(엠보싱)을 주는 방식으로 바꿨다. 색은 원래 쓰던 색(color 인자) 그대로 유지 -
+ * 요청사항이 "텍스트 색은 유지"였다. 위쪽엔 밝은 하이라이트, 아래쪽엔 어두운 그림자를
+ * 겹쳐서 글자가 살짝 도드라져 보이게 하는 원리(순수 CSS text-shadow, 이미지/아이콘 없음).
+ */
+export function badgeText3d(color) {
+  return {
+    display: 'inline-flex', alignItems: 'center', fontWeight: 800, letterSpacing: '.01em',
+    color,
+    textShadow: '0 1px 0 rgba(255,255,255,.65), 0 2px 1px rgba(16,32,64,.20), 0 4px 8px rgba(16,32,64,.14)'
+  };
+}
+
+/**
+ * DPP 입력률 그래프용 3D 바 세그먼트(2026-08-19, 강 요청 - "너무 2D라서 생동감 없고
+ * 재미없음"). 단색 평면 대신 위에서 빛이 떨어지는 듯한 그라디언트 광택 + 아래쪽 음영을
+ * 겹쳐서 살짝 튀어나온 느낌을 준다. 막대 트랙 쪽(둘러싸는 부모 div)에는 반대로 안쪽으로
+ * 파인 홈처럼 보이도록 inset 그림자를 추가로 준다(아래 groove3d 참고) - 막대가 그 홈 위에
+ * 얹힌 것처럼 보이게 하는 짝.
+ */
+export function segStyle3D(w, color) {
+  return {
+    display: 'block', width: w + '%', height: '100%',
+    background: `linear-gradient(180deg, rgba(255,255,255,.45) 0%, rgba(255,255,255,0) 45%, rgba(0,0,0,.12) 100%), ${color}`,
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,.35), inset 0 -2px 3px rgba(0,0,0,.14), 0 1px 2px rgba(16,32,64,.10)',
+    position: 'relative'
+  };
+}
+
+/** segStyle3D와 짝을 이루는 바 트랙(부모 컨테이너) 스타일 - 안쪽으로 파인 홈처럼 보이게. */
+export function groove3d(bg) {
+  return {
+    background: bg,
+    boxShadow: 'inset 0 2px 4px rgba(16,32,64,.12), inset 0 -1px 0 rgba(255,255,255,.5)'
+  };
+}
