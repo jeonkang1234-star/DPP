@@ -47,6 +47,34 @@ export function isUnreachableFromPhone(base) {
   return b.includes('//localhost') || b.includes('//127.0.0.1') || b.includes('//[::1]');
 }
 
+/**
+ * 이 QR 주소에 대해 사용자에게 띄울 경고. 없으면 null.
+ *
+ * 두 가지를 구분한다.
+ *  - loopback: 휴대폰이 자기 자신을 찾아가서 아무것도 안 뜬다.
+ *  - mismatch: 열리기는 하는데 "지금 보고 있는 서버"가 아닌 다른 서버를 가리킨다.
+ *    로컬 도커로 발급한 DPP는 그 서버 DB에 없으므로 "조회 실패"가 뜬다 - 주소가
+ *    멀쩡해 보여서 원인을 찾기 가장 어려운 경우라 명시적으로 경고한다
+ *    (2026-08-20: VITE_PUBLIC_BASE_URL 폴백이 EC2를 가리키게 되면서 생긴 상황).
+ */
+export function qrUrlWarning(url) {
+  if (!url) return null;
+  if (isUnreachableFromPhone(url)) {
+    return '이 주소는 이 PC에서만 열립니다. 휴대폰으로 스캔하려면 아래에서 접속 가능한 주소(예: http://192.168.0.10)로 바꿔 주세요.';
+  }
+  let qrOrigin;
+  try {
+    qrOrigin = new URL(url).origin;
+  } catch {
+    return null;
+  }
+  const here = String(window.location.origin || '');
+  if (qrOrigin && here && qrOrigin !== here) {
+    return 'QR이 지금 보고 있는 서버가 아니라 ' + qrOrigin + ' 를 가리킵니다. 여기서 발급한 DPP가 그 서버에 없으면 조회되지 않습니다.';
+  }
+  return null;
+}
+
 export function publicBaseUrl() {
   const override = readOverride();
   if (override) return override;

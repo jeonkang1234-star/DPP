@@ -391,7 +391,7 @@ export default function AppView(v) {
     qrModalBadge,
     qrModalTitle,
     qrModalHint,
-    qrModalUrl, qrModalUrlUnreachable,
+    qrModalUrl, qrModalUrlWarning,
     qrBaseEditing, qrBaseInput, qrBaseOnChange, openQrBaseEditor, cancelQrBaseEditor, saveQrBase,
     closeQrModal,
     goToProductsFromQr,
@@ -2073,8 +2073,8 @@ export default function AppView(v) {
           {qrModalImg ? (<img src={qrModalImg} alt="DPP QR" style={{ width: '200px', height: '200px', borderRadius: '14px', border: '1px solid rgba(16,32,64,.08)' }} />) : null}
           <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '13px', fontWeight: '600', color: '#44546F' }}>{qrModalId}</span>
           {qrModalUrl ? (<span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#6B7A93', textAlign: 'center', wordBreak: 'break-all', lineHeight: '1.5' }}>{qrModalUrl}</span>) : null}
-          {qrModalUrlUnreachable ? (
-          <span style={{ fontSize: '11.5px', color: '#C22B2B', textAlign: 'center', lineHeight: '1.6' }}>이 주소는 이 PC에서만 열립니다. 휴대폰으로 스캔하려면 아래에서 접속 가능한 주소(예: http://192.168.0.10)로 바꿔 주세요.</span>
+          {qrModalUrlWarning ? (
+          <span style={{ fontSize: '11.5px', color: '#C22B2B', textAlign: 'center', lineHeight: '1.6' }}>{qrModalUrlWarning}</span>
           ) : null}
           {qrBaseEditing ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>

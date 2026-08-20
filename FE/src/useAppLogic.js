@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { publicPassportUrl, publicBaseUrl, setPublicBaseUrl, isUnreachableFromPhone } from './publicUrl.js';
+import { publicPassportUrl, publicBaseUrl, setPublicBaseUrl, qrUrlWarning } from './publicUrl.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   pill, roleCard, pillDot, domainCard, tabStyle,
@@ -1001,8 +1001,9 @@ export function useAppLogic(userProps) {
       // http://localhost/p/... 가 들어간 걸 사용자가 알 방법이 없었다 - 휴대폰으로
       // 찍으면 아무것도 안 뜨는데 원인이 안 보였다(2026-08-20 강 리포트).
       qrModalUrl: (s.qrModal && s.qrModal.url) || '',
-      // 이 주소는 휴대폰에서 절대 안 열린다(localhost/127.0.0.1)는 경고 + 바꿀 수단.
-      qrModalUrlUnreachable: !!(s.qrModal && s.qrModal.url && isUnreachableFromPhone(s.qrModal.url)),
+      // 경고 문구(없으면 빈 문자열) - loopback이라 안 열리는 경우와, 열리긴 하는데
+      // 지금 보고 있는 서버가 아닌 곳을 가리키는 경우를 구분해서 알려준다.
+      qrModalUrlWarning: (s.qrModal && qrUrlWarning(s.qrModal.url)) || '',
       qrBaseEditing: !!s.qrBaseEditing,
       qrBaseInput: s.qrBaseInput != null ? s.qrBaseInput : publicBaseUrl(),
       qrBaseOnChange: (e) => setState({ qrBaseInput: e.target.value }),
