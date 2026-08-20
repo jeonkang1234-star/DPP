@@ -7,6 +7,8 @@ import com.dpp.mypage.dto.AdminDashboardResponse;
 import com.dpp.mypage.dto.AdminInquiryStatDto;
 import com.dpp.mypage.dto.AdminMemberDto;
 import com.dpp.mypage.repository.AdminStatsRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +22,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +37,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class AdminDashboardService {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminDashboardService.class);
 
     private final UserAccountRepository userAccountRepository;
     private final AdminStatsRepository adminStatsRepository;
@@ -68,19 +71,19 @@ public class AdminDashboardService {
 
         Long lastAnchoredMinutesAgo = null;
         Long lastAnchorBlockNo = null;
-        Optional<Object[]> latest = adminStatsRepository.findLatestAnchor();
-        if (latest.isPresent()) {
-            OffsetDateTime at = toOffsetDateTime(latest.get()[0]);
+        Object[] latest = firstRow(adminStatsRepository.findLatestAnchor(), 2);
+        if (latest != null) {
+            OffsetDateTime at = toOffsetDateTime(latest[0]);
             if (at != null) {
                 lastAnchoredMinutesAgo = Duration.between(at, OffsetDateTime.now()).toMinutes();
             }
-            Object blockRaw = latest.get()[1];
+            Object blockRaw = latest[1];
             lastAnchorBlockNo = blockRaw == null ? null : ((Number) blockRaw).longValue();
         }
 
-        Object[] successRow = adminStatsRepository.countAnchorSuccessRate30d();
-        long total30 = ((Number) successRow[0]).longValue();
-        long ok30 = ((Number) successRow[1]).longValue();
+        Object[] successRow = firstRow(adminStatsRepository.countAnchorSuccessRate30d(), 2);
+        long total30 = successRow == null ? 0L : toLong(successRow[0]);
+        long ok30 = successRow == null ? 0L : toLong(successRow[1]);
         Double successRate = total30 > 0 ? Math.round(ok30 * 10000.0 / total30) / 100.0 : null;
 
         List<Long> sparkline = buildSparkline(adminStatsRepository.dailyAnchorCounts14d());
@@ -144,6 +147,34 @@ public class AdminDashboardService {
         if ("BATTERY".equals(domain)) return "배터리";
         if ("TEXTILE".equals(domain)) return "섬유·패션";
         return "—";
+    }
+
+    /**
+     * 네이티브 쿼리 결과의 첫 행을 컬럼 수까지 확인해서 꺼낸다. 행이 없거나 모양이
+     * 예상과 다르면 null - 대시보드 KPI 하나 때문에 화면 전체가 500으로 죽지 않게 한다.
+     *
+     * 2026-08-20 강 리포트("전체 가입자 수, 등록 DPP 수에 숫자가 안 뜸")의 실제 원인이
+     * 여기였다. 앵커 행이 하나라도 생기면 GET /admin/dashboard가
+     * "Index 1 out of bounds for length 1"로 500이 났고, FE는 이 호출 실패를 조용히
+     * 삼켜서(catch(()=>{})) 가입자 수·DPP 수까지 전부 '—'로 보였다. 원인은 리포지터리
+     * 반환 타입이었고(AdminStatsRepository.findLatestAnchor 주석 참고) 거기서 고쳤지만,
+     * 같은 실수가 또 나도 KPI 하나만 비고 나머지는 나오도록 여기서 한 번 더 막는다.
+     */
+    private Object[] firstRow(List<Object[]> rows, int minColumns) {
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        Object[] row = rows.get(0);
+        if (row == null || row.length < minColumns) {
+            log.warn("예상과 다른 쿼리 결과 모양(컬럼 {}개 필요, 실제 {}개) - 해당 지표는 비워둔다",
+                    minColumns, row == null ? 0 : row.length);
+            return null;
+        }
+        return row;
+    }
+
+    private long toLong(Object raw) {
+        return raw instanceof Number n ? n.longValue() : 0L;
     }
 
     /** 최근 14일을 전부 0으로 채운 뒤 실제 집계값을 덮어써서, 앵커링이 없었던 날도 빠지지 않고 0으로 나오게 한다. */

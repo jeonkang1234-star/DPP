@@ -281,7 +281,11 @@ public class CustomsClearanceService {
     }
 
     private CustomsCaseSummaryDto toSummary(CustomsClearance row) {
-        Object[] dppSummary = customsCaseReadRepository.findDppSummary(row.getDppId()).orElse(null);
+        // firstRow로 감싼 이유: 예전엔 Optional<Object[]>를 그대로 인덱싱해서, 세관 큐를
+        // 부를 때마다 여기서 IndexOutOfBounds가 나 GET /customs/queue 전체가 500이었다.
+        // FE는 그 실패를 조용히 삼켜서(catch(()=>{})) 화면엔 "대기 중인 DPP 없음"으로만
+        // 보였다 - 2026-08-20 강 리포트 "관세청 데이터가 안 바뀌었음"의 실제 원인.
+        Object[] dppSummary = firstRow(customsCaseReadRepository.findDppSummary(row.getDppId()), 5);
         String modelName = dppSummary != null ? (String) dppSummary[1] : null;
         String exporterOrgName = dppSummary != null ? (String) dppSummary[2] : null;
         String publicUuid = dppSummary != null ? String.valueOf(dppSummary[4]) : null;
@@ -295,10 +299,9 @@ public class CustomsClearanceService {
     }
 
     private CustomsCaseDetailDto toDetail(CustomsClearance row) {
-        Optional<Object[]> dppSummaryOpt = customsCaseReadRepository.findDppSummary(row.getDppId());
-        Object[] dppSummary = dppSummaryOpt.orElse(null);
+        Object[] dppSummary = firstRow(customsCaseReadRepository.findDppSummary(row.getDppId()), 6);
         String actualHsCode = dppSummary != null ? (String) dppSummary[0] : null;
-        Long modelId = dppSummary != null ? ((Number) dppSummary[5]).longValue() : null;
+        Long modelId = dppSummary != null && dppSummary[5] instanceof Number n ? n.longValue() : null;
 
         List<CustomsCheckDto> checks = new ArrayList<>();
         checks.add(checkAnchor(row.getDppId()));
@@ -313,15 +316,34 @@ public class CustomsClearanceService {
     }
 
     private CustomsCheckDto checkAnchor(Long dppId) {
-        Optional<Object[]> anchor = customsCaseReadRepository.findLatestAnchor(dppId);
-        if (anchor.isEmpty()) {
+        Object[] anchor = firstRow(customsCaseReadRepository.findLatestAnchor(dppId), 3);
+        if (anchor == null) {
             return new CustomsCheckDto("DPP 서명 검증", false, "블록체인 앵커링 기록이 없습니다.");
         }
-        String status = String.valueOf(anchor.get()[0]);
+        String status = String.valueOf(anchor[0]);
         boolean pass = "MOCK".equals(status) || "CONFIRMED".equals(status);
-        String txId = anchor.get()[1] == null ? "—" : String.valueOf(anchor.get()[1]);
+        String txId = anchor[1] == null ? "—" : String.valueOf(anchor[1]);
         return new CustomsCheckDto("DPP 서명 검증", pass,
                 pass ? "블록체인 앵커 해시 일치 (tx: " + txId + ")" : "앵커 상태: " + status);
+    }
+
+    /**
+     * 네이티브 쿼리 결과의 첫 행을 컬럼 수까지 확인해서 꺼낸다. 행이 없거나 모양이
+     * 예상과 다르면 null - 판정 항목 하나 때문에 통관 상세 화면 전체가 500으로 죽지
+     * 않게 한다(2026-08-20, /admin/dashboard가 같은 이유로 죽었던 것과 짝 -
+     * CustomsCaseReadRepository.findDppSummary 주석 참고).
+     */
+    private Object[] firstRow(List<Object[]> rows, int minColumns) {
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        Object[] r = rows.get(0);
+        if (r == null || r.length < minColumns) {
+            log.warn("예상과 다른 쿼리 결과 모양(컬럼 {}개 필요, 실제 {}개) - 해당 판정은 건너뛴다",
+                    minColumns, r == null ? 0 : r.length);
+            return null;
+        }
+        return r;
     }
 
     private CustomsCheckDto checkHsCode(String declaredHsCode, String actualHsCode) {
