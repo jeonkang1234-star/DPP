@@ -9,8 +9,13 @@
  *
  * 해결 순서:
  *   1) 사용자가 화면에서 직접 지정한 공개 주소(localStorage) - 재빌드 없이 바꿀 수 있다
- *   2) 빌드 시 주입한 VITE_PUBLIC_BASE_URL (docker-compose build args)
- *   3) 현재 origin (PC를 LAN IP로 열었다면 이것만으로 충분하다)
+ *   2) 현재 origin이 loopback이 아니면 그대로 - EC2(http://15.134.9.240)로 접속했든
+ *      PC를 LAN IP로 열었든, 지금 보고 있는 그 주소가 언제나 정답이다. 빌드에 박아둔
+ *      값보다 이걸 먼저 보는 이유: 그 DPP가 실제로 있는 DB는 지금 접속한 서버의
+ *      DB이므로, 다른 호스트를 QR에 박으면 "없는 DPP"가 뜬다.
+ *   3) VITE_PUBLIC_BASE_URL (빌드 인자) - origin이 localhost/127.0.0.1일 때만 쓰인다.
+ *      로컬 PC에서 http://localhost로 열어둔 채 QR을 만들 때의 구제책.
+ *   4) 그래도 없으면 origin 그대로(= localhost). 모달이 빨간 경고를 띄운다.
  */
 
 const STORAGE_KEY = 'dpp.publicBaseUrl';
@@ -36,16 +41,20 @@ export function setPublicBaseUrl(value) {
   }
 }
 
-export function publicBaseUrl() {
-  return readOverride()
-    || trimSlash(import.meta.env?.VITE_PUBLIC_BASE_URL)
-    || trimSlash(window.location.origin);
-}
-
 /** 휴대폰에서 절대 열리지 않는 주소인가(= QR이 무의미한가). */
 export function isUnreachableFromPhone(base) {
-  const b = (base || publicBaseUrl()).toLowerCase();
+  const b = String(base == null ? publicBaseUrl() : base).toLowerCase();
   return b.includes('//localhost') || b.includes('//127.0.0.1') || b.includes('//[::1]');
+}
+
+export function publicBaseUrl() {
+  const override = readOverride();
+  if (override) return override;
+
+  const origin = trimSlash(window.location.origin);
+  if (origin && !isUnreachableFromPhone(origin)) return origin;
+
+  return trimSlash(import.meta.env?.VITE_PUBLIC_BASE_URL) || origin;
 }
 
 /** QR/링크에 넣을 공개 여권 절대 URL. publicUuid가 없으면 null. */
