@@ -1,0 +1,55 @@
+/**
+ * 공개 여권(/p/{publicUuid}) QR에 넣을 절대 URL을 만든다.
+ *
+ * 예전엔 세 군데(makerVals·customsVals·useAppLogic)에서 각자
+ * `window.location.origin + '/p/' + uuid`를 조립했다. PC 브라우저에서 앱을
+ * http://localhost 로 열어두면 QR에도 http://localhost/p/... 가 그대로 박히는데,
+ * 그 QR을 휴대폰으로 찍으면 휴대폰 자기 자신의 localhost로 가버려서 아무것도
+ * 뜨지 않는다(2026-08-20 강 리포트 "QR코드 모바일로 찍어도 조회가 안 된다").
+ *
+ * 해결 순서:
+ *   1) 사용자가 화면에서 직접 지정한 공개 주소(localStorage) - 재빌드 없이 바꿀 수 있다
+ *   2) 빌드 시 주입한 VITE_PUBLIC_BASE_URL (docker-compose build args)
+ *   3) 현재 origin (PC를 LAN IP로 열었다면 이것만으로 충분하다)
+ */
+
+const STORAGE_KEY = 'dpp.publicBaseUrl';
+
+const trimSlash = (s) => String(s || '').trim().replace(/\/+$/, '');
+
+/** localStorage 접근이 막힌 환경(사생활 보호 모드 등)에서도 앱이 죽지 않게 감싼다. */
+function readOverride() {
+  try {
+    return trimSlash(window.localStorage.getItem(STORAGE_KEY));
+  } catch {
+    return '';
+  }
+}
+
+export function setPublicBaseUrl(value) {
+  try {
+    const v = trimSlash(value);
+    if (v) window.localStorage.setItem(STORAGE_KEY, v);
+    else window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // 저장 실패해도 이번 세션의 QR 생성 자체는 인자로 받은 값으로 계속 진행한다.
+  }
+}
+
+export function publicBaseUrl() {
+  return readOverride()
+    || trimSlash(import.meta.env?.VITE_PUBLIC_BASE_URL)
+    || trimSlash(window.location.origin);
+}
+
+/** 휴대폰에서 절대 열리지 않는 주소인가(= QR이 무의미한가). */
+export function isUnreachableFromPhone(base) {
+  const b = (base || publicBaseUrl()).toLowerCase();
+  return b.includes('//localhost') || b.includes('//127.0.0.1') || b.includes('//[::1]');
+}
+
+/** QR/링크에 넣을 공개 여권 절대 URL. publicUuid가 없으면 null. */
+export function publicPassportUrl(publicUuid) {
+  if (!publicUuid) return null;
+  return publicBaseUrl() + '/p/' + publicUuid;
+}

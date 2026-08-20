@@ -1,5 +1,6 @@
 import React from 'react';
 import QRCode from 'qrcode';
+import { publicPassportUrl } from '../publicUrl.js';
 import { updateOrganization } from '../api/meApi.js';
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -526,11 +527,11 @@ export function makerVals(ctx) {
         const displayId = issued.internalSku || ('DPP-' + issued.dppId);
         const snapshot = (issued.fields || []).map(f => ({ label: f.labelKo, value: f.value || '', required: f.required }));
         try {
-          const passportUrl = issued.publicUuid ? (window.location.origin + '/p/' + issued.publicUuid) : displayId;
+          const passportUrl = publicPassportUrl(issued.publicUuid) || displayId;
           const dataUrl = await QRCode.toDataURL(passportUrl, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } });
           setState(s => ({
             issuedPassportCache: { ...(s.issuedPassportCache || {}), [displayId]: { material: r, formLabel: inputMeta.form, fields: snapshot } },
-            qrModal: { id: displayId, dataUrl, showProductsLink: true }
+            qrModal: { id: displayId, dataUrl, showProductsLink: true, url: passportUrl }
           }));
         } catch (qrErr) {
           // QR 이미지 생성만 실패해도 발급 자체(실데이터, 블록체인 앵커링)는 이미 끝났으니

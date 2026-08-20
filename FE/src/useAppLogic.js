@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
+import { publicPassportUrl, publicBaseUrl, setPublicBaseUrl, isUnreachableFromPhone } from './publicUrl.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   pill, roleCard, pillDot, domainCard, tabStyle,
@@ -492,7 +493,7 @@ export function useAppLogic(userProps) {
     let alive = true;
     // 2026-08-18 강 리포트: QR이 텍스트만 인코딩해서 스캐너가 구글 검색으로 처리하던
     // 버그 - 공개 조회 URL(/p/{publicUuid})을 인코딩한다(makerVals.js issueDpp와 동일).
-    const passportUrl = row.publicUuid ? (window.location.origin + '/p/' + row.publicUuid) : displayId;
+    const passportUrl = publicPassportUrl(row.publicUuid) || displayId;
     QRCode.toDataURL(passportUrl, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
       .then((dataUrl) => {
         if (!alive) return;
@@ -996,6 +997,34 @@ export function useAppLogic(userProps) {
       ...notifVals(ctx),
       ...dppVals(ctx),
       ...obVals(ctx),
+      // QR 모달에 인코딩된 실제 주소를 보여준다. 예전엔 QR 이미지만 있어서, 그 안에
+      // http://localhost/p/... 가 들어간 걸 사용자가 알 방법이 없었다 - 휴대폰으로
+      // 찍으면 아무것도 안 뜨는데 원인이 안 보였다(2026-08-20 강 리포트).
+      qrModalUrl: (s.qrModal && s.qrModal.url) || '',
+      // 이 주소는 휴대폰에서 절대 안 열린다(localhost/127.0.0.1)는 경고 + 바꿀 수단.
+      qrModalUrlUnreachable: !!(s.qrModal && s.qrModal.url && isUnreachableFromPhone(s.qrModal.url)),
+      qrBaseEditing: !!s.qrBaseEditing,
+      qrBaseInput: s.qrBaseInput != null ? s.qrBaseInput : publicBaseUrl(),
+      qrBaseOnChange: (e) => setState({ qrBaseInput: e.target.value }),
+      openQrBaseEditor: () => setState({ qrBaseEditing: true, qrBaseInput: publicBaseUrl() }),
+      cancelQrBaseEditor: () => setState({ qrBaseEditing: false }),
+      saveQrBase: async () => {
+        const next = String(s.qrBaseInput || '').trim();
+        setPublicBaseUrl(next);
+        setState({ qrBaseEditing: false });
+        // 저장한 주소로 QR을 즉시 다시 만든다 - 저장만 하고 이미지가 그대로면
+        // 바뀐 건지 알 수 없다.
+        const cur = s.qrModal;
+        if (!cur || !cur.url) { say('공개 주소를 저장했습니다. 다음 QR부터 적용됩니다.'); return; }
+        const uuid = cur.url.split('/p/')[1];
+        const url = publicPassportUrl(uuid);
+        try {
+          const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } });
+          setState({ qrModal: { ...cur, dataUrl, url } });
+        } catch {
+          say('QR 이미지를 다시 만들지 못했습니다.');
+        }
+      },
       confirmOpen: !!s.confirm,
       confirmTitle: s.confirm && s.confirm.title,
       confirmBody: s.confirm && s.confirm.body,

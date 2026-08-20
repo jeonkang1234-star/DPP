@@ -81,6 +81,10 @@ services:
     build:
       context: ../FE
       dockerfile: Dockerfile
+      args:
+        # 공개 여권 QR에 박힐 절대 주소. 비워두면 브라우저 origin을 쓴다.
+        # 휴대폰으로 QR을 스캔하려면 PC의 LAN 주소를 넣어야 한다(예: http://192.168.0.10).
+        VITE_PUBLIC_BASE_URL: "${VITE_PUBLIC_BASE_URL:-}"
     container_name: dpp-frontend
     restart: unless-stopped
     depends_on:

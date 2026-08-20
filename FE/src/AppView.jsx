@@ -391,6 +391,8 @@ export default function AppView(v) {
     qrModalBadge,
     qrModalTitle,
     qrModalHint,
+    qrModalUrl, qrModalUrlUnreachable,
+    qrBaseEditing, qrBaseInput, qrBaseOnChange, openQrBaseEditor, cancelQrBaseEditor, saveQrBase,
     closeQrModal,
     goToProductsFromQr,
     tierRequestPending,
@@ -768,7 +770,7 @@ export default function AppView(v) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '20px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>국내(KR) 사업자등록번호 체크섬 자동 검증 · 그 외 국가는 관리자 수동 심사</span>
+              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>제출 문서 형식 OCR 자동검증 · 그 외는 관리자 수동 심사</span>
               <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>회원 관리</h1>
             </div>
           </div>
@@ -953,7 +955,7 @@ export default function AppView(v) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: '16px', alignItems: 'start' }}>
               {!documentSlotsEmpty ? (<>
               <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <span style={{ fontSize: '15px', fontWeight: '600' }}>필수 문서</span>
+                <span style={{ fontSize: '15px', fontWeight: '600' }}>문서 검증</span>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                   {(documentSlots || []).map((d, $index) => (<React.Fragment key={$index}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '13px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1.5px solid ' + d.tileBorderColor }}>
@@ -2070,6 +2072,21 @@ export default function AppView(v) {
           <span style={{ fontSize: '15px', fontWeight: '700', textAlign: 'center' }}>{qrModalTitle}</span>
           {qrModalImg ? (<img src={qrModalImg} alt="DPP QR" style={{ width: '200px', height: '200px', borderRadius: '14px', border: '1px solid rgba(16,32,64,.08)' }} />) : null}
           <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '13px', fontWeight: '600', color: '#44546F' }}>{qrModalId}</span>
+          {qrModalUrl ? (<span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#6B7A93', textAlign: 'center', wordBreak: 'break-all', lineHeight: '1.5' }}>{qrModalUrl}</span>) : null}
+          {qrModalUrlUnreachable ? (
+          <span style={{ fontSize: '11.5px', color: '#C22B2B', textAlign: 'center', lineHeight: '1.6' }}>이 주소는 이 PC에서만 열립니다. 휴대폰으로 스캔하려면 아래에서 접속 가능한 주소(예: http://192.168.0.10)로 바꿔 주세요.</span>
+          ) : null}
+          {qrBaseEditing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+            <input value={qrBaseInput} onChange={qrBaseOnChange} placeholder="http://192.168.0.10" style={{ height: '40px', padding: '0 12px', border: '1px solid rgba(16,32,64,.16)', borderRadius: '10px', fontSize: '13px', fontFamily: '\'JetBrains Mono\',monospace' }} />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={cancelQrBaseEditor} style={{ flex: 1, height: '38px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', fontSize: '12.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>취소</button>
+              <button onClick={saveQrBase} style={{ flex: 1, height: '38px', border: '0', borderRadius: '10px', background: '#0045A9', color: '#fff', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>저장하고 QR 다시 만들기</button>
+            </div>
+          </div>
+          ) : (
+          <button onClick={openQrBaseEditor} style={{ border: '0', background: 'transparent', color: '#0045A9', fontSize: '11.5px', fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' }}>공개 주소 변경</button>
+          )}
           <span style={{ fontSize: '11.5px', color: '#8494AC', textAlign: 'center', lineHeight: '1.6' }}>{qrModalHint}</span>
           <div style={{ display: 'flex', gap: '9px', width: '100%' }}>
             <button onClick={closeQrModal} style={{ flex: 1, height: '44px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
