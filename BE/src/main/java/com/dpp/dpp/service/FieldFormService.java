@@ -112,6 +112,7 @@ public class FieldFormService {
                              ParticipantSubmitStatusService participantSubmitStatusService,
                              BlockchainAnchorRepository blockchainAnchorRepository,
                              Optional<BlockchainClient> blockchainClient,
+                             CustomsClearanceService customsClearanceService,
                              AuditLogService auditLogService) {
         this.userAccountRepository = userAccountRepository;
         this.productModelRepository = productModelRepository;
