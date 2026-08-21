@@ -35,8 +35,25 @@ jobs:
           script: |
             set -e
             cd /opt/app
-            git fetch origin main
-            git reset --hard origin/main
+
+            # 원격 추적 ref(refs/remotes/origin/main)가 깨지면 fetch가
+            #   "error: fetching ref refs/remotes/origin/main failed: incorrect old value provided"
+            # 로 죽는다(2026-08-21, PR #54 배포에서 실제 발생). loose ref와 packed-refs에
+            # 서로 다른 값이 남아 있을 때 나는 증상이라, 코드나 커밋과는 무관하고 EC2 쪽
+            # .git 상태 문제다. 한 번 나면 사람이 손대기 전까지 모든 배포가 같은 자리에서
+            # 멈추므로, 실패하면 그 ref를 지우고 packed-refs를 정리한 뒤 한 번 더 시도한다.
+            if ! git fetch origin main; then
+              echo "fetch 실패 - origin/main 추적 ref를 재생성하고 재시도"
+              git update-ref -d refs/remotes/origin/main || true
+              git pack-refs --all --prune || true
+              git fetch origin main
+            fi
+
+            # origin/main 대신 FETCH_HEAD로 리셋한다. 방금 받은 커밋을 직접 가리키므로
+            # 추적 ref 상태와 무관하게 항상 정확하다.
+            git reset --hard FETCH_HEAD
+            git log --oneline -1
+
             cd docker                          # docker-compose.yml이 /opt/app/docker 에 위치
 
             # /opt/app/fabric-identity에 Fabric 인증서(admin-cert.pem 등)가 준비돼 있으면
