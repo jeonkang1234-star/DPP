@@ -53,6 +53,9 @@ public class NotificationService {
                 .toList();
     }
 
+    /** org_type이 아직 비어 있는 기업 계정을 가리키는 내부 역할 문자열. */
+    private static final String BUSINESS_UNKNOWN_ROLE = "BUSINESS_UNKNOWN";
+
     /**
      * 노출 규칙을 고를 때 쓰는 역할 문자열.
      * 운영자는 계정 종류(ADMIN)로, 나머지는 소속 조직의 org_type으로 정한다 -
@@ -72,9 +75,16 @@ public class NotificationService {
         if (user.getOrgId() == null) {
             return null;
         }
-        return organizationRepository.findById(user.getOrgId())
+        String orgType = organizationRepository.findById(user.getOrgId())
                 .map(Organization::getOrgType)
                 .orElse(null);
+        // org_type이 비어 있는 기업 계정(2026-08-21 이전에 가입해서 마이페이지에서 유형을
+        // 아직 안 고른 조직)은 예전엔 null로 내려가 visibleTo의 default 분기(전부 보여주기)를
+        // 탔다 - 갓 가입한 제조사 알림센터에 통관·Tier까지 8개 탭이 전부 뜨던 원인
+        // (강 요청 5번). 조직에 소속돼 있다는 것만으로 제조사/협력사 둘 중 하나이고 두
+        // 역할의 노출 집합이 같으므로(CERT·SYSTEM), 최소 집합으로 보수적으로 처리한다.
+        // 신규 가입은 OrganizationService.findOrCreateForSignup이 org_type을 바로 채운다.
+        return orgType == null ? BUSINESS_UNKNOWN_ROLE : orgType;
     }
 
     @Transactional(readOnly = true)

@@ -214,7 +214,7 @@ export function useAppLogic(userProps) {
       suCaptcha: '',
       suRole: 'maker',
       suCountry: '대한민국',
-      obOpen: false, obStep: 1, obDomain: 'steel', obTier: 3,
+      obOpen: false, obStep: 1, obDomain: 'steel',
       notifOpen: false, notifCat: 'all',
       dppOpen: false, dppId: null, pubId: null,
       issueMode: 'single',
@@ -1044,7 +1044,13 @@ export function useAppLogic(userProps) {
         if (domainHint(email) === 'personal') { say('개인 메일 도메인으로는 기업 회원가입을 할 수 없습니다.'); return; }
         if (!s.suVerified) { say('이메일 인증을 먼저 완료해 주세요.'); return; }
         if (!s.suPhoneVerified) { say('전화번호 인증을 먼저 완료해 주세요.'); return; }
-        if (!s.suCompanyName || !s.suBizRegNo) { say('회사명과 사업자등록번호를 입력해 주세요.'); return; }
+        const isPublicAuthorityRole = s.suRole === 'customs' || s.suRole === 'eu';
+        // 세관·시장감독기관은 사업자등록번호 입력란 자체가 없다(2026-08-21 강 요청 6번) -
+        // 그 자리에서 국가를 받으므로 여기서도 국가만 필수로 본다.
+        if (!s.suCompanyName) { say(isPublicAuthorityRole ? '기관명을 입력해 주세요.' : '회사명을 입력해 주세요.'); return; }
+        if (isPublicAuthorityRole) {
+          if (!s.suCountry) { say('국가를 입력해 주세요.'); return; }
+        } else if (!s.suBizRegNo) { say('사업자등록번호를 입력해 주세요.'); return; }
         if (!s.suPassword || s.suPassword.length < 8) { say('비밀번호는 8자 이상이어야 합니다.'); return; }
         if (s.suPassword !== s.suPasswordConfirm) { say('비밀번호가 일치하지 않습니다.'); return; }
         // 자동입력 방지 문자 확인(2026-08-21). 예전엔 화면에만 있고 검사를 아예 안 했다.
@@ -1056,7 +1062,7 @@ export function useAppLogic(userProps) {
           say('자동입력 방지 문자가 일치하지 않습니다. 새 문자를 입력해 주세요.');
           return;
         }
-        const isPublicAuthority = s.suRole === 'customs' || s.suRole === 'eu';
+        const isPublicAuthority = isPublicAuthorityRole;
         // 제조사/협력사는 사업자등록증 첨부가 필수다(2026-08-19 강 요청 4번 - 가입 시
         // 업로드 필수화). 세관/시장감독기관은 자동승인을 아예 시도하지 않고 항상 관리자
         // 수동심사로 가므로(강 요청 3번) 파일이 없어도 통과시킨다.
@@ -1069,11 +1075,21 @@ export function useAppLogic(userProps) {
         // 보낸다 - 예전엔 여기서 'customs'/'eu' 문자열을 그대로 domain에 넣어 보내던 버그가
         // 있었다(BE normalizeDomain이 STEEL/TEXTILE/BATTERY만 받아 400이 났을 것).
         const domain = (s.suRole === 'maker' || s.suRole === 'partner') ? 'steel' : null;
-        const orgTypeHint = s.suRole === 'customs' ? 'CUSTOMS' : s.suRole === 'eu' ? 'EU_AUTHORITY' : null;
+        // org_type은 네 유형 모두 가입 시점에 확정한다. 예전엔 제조사/협력사가 null을 보내서
+        // organization.org_type이 비어 있었고, 그 탓에 NotificationCategory.visibleTo가
+        // default(전부 보여주기) 분기로 빠져 갓 가입한 제조사 알림센터에 통관·Tier까지 8개
+        // 탭이 전부 떴다(2026-08-21 강 요청 5번). 협력사는 RAW_SUPPLIER로 보낸다 - 가입
+        // 화면에서 협력사 세부 역할(원자재공급/시험소/재활용)을 아직 고르지 않기 때문이고,
+        // 알림 가시성(PARTNER_VISIBLE)은 세 역할이 동일하다. 세부 역할은 마이페이지에서
+        // 바꿀 수 있다(OrganizationService.updateMyOrganization).
+        const orgTypeHint = s.suRole === 'customs' ? 'CUSTOMS'
+          : s.suRole === 'eu' ? 'EU_AUTHORITY'
+          : s.suRole === 'partner' ? 'RAW_SUPPLIER' : 'MANUFACTURER';
         try {
           const res = await completeBusinessSignup({
             email, password: s.suPassword, companyName: s.suCompanyName,
-            businessRegNo: s.suBizRegNo, country: s.suCountry || '대한민국', domain, orgTypeHint,
+            businessRegNo: isPublicAuthority ? null : s.suBizRegNo,
+            country: s.suCountry || '대한민국', domain, orgTypeHint,
             phone: (s.suPhone || '').trim(), bizRegCert: s.suBizRegCert
           });
           const sessionExtra = { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType };

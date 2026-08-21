@@ -78,6 +78,11 @@ public class BusinessSignupService {
 
     private static final Set<String> PUBLIC_AUTHORITY_ORG_TYPES = Set.of("CUSTOMS", "EU_AUTHORITY");
 
+    /** 가입 화면(FE suRole)에서 고를 수 있는 네 가지 계정 유형. 2026-08-21 강 요청 5번으로
+     * 제조사/협력사도 orgTypeHint를 보내게 되면서(예전엔 null) 여기서 함께 검증한다. */
+    private static final Set<String> SIGNUP_ORG_TYPES =
+            Set.of("MANUFACTURER", "RAW_SUPPLIER", "CUSTOMS", "EU_AUTHORITY");
+
     @Transactional
     public LoginResponse signup(BusinessSignupRequest request, MultipartFile bizRegCert) {
         if (userAccountRepository.existsByEmail(request.email())) {
@@ -90,19 +95,29 @@ public class BusinessSignupService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "전화번호 인증을 먼저 완료해 주세요.");
         }
 
-        // orgTypeHint가 있으면 세관/시장감독기관(공적 기관) 계정 - domain 대신 org_type이
-        // 즉시 확정되고, 사업자등록증 자동승인 없이 항상 관리자 수동심사로 간다(2026-08-19
-        // 강 요청 3번). 그 외(제조사/협력사)는 domain이 필수고, 사업자등록증 파일도
-        // 필수다(가입 시 업로드 필수화 - 4번 항목).
-        boolean isPublicAuthority = request.orgTypeHint() != null && !request.orgTypeHint().isBlank();
+        // orgTypeHint는 네 유형 모두 온다(2026-08-21 강 요청 5번). 그 중 CUSTOMS/EU_AUTHORITY만
+        // 공적 기관으로 취급해서 domain 대신 국가만 받고, 사업자등록증 자동승인 없이 항상
+        // 관리자 수동심사로 간다(2026-08-19 강 요청 3번) - 승인 전까지는 로그인도 막힌다
+        // (PasswordAuthService.requireApprovedOrganization, 강 요청 9번). 그 외(제조사/협력사)는
+        // domain·사업자등록번호·사업자등록증 파일이 모두 필수다(가입 시 업로드 필수화 - 4번 항목).
+        String orgTypeHint = request.orgTypeHint() == null ? null : request.orgTypeHint().trim().toUpperCase();
+        if (orgTypeHint != null && !orgTypeHint.isBlank() && !SIGNUP_ORG_TYPES.contains(orgTypeHint)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "orgTypeHint 값이 올바르지 않습니다 (" + SIGNUP_ORG_TYPES + " 중 하나여야 합니다).");
+        }
+        boolean isPublicAuthority = orgTypeHint != null && PUBLIC_AUTHORITY_ORG_TYPES.contains(orgTypeHint);
         if (isPublicAuthority) {
-            if (!PUBLIC_AUTHORITY_ORG_TYPES.contains(request.orgTypeHint())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "orgTypeHint 값이 올바르지 않습니다 (CUSTOMS 또는 EU_AUTHORITY만 허용).");
+            // 세관/시장감독기관은 사업자등록번호 입력란 자체가 없다(2026-08-21 강 요청 6번) -
+            // 그 자리에 국가를 받는다. biz_reg_no는 NULL로 남는다.
+            if (request.country() == null || request.country().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "국가는 필수입니다.");
             }
         } else {
             if (request.domain() == null || request.domain().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "domain은 필수입니다.");
+            }
+            if (request.businessRegNo() == null || request.businessRegNo().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사업자등록번호는 필수입니다.");
             }
             if (bizRegCert == null || bizRegCert.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사업자등록증을 첨부해 주세요.");
@@ -114,7 +129,7 @@ public class BusinessSignupService {
         // 검증해서 완전히 일치할 때만 즉시 ACTIVE로 승인한다(OrganizationService.verifyBizCert).
         Organization org = organizationService.findOrCreateForSignup(
                 request.companyName(), request.businessRegNo(), request.country(), request.domain(),
-                request.orgTypeHint(), bizRegCert);
+                orgTypeHint, bizRegCert);
 
         UserAccount user = new UserAccount();
         user.setAccountType(AccountType.BUSINESS);

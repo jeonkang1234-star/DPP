@@ -76,6 +76,9 @@ public enum NotificationCategory {
             case "EU_AUTHORITY" -> EU_AUTHORITY_VISIBLE.contains(this);
             case "MANUFACTURER" -> MANUFACTURER_VISIBLE.contains(this);
             case "RAW_SUPPLIER", "TEST_LAB", "RECYCLER" -> PARTNER_VISIBLE.contains(this);
+            // org_type이 비어 있는 기업 계정 - 제조사/협력사 둘 중 하나이고 두 역할의 노출
+            // 집합이 같으므로 그 최소 집합을 쓴다(NotificationService.BUSINESS_UNKNOWN_ROLE).
+            case "BUSINESS_UNKNOWN" -> PARTNER_VISIBLE.contains(this);
             default -> true;
         };
     }

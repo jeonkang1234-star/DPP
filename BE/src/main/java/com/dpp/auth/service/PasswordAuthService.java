@@ -8,6 +8,9 @@ import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.auth.security.JwtTokenProvider;
 import com.dpp.audit.service.AuditLogService;
+import com.dpp.mypage.entity.OrgApprovalStatus;
+import com.dpp.mypage.entity.Organization;
+import com.dpp.mypage.repository.OrganizationRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -17,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.OffsetDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 이메일 + 비밀번호 로그인. BUSINESS/ADMIN 계정 전용.
@@ -33,15 +37,29 @@ public class PasswordAuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final AuditLogService auditLogService;
+    private final OrganizationRepository organizationRepository;
+
+    /**
+     * 관리자 승인 전까지 로그인 자체를 막는 조직 유형(2026-08-21 강 요청 9번).
+     * 세관·시장감독기관은 공권력을 행사하는 계정이라 실제 기관 확인 없이 열어주면 안 된다.
+     * 가입 -> 온보딩까지는 그대로 진행시키고(입력 내용은 DB에 남는다), 온보딩을 끝내는
+     * 순간 FE가 로그아웃시킨다(obVals.js finish). 그 뒤로는 여기서 403으로 막힌다.
+     *
+     * 제조사/협력사는 대상이 아니다 - 사업자등록증 자동승인을 통과하지 못하면 PENDING으로
+     * 남지만, 그 사이에도 자기 DPP 작성은 계속할 수 있어야 한다(기존 동작 유지).
+     */
+    private static final Set<String> APPROVAL_GATED_ORG_TYPES = Set.of("CUSTOMS", "EU_AUTHORITY");
 
     public PasswordAuthService(UserAccountRepository userAccountRepository,
                                 PasswordEncoder passwordEncoder,
                                 JwtTokenProvider jwtTokenProvider,
-                                AuditLogService auditLogService) {
+                                AuditLogService auditLogService,
+                                OrganizationRepository organizationRepository) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
         this.auditLogService = auditLogService;
+        this.organizationRepository = organizationRepository;
     }
 
     @Transactional
@@ -68,6 +86,8 @@ public class PasswordAuthService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
+        requireApprovedOrganization(user);
+
         user.setFailedLoginCount((short) 0);
         user.setLockedUntil(null);
         user.setLastLoginAt(OffsetDateTime.now());
@@ -86,6 +106,31 @@ public class PasswordAuthService {
                 user.getEmail(), "성공", null);
 
         return LoginResponse.of(access, refresh, user.getAccountType().name(), user.getEmail(), user.getDisplayName());
+    }
+
+    /**
+     * 세관/시장감독기관 계정은 organization.approval_status가 ACTIVE가 되기 전까지 로그인을
+     * 막는다. 비밀번호 검증을 통과한 뒤에 확인하는 이유는, 승인 상태를 미가입/오답 응답과
+     * 구분해 흘리지 않기 위해서다(계정 존재 여부 노출 방지).
+     */
+    private void requireApprovedOrganization(UserAccount user) {
+        if (user.getOrgId() == null) {
+            return;
+        }
+        Organization org = organizationRepository.findById(user.getOrgId()).orElse(null);
+        if (org == null || org.getOrgType() == null
+                || !APPROVAL_GATED_ORG_TYPES.contains(org.getOrgType())) {
+            return;
+        }
+        OrgApprovalStatus status = org.getApprovalStatus();
+        if (status == OrgApprovalStatus.ACTIVE) {
+            return;
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, switch (status) {
+            case REJECTED -> "기관 등록 신청이 반려되었습니다. 관리자에게 문의해 주세요.";
+            case SUSPENDED -> "정지된 기관 계정입니다. 관리자에게 문의해 주세요.";
+            default -> "관리자 승인 대기 중인 기관 계정입니다. 승인 후 로그인할 수 있습니다.";
+        });
     }
 
     /** 실패 5회 누적 시 15분 잠금. 잠금 중 재시도해도 카운트가 더 늘지 않게 여기서만 증가시킨다. */

@@ -194,13 +194,10 @@ export default function AppView(v) {
     obBars,
     obBatteryCard,
     obC2,
-    obC4,
     obClose,
     obComplete,
-    obDocs,
     obDomainLabel,
     obG1,
-    obG3,
     obGovBanner,
     obGovBannerText,
     obGovCodeSample,
@@ -210,16 +207,13 @@ export default function AppView(v) {
     obIncomplete,
     obIs1,
     obIs2,
-    obIs3,
-    obIs4,
-    obIs5,
+    obCompanyName,
+    obBizRegNo,
     obLastStep,
     obM2,
-    obM4,
     obNext,
     obNextLabel,
     obOpen,
-    obPermList,
     obPickBattery,
     obPickSteel,
     obPickTextile,
@@ -233,14 +227,6 @@ export default function AppView(v) {
     obSteelCard,
     obStep,
     obTextileCard,
-    obTier1,
-    obTier1Card,
-    obTier2,
-    obTier2Card,
-    obTier3,
-    obTier3Card,
-    obTierLabel,
-    obTierSub,
     obTitle,
     onCustomsQuery,
     onEditBiz,
@@ -362,9 +348,7 @@ export default function AppView(v) {
     submitSignup,
     tabs,
     takebackName,
-    tier1Chip,
     tier2Chip,
-    tier3Chip,
     toast,
     userInitial,
     userName,
@@ -560,11 +544,20 @@ export default function AppView(v) {
                   <span style={{ fontSize: '11.5px', color: '#8494AC' }}>도메인은 유형을 제안할 뿐이며, 최종 유형은 관리자 승인 시 확정됩니다.</span>
                 </div>
 
+                {/* 세관·시장감독기관은 사업자등록번호 개념이 맞지 않아 입력란을 없애고 그
+                    자리에 국가를 받는다(2026-08-21 강 요청 6번). 제조사·협력사는 종전대로
+                    사업자등록번호를 받고 국가는 그 아래 줄에서 받는다. */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>회사명</span><input value={suCompanyName} onChange={onSuCompanyName} placeholder="대성제강" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>{suRoleIsPublicAuthority ? '기관명' : '회사명'}</span><input value={suCompanyName} onChange={onSuCompanyName} placeholder={suRoleIsPublicAuthority ? '관세청 인천세관 수입통관과' : '대성제강'} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                  {suRoleIsPublicAuthority ? (<>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>국가</span><input value={suCountry} onChange={onSuCountry} placeholder="대한민국" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                  </>) : (<>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>사업자등록번호</span><input value={suBizRegNo} onChange={onSuBizRegNo} placeholder="123-45-67890" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                  </>)}
                 </div>
+                {suRoleIsPublicAuthority ? null : (<>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>국가</span><input value={suCountry} onChange={onSuCountry} placeholder="대한민국" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                </>)}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호</span><input type="password" value={suPassword} onChange={onSuPassword} placeholder="8자 이상" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호 확인</span><input type="password" value={suPasswordConfirm} onChange={onSuPasswordConfirm} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
@@ -1886,140 +1879,38 @@ export default function AppView(v) {
             </>) : null}
 
             {obC2 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>국가 통관 시스템(Single Window)과 자동 연동하기 위한 인증 정보를 등록합니다.</p>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>Single Window 연동 API 키</span><input placeholder="sw_live_••••••••••••••••" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>API 시크릿</span><input type="password" placeholder="발급받은 시크릿 키" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>보안 IP 대역 (허용 목록)</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '8px' }}>
-                  <input placeholder="203.245.10.0/24" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} />
-                  <button style={{ height: '48px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '12px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>대역 추가</button>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px', marginTop: '4px' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', height: '28px', padding: '0 12px', borderRadius: '999px', background: 'rgba(0,69,169,.08)', color: '#0045A9', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', fontWeight: '600' }}>203.245.10.0/24</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', height: '28px', padding: '0 12px', borderRadius: '999px', background: 'rgba(0,69,169,.08)', color: '#0045A9', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', fontWeight: '600' }}>210.94.32.0/22</span>
-                </div>
-                <span style={{ fontSize: '11.5px', color: '#8494AC' }}>등록된 대역 밖에서의 API 호출은 자동 차단됩니다.</span>
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>기관 지정 공문 등 신원을 확인할 수 있는 서류를 첨부해 주세요. 관리자가 확인 후 계정을 승인합니다.</p>
+              <label style={{ border: '1.5px dashed rgba(0,69,169,.34)', borderRadius: '16px', background: 'rgba(0,69,169,.035)', padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                <span style={{ width: '44px', height: '44px', borderRadius: '999px', background: 'rgba(0,69,169,.10)', display: 'grid', placeItems: 'center' }}><span style={{ width: '14px', height: '14px', background: '#0045A9', borderRadius: '3px' }}></span></span>
+                <span style={{ fontSize: '14px', fontWeight: '600' }}>증빙서류를 업로드하세요</span>
+                <span style={{ fontSize: '12px', color: '#6B7A93' }}>기관 지정 공문 · 재직증명서 · PDF/JPG 20MB 이하</span>
+                <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} />
+              </label>
             </div>
             </>) : null}
 
             {obM2 ? (<>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>포털에 직접 접속해 단속을 수행할 담당 공무원의 신원 정보를 등록합니다. 모든 열람 기록은 이 사번으로 남습니다.</p>
+              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>포털에 직접 접속할 담당자의 신원 정보를 등록합니다. 모든 열람 기록은 이 사번으로 남습니다.</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>조사관 성명</span><input placeholder="예) 윤가람" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>담당자 성명</span><input placeholder="예) 윤가람" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>고유 사번</span><input placeholder="예) MSA-2026-0417" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>소속 부서 · 직위</span><input placeholder="예) 제품안전조사과 · 조사관" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>통합 로그인(SSO) 계정</span><input placeholder="name@korea.kr" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 17px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE' }}>
-                <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>정부 통합 SSO 연동</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>기관 계정으로 인증하면 사번이 자동 대조됩니다</span></span>
-                <button style={{ height: '38px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '12px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>SSO 연결</button>
-              </div>
-            </div>
-            </>) : null}
-
-            {obG3 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>eIDAS 등 정부 기관용 적격 전자신원 인증서를 등록합니다. 인증서는 열람 기록에 전자서명으로 첨부됩니다.</p>
-              <div style={{ border: '1.5px dashed rgba(0,69,169,.34)', borderRadius: '16px', background: 'rgba(0,69,169,.035)', padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                <span style={{ width: '44px', height: '44px', borderRadius: '999px', background: 'rgba(0,69,169,.10)', display: 'grid', placeItems: 'center' }}><span style={{ width: '14px', height: '14px', background: '#0045A9', borderRadius: '3px' }}></span></span>
-                <span style={{ fontSize: '14px', fontWeight: '600' }}>적격 전자신원 인증서를 업로드하세요</span>
-                <span style={{ fontSize: '12px', color: '#6B7A93' }}>eIDAS QSeal / QWAC · .p12 · .pfx · .cer 형식</span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', background: 'rgba(16,32,64,.08)', borderRadius: '14px', overflow: 'hidden' }}>
-                <div style={{ background: '#fff', padding: '15px 17px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '12px', color: '#8494AC' }}>인증서 유형</span><span style={{ fontSize: '13.5px', fontWeight: '600' }}>eIDAS 적격 전자인장 (QSeal)</span></div>
-                <div style={{ background: '#fff', padding: '15px 17px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '12px', color: '#8494AC' }}>발급 기관</span><span style={{ fontSize: '13.5px', fontWeight: '600' }}>한국정보인증 (Qualified TSP)</span></div>
-                <div style={{ background: '#fff', padding: '15px 17px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '12px', color: '#8494AC' }}>인증서 일련번호</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '13px', fontWeight: '600' }}>4A:2F:88:C1:07:E9</span></div>
-                <div style={{ background: '#fff', padding: '15px 17px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '12px', color: '#8494AC' }}>유효기간</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '13px', fontWeight: '600' }}>2026-01-15 ~ 2029-01-14</span></div>
-                <div style={{ background: '#fff', padding: '15px 17px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '12px', color: '#8494AC' }}>검증 상태</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={{ width: '8px', height: '8px', borderRadius: '999px', background: '#12A150' }}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>EU 신뢰목록 확인됨</span></span></div>
-              </div>
-            </div>
-            </>) : null}
-
-            {obC4 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>수입품의 고유 식별자(UPI)를 조회·검증할 수 있는 시스템 권한(Role)을 신청합니다.</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '12px', alignItems: 'center', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" checked={true} style={{ width: '16px', height: '16px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>UPI 조회 (CUSTOMS_UPI_READ)</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>수입품 고유 식별자로 DPP 원본 조회</span></span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC' }}>필수</span></label>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '12px', alignItems: 'center', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" checked={true} style={{ width: '16px', height: '16px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>유효성 검증 (CUSTOMS_VERIFY)</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>여권 서명·정지 여부·적합성 선언서 검증</span></span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC' }}>필수</span></label>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '12px', alignItems: 'center', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" checked={true} style={{ width: '16px', height: '16px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>통관 판정 기록 (CUSTOMS_DECIDE)</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>통관 가능·보류 판정 및 이력 저장</span></span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC' }}>선택</span></label>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '12px', alignItems: 'center', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" style={{ width: '16px', height: '16px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>일괄 조회 (CUSTOMS_BULK)</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>화물 단위 다건 UPI 동시 검증</span></span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC' }}>선택</span></label>
-              </div>
-            </div>
-            </>) : null}
-
-            {obM4 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>기업의 영업비밀·세부 공급망 등 제한된 데이터를 열람하려면 법적 권한 증명과 조사 목적 기록이 필요합니다.</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', alignItems: 'flex-start', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" checked={true} style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>공개 DPP 열람</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>일반 공개 항목 조회 · 별도 증명 불필요</span></span></label>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', alignItems: 'flex-start', padding: '15px 16px', border: '1.5px solid rgba(224,59,59,.28)', borderRadius: '13px', background: 'rgba(224,59,59,.04)', cursor: 'pointer' }}><input type="checkbox" checked={true} style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600', color: '#C22B2B' }}>영업비밀 데이터 열람 (제한)</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>원가·공정 파라미터 등 ZKP 비공개 원본 조회</span></span></label>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', alignItems: 'flex-start', padding: '15px 16px', border: '1.5px solid rgba(224,59,59,.28)', borderRadius: '13px', background: 'rgba(224,59,59,.04)', cursor: 'pointer' }}><input type="checkbox" style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600', color: '#C22B2B' }}>세부 공급망 소급 조회 (제한)</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>Tier 2~4 협력사 및 원자재 단계까지 추적</span></span></label>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '20px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '16px', background: '#F7F9FD' }}>
-                <span style={{ fontSize: '13.5px', fontWeight: '700' }}>법적 권한 증명 및 조사 목적 기록</span>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>근거 법령</span><input placeholder="예) 제품안전기본법 제12조" style={{ height: '46px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} /></label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>조사 명령서 번호</span><input placeholder="예) MSA-INV-2026-0188" style={{ height: '46px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace', background: '#fff' }} /></label>
-                </div>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>조사 목적</span><textarea rows="3" placeholder="열람이 필요한 사유와 조사 범위를 기재하세요. 입력 내용은 감사 로그에 영구 기록됩니다." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical', background: '#fff' }}></textarea></label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'center', padding: '14px 15px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#fff' }}>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13px', fontWeight: '600' }}>조사_명령서_2026-0188.pdf</span><span style={{ fontSize: '11px', color: '#8494AC' }}>PDF · 0.4MB · 기관장 전자서명 포함</span></span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={{ width: '8px', height: '8px', borderRadius: '999px', background: '#12A150' }}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>서명 유효</span></span>
-                </div>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>소속 부서 · 직위</span><input placeholder="예) 제품안전조사과 · 사무관" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>업무용 연락처</span><input placeholder="02-0000-0000" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
               </div>
             </div>
             </>) : null}
 
             {obIs2 ? (<>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>회사명</span><input placeholder="주식회사 예시제강" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>사업자등록번호</span><input placeholder="000-00-00000" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>대표번호</span><input placeholder="02-0000-0000" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>홈페이지 URL <span style={{ fontWeight: '500', color: '#9AA8BE' }}>(선택)</span></span><input placeholder="https://" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-            </div>
-            </>) : null}
-
-            {obIs3 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ border: '1.5px dashed rgba(0,69,169,.34)', borderRadius: '16px', background: 'rgba(0,69,169,.035)', padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                <span style={{ width: '44px', height: '44px', borderRadius: '999px', background: 'rgba(0,69,169,.10)', display: 'grid', placeItems: 'center' }}><span style={{ width: '14px', height: '14px', background: '#0045A9', borderRadius: '3px' }}></span></span>
-                <span style={{ fontSize: '14px', fontWeight: '600' }}>증빙서류를 업로드하세요</span>
-                <span style={{ fontSize: '12px', color: '#6B7A93' }}>사업자등록증(필수) · 공장등록증 · 제3자 인증서 · PDF/JPG 20MB 이하</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>회사명</span><input value={obCompanyName} readOnly title="회사명은 가입 시 확정되며 여기서 변경할 수 없습니다." style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#F7F9FD', color: '#44546F' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>사업자등록번호</span><input value={obBizRegNo} readOnly title="사업자등록번호는 가입 시 확정되며 여기서 변경할 수 없습니다." style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace', background: '#F7F9FD', color: '#44546F' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>대표번호</span><input placeholder="02-0000-0000" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>홈페이지 URL <span style={{ fontWeight: '500', color: '#9AA8BE' }}>(선택)</span></span><input placeholder="https://" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
-                {(obDocs || []).map((f, $index) => (<React.Fragment key={$index}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '10px', alignItems: 'center', padding: '14px 15px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE' }}>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13px', fontWeight: '600' }}>{f.name}</span><span style={{ fontSize: '11px', color: '#8494AC' }}>{f.meta}</span></span>
-                  <span style={f.chip}>{f.status}</span>
-                  <button onClick={f.view} style={{ height: '32px', padding: '0 13px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv35">확인</button>
-                  <button onClick={f.remove} title="삭제" style={{ width: '32px', height: '32px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', color: '#8494AC', cursor: 'pointer' }} className="hv36"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
-                </div>
-                </React.Fragment>))}
-              </div>
-            </div>
-            </>) : null}
-
-            {obIs4 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <button onClick={obTier1} style={obTier1Card}><span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '700' }}>Tier 1</span><span style={tier1Chip}>기초 / 셀프 등록</span></span><span style={{ fontSize: '12.5px', color: '#6B7A93', lineHeight: '1.6', textAlign: 'left' }}>자체 선언 데이터만 입력하는 무료·기본 등급. 서류 심사 없이 즉시 사용할 수 있습니다.</span></button>
-              <button onClick={obTier2} style={obTier2Card}><span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '700' }}>Tier 2</span><span style={tier2Chip}>표준 / 검증 등록</span></span><span style={{ fontSize: '12.5px', color: '#6B7A93', lineHeight: '1.6', textAlign: 'left' }}>ISO·ESG 등 제3자 인증서를 첨부해 데이터 신뢰도를 높인 등급. 자동심사 후 즉시 승인됩니다.</span></button>
-              <button onClick={obTier3} style={obTier3Card}><span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '700' }}>Tier 3</span><span style={tier3Chip}>엔터프라이즈 / Full DPP</span></span><span style={{ fontSize: '12.5px', color: '#6B7A93', lineHeight: '1.6', textAlign: 'left' }}>공급망 하위 업체(Tier 2~4)까지 초대해 전체 추적망을 연동할 수 있는 최고 등급. 관리자 심사가 필요합니다.</span></button>
-            </div>
-            </>) : null}
-
-            {obIs5 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>담당 업무에 필요한 권한을 신청하세요. 관리자 승인 후 즉시 적용됩니다.</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', alignItems: 'flex-start', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" checked={true} style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>DPP 발급 · 수정</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>제품 데이터 입력 및 여권 발급</span></span></label>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', alignItems: 'flex-start', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" checked={true} style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>협력사 초대</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>하위 공급망 계정 초대 및 역할 부여</span></span></label>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', alignItems: 'flex-start', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>ZKP 증명 제출</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>영업기밀 비공개 증명 생성·제출</span></span></label>
-                <label style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', alignItems: 'flex-start', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', cursor: 'pointer' }}><input type="checkbox" style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: '#0045A9' }} /><span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>감사 로그 열람</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>자사 DPP 관련 감사 이력 조회</span></span></label>
-              </div>
+              <div style={{ padding: '14px 16px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)', fontSize: '12.5px', lineHeight: '1.65', color: '#44546F' }}>회사명과 사업자등록번호는 회원가입 때 제출한 사업자등록증으로 확인된 값이라 여기서 수정할 수 없습니다. 변경이 필요하면 관리자에게 문의해 주세요.</div>
             </div>
             </>) : null}
           </div>
