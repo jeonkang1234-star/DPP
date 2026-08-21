@@ -51,3 +51,6 @@ FE/tsconfig.node.tsbuildinfo
 /login.json
 /org.json
 docker/login.json
+
+# 로컬 전용 - 번들·브랜치 tar 보관함(커밋 대상 아님)
+_to_delete/
