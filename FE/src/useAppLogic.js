@@ -737,6 +737,17 @@ export function useAppLogic(userProps) {
       // 알림센터를 열 때 바로 한 번 더 받아온다(2026-08-21 강 요청 "초대 보내면 바로
       // 알림센터에 뜨게"). 20초 폴링이 이미 돌지만, 방금 초대를 받은 사람이 알림함을
       // 열었을 때 최대 20초를 기다리는 건 "동기화가 안 된다"로 보인다.
+      /**
+       * 알림의 "바로가기". 서버가 준 경로(notification.link_url)를 routes.js로 해석해
+       * 실제 화면 상태로 바꾼다. 모르는 경로면 그 사실을 알린다 - 조용히 아무 일도
+       * 안 일어나는 게 제일 나쁘다(2026-08-21 강 리포트).
+       */
+      goToLink: (linkUrl) => {
+        if (!linkUrl) { say('이동할 화면이 지정되지 않은 알림입니다.'); return; }
+        const target = stateFromPath(linkUrl);
+        if (!target || target.view !== 'app') { say('이동할 수 없는 주소입니다: ' + linkUrl); return; }
+        setState({ notifOpen: false, view: 'app', role: target.role, tab: target.tab });
+      },
       openNotif: () => {
         setState({ notifOpen: true });
         fetchNotifications().then((res) => setNotifsData(res || [])).catch(() => {});

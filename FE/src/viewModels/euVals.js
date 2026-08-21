@@ -1,3 +1,4 @@
+import { fetchPublicPassport } from '../api/publicApi.js';
 import React from 'react';
 import { searchDppRegistry } from '../api/meApi.js';
 
@@ -46,8 +47,47 @@ export function euVals(ctx) {
       key: r.dppId, id: (r.publicUuid || '').slice(0, 8), fullId: r.publicUuid,
       code: r.serialNumber || '—', date: r.issuedAtDate || '—', time: '',
       name: r.modelName, company: r.orgName, hs: r.hsCode || '—', domainRaw: r.domain,
-      open: () => setState({ docPreview: { name: r.modelName + ' · ' + r.orgName, meta: 'HS ' + (r.hsCode || '—') + ' · ' + (r.issuedAtDate || '—'), status: '발급됨' } })
+      /*
+       * 2026-08-21 강 요청: "열람을 누르면 DPP 생성 때 입력한 정보가 다 보여야 한다".
+       * 예전엔 회색 막대만 그린 가짜 문서 미리보기 모달을 띄웠다(docPreview).
+       * 이제 GET /public/dpp/{publicUuid}를 실제로 불러 그 값을 그린다 -
+       * 시장감시당국 토큰으로 부르므로 제한(RESTRICTED) 항목까지 함께 온다.
+       * 영업비밀 항목은 실측값을 저장하지 않으므로 "규정 충족" 판정만 온다.
+       */
+      open: async () => {
+        setState({ passportModal: { loading: true, title: r.modelName, sub: r.orgName, data: null, error: null } });
+        try {
+          const data = await fetchPublicPassport(r.publicUuid);
+          setState({ passportModal: { loading: false, title: r.modelName, sub: r.orgName, data, error: null } });
+        } catch (e) {
+          setState({ passportModal: { loading: false, title: r.modelName, sub: r.orgName, data: null, error: e.message || '조회에 실패했습니다.' } });
+        }
+      }
     })),
+    // --- 열람 모달 ---
+    passportModalOpen: !!state.passportModal,
+    passportModalLoading: !!(state.passportModal && state.passportModal.loading),
+    passportModalTitle: (state.passportModal && state.passportModal.title) || '',
+    passportModalSub: (state.passportModal && state.passportModal.sub) || '',
+    passportModalError: (state.passportModal && state.passportModal.error) || '',
+    passportModalViewer: (state.passportModal && state.passportModal.data && state.passportModal.data.viewerLabel) || '',
+    passportModalHiddenNote: (() => {
+      const d = state.passportModal && state.passportModal.data;
+      if (!d) return '';
+      const parts = [];
+      if (d.restrictedCount) parts.push('권한 밖 ' + d.restrictedCount + '개');
+      if (d.tradeSecretCount) parts.push('영업비밀 ' + d.tradeSecretCount + '개');
+      return parts.length ? parts.join(' · ') + ' 는 값이 표시되지 않습니다' : '';
+    })(),
+    passportModalFields: (((state.passportModal || {}).data || {}).fields || []).map((f, i) => ({
+      key: (f.labelKo || '') + i,
+      label: f.labelKo,
+      section: f.section || '',
+      // 값이 없고 proofLabel만 있는 항목 = 영업비밀(ZKP로 대체된 판정)
+      value: f.value || f.proofLabel || '—',
+      isProof: !f.value && !!f.proofLabel
+    })),
+    closePassportModal: () => setState({ passportModal: null }),
     auditLog: (ctx.auditLogData || []).map((l, i) => ({
       key: (l.txId || '') + l.atIso + i,
       at: l.atIso ? l.atIso.replace('T', ' ').slice(0, 19) : '—',

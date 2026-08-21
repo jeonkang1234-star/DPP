@@ -44,8 +44,9 @@ public enum NotificationCategory {
      * 빈 집합이면 getCategories가 빈 배열을 내려주고, FE는 '전체' 탭 하나만 남긴다.
      */
     private static final Set<NotificationCategory> ADMIN_VISIBLE = Set.of();
+    /** 2026-08-21 강 요청으로 CUSTOMS(통관)까지 뺐다 - 계정·문의만 남는다. */
     private static final Set<NotificationCategory> CUSTOMS_VISIBLE =
-            Set.of(CUSTOMS, ACCOUNT, INQUIRY);
+            Set.of(ACCOUNT, INQUIRY);
     private static final Set<NotificationCategory> EU_AUTHORITY_VISIBLE =
             Set.of(ZKP, ACCOUNT, INQUIRY);
     /**

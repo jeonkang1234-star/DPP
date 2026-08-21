@@ -1,6 +1,10 @@
 package com.dpp.dpp.service;
 
+import com.dpp.auth.entity.UserAccount;
+import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.document.repository.ZkpProofRepository;
+import com.dpp.mypage.entity.Organization;
+import com.dpp.mypage.repository.OrganizationRepository;
 import com.dpp.dpp.dto.PublicPassportFieldDto;
 import com.dpp.dpp.dto.PublicPassportResponse;
 import com.dpp.dpp.entity.Dpp;
@@ -20,6 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -58,38 +63,61 @@ public class PublicPassportService {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
 
     private static final PublicPassportResponse NOT_ISSUED =
-            new PublicPassportResponse(false, null, null, null, null, List.of(), 0, 0);
+            new PublicPassportResponse(false, null, null, null, null, List.of(), 0, 0, "PUBLIC", "일반 공개");
 
     /** disclosure_scope가 비어 있는 행(구 시드)은 공개로 본다 - V20이 DEFAULT 'PUBLIC'을 준다. */
     private static final String PUBLIC = "PUBLIC";
     private static final String TRADE_SECRET = "TRADE_SECRET";
+    /** 제한 항목까지 볼 수 있는 자격. Annex XIII의 "정당한 이익 보유자·시장감시당국" 계층. */
+    private static final Set<String> RESTRICTED_VIEWERS = Set.of("CUSTOMS", "EU_AUTHORITY", "ADMIN");
 
     private final DppQueryRepository dppRepository;
     private final ProductModelRepository productModelRepository;
     private final RequirementFieldRepository requirementFieldRepository;
     private final DppFieldValueRepository fieldValueRepository;
     private final ZkpProofRepository zkpProofRepository;
+    private final UserAccountRepository userAccountRepository;
+    private final OrganizationRepository organizationRepository;
 
     public PublicPassportService(DppQueryRepository dppRepository,
                                   ProductModelRepository productModelRepository,
                                   RequirementFieldRepository requirementFieldRepository,
                                   DppFieldValueRepository fieldValueRepository,
-                                  ZkpProofRepository zkpProofRepository) {
+                                  ZkpProofRepository zkpProofRepository,
+                                  UserAccountRepository userAccountRepository,
+                                  OrganizationRepository organizationRepository) {
         this.dppRepository = dppRepository;
         this.productModelRepository = productModelRepository;
         this.requirementFieldRepository = requirementFieldRepository;
         this.fieldValueRepository = fieldValueRepository;
         this.zkpProofRepository = zkpProofRepository;
+        this.userAccountRepository = userAccountRepository;
+        this.organizationRepository = organizationRepository;
     }
 
+    /** 토큰 없이 부르던 기존 호출부 호환용 - 일반 공개 뷰. */
     @Transactional(readOnly = true)
     public PublicPassportResponse getByPublicUuid(UUID publicUuid) {
+        return getByPublicUuid(publicUuid, null);
+    }
+
+    /**
+     * @param viewerUserId 요청에 유효한 토큰이 실려 있으면 그 사용자 id, 아니면 null.
+     *     이 값으로 자격을 정한다 - 세관·시장감시당국·운영자는 제한(RESTRICTED) 항목까지
+     *     본다(2026-08-21 강 요청 "QR로 볼 때 개인·세관·EU가 보는 결과가 달라야 함").
+     *     영업비밀 실측값은 어느 자격이든 못 본다 - 애초에 저장하지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public PublicPassportResponse getByPublicUuid(UUID publicUuid, Long viewerUserId) {
         Dpp dpp = dppRepository.findByPublicUuidAndDeletedAtIsNull(publicUuid)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 DPP를 찾을 수 없습니다."));
 
         if (dpp.getIssuedAt() == null) {
             return NOT_ISSUED;
         }
+
+        String viewerRole = resolveViewerRole(viewerUserId);
+        boolean canSeeRestricted = RESTRICTED_VIEWERS.contains(viewerRole);
 
         ProductModel model = productModelRepository.findById(dpp.getModelId()).orElse(null);
 
@@ -128,7 +156,14 @@ public class PublicPassportService {
                             f.getTier(), null, "한계값 충족 (영지식증명으로 검증됨)"));
                 }
             } else {
-                restricted++;
+                // RESTRICTED - 세관·시장감시당국·운영자에게만 값을 준다. 그 외에는
+                // 개수만 세어 "몇 개가 왜 빠졌는지"를 알린다.
+                if (canSeeRestricted) {
+                    visible.add(new PublicPassportFieldDto(f.getLabelKo(), f.getLabelEn(), f.getSection(),
+                            f.getTier(), value, null));
+                } else {
+                    restricted++;
+                }
             }
         }
 
@@ -140,7 +175,45 @@ public class PublicPassportService {
                 dpp.getIssuedAt().toLocalDate().format(DATE_FORMAT),
                 List.copyOf(visible),
                 restricted,
-                tradeSecret
+                tradeSecret,
+                viewerRole,
+                viewerLabel(viewerRole)
         );
+    }
+
+    /**
+     * 요청자의 자격. 토큰이 없거나 계정을 못 찾으면 PUBLIC.
+     * NotificationService.resolveViewerRole과 같은 규칙이다 - 운영자는 계정 종류(ADMIN),
+     * 나머지는 소속 조직의 org_type.
+     */
+    private String resolveViewerRole(Long viewerUserId) {
+        if (viewerUserId == null) {
+            return PUBLIC;
+        }
+        UserAccount user = userAccountRepository.findById(viewerUserId).orElse(null);
+        if (user == null) {
+            return PUBLIC;
+        }
+        if (user.getAccountType() != null && "ADMIN".equals(user.getAccountType().name())) {
+            return "ADMIN";
+        }
+        if (user.getOrgId() == null) {
+            return PUBLIC;
+        }
+        String orgType = organizationRepository.findById(user.getOrgId())
+                .map(Organization::getOrgType)
+                .orElse(null);
+        return orgType == null ? PUBLIC : orgType;
+    }
+
+    private static String viewerLabel(String role) {
+        return switch (role) {
+            case "ADMIN" -> "운영자";
+            case "CUSTOMS" -> "세관";
+            case "EU_AUTHORITY" -> "시장감시당국";
+            case "MANUFACTURER" -> "제조사";
+            case "RAW_SUPPLIER", "TEST_LAB", "RECYCLER" -> "협력사";
+            default -> "일반 공개";
+        };
     }
 }

@@ -10,7 +10,9 @@ import React from 'react';
  * 로그아웃 버튼은 헤더(components/AppHeader.jsx)에 있습니다.
  */
 export default function MyPage(props) {
-  if (props.scMy) return <CompanyMyPage {...props} />;
+  // 협력사도 기업 회원이라 같은 화면을 쓴다. 예전엔 scMy(제조사 3종)만 봐서
+  // 협력사 마이페이지가 통째로 빈 화면이었다(2026-08-21 강 리포트).
+  if (props.scMy || props.scPartnerMy) return <CompanyMyPage {...props} />;
   if (props.scPersonalMy) return <PersonalMyPage {...props} />;
   return null;
 }

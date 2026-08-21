@@ -16,6 +16,13 @@ public record NotificationDto(
         String body,
         OffsetDateTime createdAt,
         String actionLabel,
+        /**
+         * "바로가기"가 이동할 앱 내부 경로(예: /partner/assigned). 없으면 null.
+         * 2026-08-21 추가 - 예전엔 존재 여부만 boolean처럼 actionLabel로 접어 내려서,
+         * FE가 버튼을 그려도 갈 곳을 몰라 토스트만 띄웠다(강 리포트 "바로가기를 눌러도
+         * 이동이 안 된다").
+         */
+        String linkUrl,
         String colorHex,
         boolean read
 ) {
@@ -28,6 +35,7 @@ public record NotificationDto(
                 n.getBody(),
                 n.getCreatedAt(),
                 hasLink ? "바로가기" : null,
+                hasLink ? n.getLinkUrl() : null,
                 n.getCategory().colorHex(),
                 n.isRead());
     }

@@ -31,17 +31,11 @@ export default function AppView(v) {
     cCeFail,
     cCeNote,
     cCeOk,
-    cChecks,
     cDeclared,
     cDoc,
-    cDownloadAll,
     showQr,
     cQueueEmpty,
     cQueueRows,
-    cCanDecide,
-    cApprove,
-    cHold,
-    cReject,
     cEori,
     cExporter,
     cHs,
@@ -57,10 +51,6 @@ export default function AppView(v) {
     cResultMode,
     cSearchMode,
     cTech,
-    cVerdict,
-    cVerdictDot,
-    cVerdictStyle,
-    cVerdictTextStyle,
     cancelProfileEdit,
     careItems,
     closeDocPreview,
@@ -393,6 +383,9 @@ export default function AppView(v) {
     qrModalHint,
     qrModalUrl, qrModalUrlWarning,
     memberModalOpen, memberModalName, memberModalRows, closeMemberModal,
+    passportModalOpen, passportModalLoading, passportModalTitle, passportModalSub,
+    passportModalError, passportModalViewer, passportModalHiddenNote,
+    passportModalFields, closePassportModal,
     qrBaseEditing, qrBaseInput, qrBaseOnChange, openQrBaseEditor, cancelQrBaseEditor, saveQrBase,
     closeQrModal,
     goToProductsFromQr,
@@ -1611,24 +1604,10 @@ export default function AppView(v) {
               <button onClick={runCustomsSearch} style={{ height: '36px', padding: '0 16px', border: '0', borderRadius: '11px', background: '#F2F6FC', color: '#44546F', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }}>검색</button>
             </div>
             <button onClick={showQr} style={{ height: '52px', padding: '0 20px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '15px', background: '#fff', color: '#0045A9', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>QR 보기</button>
-            <button onClick={cDownloadAll} style={{ height: '52px', padding: '0 22px', border: '0', borderRadius: '15px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 20px rgba(0,69,169,.26)', whiteSpace: 'nowrap', flex: 'none' }}>인증서 일괄 다운로드</button>
           </div>
 
-          <div style={cVerdictStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <span style={cVerdictDot}></span>
-              <span style={cVerdictTextStyle}>{cVerdict}</span>
-              {cCanDecide ? (
-              <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
-                <button onClick={cApprove} style={{ height: '42px', padding: '0 18px', border: '0', borderRadius: '12px', background: '#12A150', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>승인</button>
-                <button onClick={cHold} style={{ height: '42px', padding: '0 18px', border: '1px solid rgba(227,160,8,.32)', borderRadius: '12px', background: 'rgba(227,160,8,.10)', color: '#96660A', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>보류</button>
-                <button onClick={cReject} style={{ height: '42px', padding: '0 18px', border: '1px solid rgba(224,59,59,.28)', borderRadius: '12px', background: 'rgba(224,59,59,.08)', color: '#C22B2B', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>반려</button>
-              </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: '16px', alignItems: 'start' }}>
+          {/* 오른쪽 "검증 항목" 컬럼을 지우면서 1열로(2026-08-21 강 요청). */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px', alignItems: 'start' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <span style={{ fontSize: '15px', fontWeight: '600' }}>신원 및 신고 정보</span>
@@ -1663,18 +1642,6 @@ export default function AppView(v) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', alignItems: 'center', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE' }}>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{cDoc}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{cTech}</span></span>
                 </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <span style={{ fontSize: '15px', fontWeight: '600' }}>검증 항목</span>
-                {(cChecks || []).map((c, $index) => (<React.Fragment key={$index}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '11px', alignItems: 'flex-start' }}>
-                  <span style={c.markStyle}>{c.mark}</span>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}><span style={{ fontSize: '13px', fontWeight: '600', lineHeight: '1.35' }}>{c.label}</span><span style={c.detailStyle}>{c.detail}</span></span>
-                </div>
-                </React.Fragment>))}
               </div>
             </div>
           </div>
@@ -1867,7 +1834,9 @@ export default function AppView(v) {
                 <button onClick={f.nudge} style={{ height: '36px', padding: '0 14px', border: '0', borderRadius: '11px', background: 'rgba(0,69,169,.10)', color: '#0045A9', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }} className="hv34">독촉 알림 전송</button>
               </div>
               </React.Fragment>))}
-              <p style={{ margin: '0', fontSize: '12px', lineHeight: '1.6', color: '#8494AC' }}>책임주체를 클릭하면 문서 업로드 독촉 알림이 담당자 이메일과 알림센터로 동시에 발송됩니다.</p>
+              {/* 예전 문구는 "메일과 알림센터로 동시 발송된다"였는데 실제로는 토스트만
+                  띄웠다. 지금 동작(협력사 관리로 이동)에 맞춰 고친다(2026-08-21). */}
+              <p style={{ margin: '0', fontSize: '12px', lineHeight: '1.6', color: '#8494AC' }}>책임주체를 클릭하면 이 DPP의 협력사 관리 화면으로 이동해 초대·재발송을 보낼 수 있습니다.</p>
             </div>
           </div>
         </div>
@@ -2120,6 +2089,40 @@ export default function AppView(v) {
             {qrModalShowLink ? (<>
             <button onClick={goToProductsFromQr} style={{ flex: 1, height: '44px', border: '0', borderRadius: '12px', background: '#0045A9', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>제품 조회에서 보기</button>
             </>) : null}
+          </div>
+        </div>
+      </div>
+      </>) : null}
+
+      {passportModalOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '91', display: 'grid', placeItems: 'center', padding: '40px' }}>
+        <div onClick={closePassportModal} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.55)' }}></div>
+        <div style={{ position: 'relative', width: '620px', maxHeight: '82vh', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '22px 26px 16px', borderBottom: '1px solid rgba(16,32,64,.08)', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#0045A9' }}>DPP 열람</span>
+              {passportModalViewer ? (<span style={{ fontSize: '11px', color: '#6B7A93' }}>· {passportModalViewer} 권한으로 조회</span>) : null}
+            </span>
+            <span style={{ fontSize: '19px', fontWeight: '700' }}>{passportModalTitle}</span>
+            <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{passportModalSub}</span>
+          </div>
+          <div style={{ padding: '18px 26px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0' }}>
+            {passportModalLoading ? (
+              <div style={{ padding: '40px 0', textAlign: 'center', fontSize: '13.5px', color: '#8494AC' }}>불러오는 중…</div>
+            ) : passportModalError ? (
+              <div style={{ padding: '40px 0', textAlign: 'center', fontSize: '13.5px', color: '#C22B2B' }}>{passportModalError}</div>
+            ) : passportModalFields.length === 0 ? (
+              <div style={{ padding: '40px 0', textAlign: 'center', fontSize: '13.5px', color: '#8494AC' }}>표시할 항목이 없습니다.</div>
+            ) : passportModalFields.map((f) => (
+              <div key={f.key} style={{ display: 'grid', gridTemplateColumns: '210px 1fr', gap: '12px', padding: '10px 0', borderTop: '1px solid rgba(16,32,64,.07)', alignItems: 'baseline' }}>
+                <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{f.label}</span>
+                <span style={{ fontSize: '13.5px', fontWeight: '600', color: f.isProof ? '#0E7A3D' : '#0B1B33', wordBreak: 'break-word' }}>{f.value}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '14px 26px 20px', borderTop: '1px solid rgba(16,32,64,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+            <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{passportModalHiddenNote}</span>
+            <button onClick={closePassportModal} style={{ height: '42px', padding: '0 20px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer', flex: 'none' }}>닫기</button>
           </div>
         </div>
       </div>

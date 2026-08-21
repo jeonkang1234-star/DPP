@@ -101,7 +101,18 @@ export function dppVals(ctx) {
     missingFields: (done === 100 ? [] : missing).map(([field, owner, role, c]) => ({
       key: field, field, owner, role,
       sevDot: { width: 7, height: 7, flex: 'none', borderRadius: 4, background: c },
-      nudge: () => ctx.say(owner + '에 문서 업로드 독촉 알림을 전송했습니다.')
+      // 2026-08-21 강 요청: 토스트만 띄우지 말고 그 DPP의 협력사 관리 화면으로 보낸다.
+      // 거기서 실제로 초대/재발송을 할 수 있다(예전 문구는 메일이 나간 것처럼 말했지만
+      // 실제로는 아무 일도 하지 않았다).
+      nudge: () => {
+        setState({
+          dppOpen: false,
+          tab: 'partners',
+          partnersDppId: id,
+          inviteRows: [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]
+        });
+        ctx.say(owner + ' 담당 항목이 비어 있습니다 · 협력사 관리에서 초대를 보내세요.');
+      }
     })),
 
     // --- 통관 신청 모달 ---
