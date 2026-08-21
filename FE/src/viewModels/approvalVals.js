@@ -66,7 +66,10 @@ export function approvalVals(ctx) {
       const isAuto = r.autoApproved;
       const isManual = isPending(r);
       const isRejected = r.approvalStatus === 'REJECTED';
-      const route = isAuto ? '국세청 체크섬 자동검증'
+      // 자동승인 경로 이름. 실제로 도는 건 국세청 진위확인 API가 아니라 제출한
+      // 사업자등록증의 형식·항목을 OCR로 읽어 확인하는 것뿐이라, 화면 문구도
+      // 거기에 맞춘다(2026-08-20 강 요청).
+      const route = isAuto ? 'OCR 자동검증'
         : isManual ? '관리자 수동 심사 필요'
         : isRejected ? '반려됨' + (r.rejectReason ? (': ' + r.rejectReason) : '')
         : '관리자 승인';

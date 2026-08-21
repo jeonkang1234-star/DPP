@@ -39,8 +39,20 @@ export function tabStyle(active) {
     : { height: 40, padding: '0 18px', border: 0, borderRadius: 11, background: 'transparent', color: '#5A6B85', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' };
 }
 
+/**
+ * 상태 배지(성공/반려/검증 실패, 데이터 검증/형식 확인, 법정필수/조건부 ...).
+ *
+ * 2026-08-20 강 요청: "감사 로그 결과에 보이는 것과 같은 형식의 디자인을 전부 입체적인
+ * 버튼 느낌으로 - 배경색 삭제하고 텍스트만 색깔 남기기". 그래서 둥근 배경 pill을 걷어내고
+ * badgeText3d와 같은 엠보싱 글자로 바꿨다. 배경이 사라져도 색은 그대로라 의미(초록=성공,
+ * 빨강=실패)는 유지된다.
+ *
+ * 첫 인자 bg는 이제 그리는 데 쓰지 않는다. 호출부가 30군데라 시그니처를 바꾸면 전부
+ * 손봐야 하고, 나중에 pill로 되돌리고 싶어질 때 색 짝을 다시 찾아야 한다 - 그래서 인자는
+ * 남겨두고 무시한다. 새로 쓰는 곳은 badgeText3d(색)를 직접 부르는 쪽이 더 정직하다.
+ */
 export function chip(bg, fg) {
-  return { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 11px', borderRadius: 999, background: bg, color: fg, fontSize: 11.5, fontWeight: 700, width: 'fit-content' };
+  return { ...badgeText3d(fg), justifyContent: 'center', height: 24, fontSize: 11.5, width: 'fit-content', whiteSpace: 'nowrap' };
 }
 
 export function domainChipFor(d) {
@@ -76,7 +88,11 @@ export function badgeText3d(color) {
   return {
     display: 'inline-flex', alignItems: 'center', fontWeight: 800, letterSpacing: '.01em',
     color,
-    textShadow: '0 1px 0 rgba(255,255,255,.65), 0 2px 1px rgba(16,32,64,.20), 0 4px 8px rgba(16,32,64,.14)'
+    // 그림자는 '글자가 살짝 튀어나온' 정도까지만. 예전엔 0 4px 8px 짜리 넓은 드롭섀도가
+    // 한 겹 더 깔려 있어서 글자 밑이 번져 지저분해 보였다(2026-08-20 강 리포트
+    // "밑에 있는 그림자로 인해 지저분해 보인다"). 위쪽 하이라이트(0 -1px 0 흰색)와
+    // 1px 짜리 아래 음영만 남겨 오프셋을 최소화한다.
+    textShadow: '0 -1px 0 rgba(255,255,255,.85), 0 1px 1px rgba(16,32,64,.18)'
   };
 }
 

@@ -22,8 +22,18 @@ public class ParserClient {
         this.parserRestClient = parserRestClient;
     }
 
-    @SuppressWarnings("unchecked")
     public Map<String, Object> parse(MultipartFile file, String registryCode) throws IOException {
+        return parse(file, registryCode, null);
+    }
+
+    /**
+     * @param domain STEEL/TEXTILE/BATTERY. 파서의 spec_fields 추출이 이 도메인 + COMMON
+     *               필드만 보게 한다. null이면 도메인이 갈라야 하는 라벨(섬유·배터리에
+     *               같이 있는 'SVHC 1 물질명' 등)은 아예 안 채워진다 - 어느 쪽인지 모르는데
+     *               찍는 것보다 비우는 게 낫다는 파서 쪽 원칙(spec_extractor.py) 그대로다.
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> parse(MultipartFile file, String registryCode, String domain) throws IOException {
         String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload.pdf";
         ByteArrayResource resource = new ByteArrayResource(file.getBytes()) {
             @Override
@@ -35,6 +45,9 @@ public class ParserClient {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
         builder.part("file", resource);
         builder.part("registry_code", registryCode);
+        if (domain != null && !domain.isBlank()) {
+            builder.part("domain", domain);
+        }
 
         return parserRestClient.post()
                 .uri("/parse")

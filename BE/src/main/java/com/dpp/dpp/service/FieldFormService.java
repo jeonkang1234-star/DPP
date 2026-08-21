@@ -6,14 +6,19 @@ import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.blockchain.client.BlockchainClient;
 import com.dpp.blockchain.entity.BlockchainAnchor;
 import com.dpp.blockchain.repository.BlockchainAnchorRepository;
+import com.dpp.customs.service.CustomsClearanceService;
+import com.dpp.dpp.dto.CodeOptionDto;
 import com.dpp.dpp.dto.FieldFormItemDto;
+import com.dpp.dpp.dto.FieldFormSectionDto;
 import com.dpp.dpp.dto.FieldFormResponse;
 import com.dpp.dpp.dto.SaveFieldFormRequest;
+import com.dpp.dpp.entity.CodeMaster;
 import com.dpp.dpp.entity.Dpp;
 import com.dpp.dpp.entity.DppFieldValue;
 import com.dpp.dpp.entity.DppParticipant;
 import com.dpp.dpp.entity.ProductModel;
 import com.dpp.dpp.entity.RequirementField;
+import com.dpp.dpp.repository.CodeMasterRepository;
 import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppParticipantRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
@@ -28,7 +33,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -78,15 +86,20 @@ public class FieldFormService {
         return List.of("COMMON", domain);
     }
 
+    /** 섹션 라벨이 들어있는 code_master 그룹 (V21__seed_requirement_t0_t1.sql). */
+    private static final String SECTION_CODE_GROUP = "FIELD_SECTION";
+
     private final UserAccountRepository userAccountRepository;
     private final ProductModelRepository productModelRepository;
     private final DppQueryRepository dppRepository;
     private final RequirementFieldRepository requirementFieldRepository;
     private final DppFieldValueRepository fieldValueRepository;
+    private final CodeMasterRepository codeMasterRepository;
     private final DppParticipantRepository participantRepository;
     private final ParticipantSubmitStatusService participantSubmitStatusService;
     private final BlockchainAnchorRepository blockchainAnchorRepository;
     private final Optional<BlockchainClient> blockchainClient;
+    private final CustomsClearanceService customsClearanceService;
     private final AuditLogService auditLogService;
 
     public FieldFormService(UserAccountRepository userAccountRepository,
@@ -94,20 +107,24 @@ public class FieldFormService {
                              DppQueryRepository dppRepository,
                              RequirementFieldRepository requirementFieldRepository,
                              DppFieldValueRepository fieldValueRepository,
+                             CodeMasterRepository codeMasterRepository,
                              DppParticipantRepository participantRepository,
                              ParticipantSubmitStatusService participantSubmitStatusService,
                              BlockchainAnchorRepository blockchainAnchorRepository,
                              Optional<BlockchainClient> blockchainClient,
+                             CustomsClearanceService customsClearanceService,
                              AuditLogService auditLogService) {
         this.userAccountRepository = userAccountRepository;
         this.productModelRepository = productModelRepository;
         this.dppRepository = dppRepository;
         this.requirementFieldRepository = requirementFieldRepository;
         this.fieldValueRepository = fieldValueRepository;
+        this.codeMasterRepository = codeMasterRepository;
         this.participantRepository = participantRepository;
         this.participantSubmitStatusService = participantSubmitStatusService;
         this.blockchainAnchorRepository = blockchainAnchorRepository;
         this.blockchainClient = blockchainClient;
+        this.customsClearanceService = customsClearanceService;
         this.auditLogService = auditLogService;
     }
 
@@ -127,10 +144,10 @@ public class FieldFormService {
             // STEEL로 폴백.
             String domain = (requestedDomain == null || requestedDomain.isBlank()) ? DEFAULT_DOMAIN : requestedDomain;
             List<FieldFormItemDto> allFields = fieldsFor(fieldDomains(domain), null).stream()
-                    .map(f -> new FieldFormItemDto(f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getUnit(),
-                            f.getHelpText(), f.isRequired(), null))
+                    .map(f -> toItem(f, null))
                     .toList();
-            return new FieldFormResponse(null, null, domain, "DRAFT", 0.0, 0, 0, allFields);
+            return new FieldFormResponse(null, null, null, domain, "DRAFT", 0.0, 0, 0, allFields,
+                    sectionsOf(allFields), codeOptionsOf(allFields));
         }
 
         Dpp dpp = dppRepository.findById(dppId)
@@ -144,8 +161,7 @@ public class FieldFormService {
                 .collect(Collectors.toMap(DppFieldValue::getFieldCode, DppFieldValue::getValueText, (a, b) -> b));
 
         List<FieldFormItemDto> fields = fieldsFor(fieldDomains(domain), access.participantRoleCode()).stream()
-                .map(f -> new FieldFormItemDto(f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getUnit(), f.getHelpText(),
-                        f.isRequired(), existingValues.get(f.getFieldCode())))
+                .map(f -> toItem(f, existingValues.get(f.getFieldCode())))
                 .toList();
 
         // dpp 엔티티가 아니라 별도 스칼라 프로젝션으로 다시 읽는다 - saveDraft/issue가 같은
@@ -180,7 +196,8 @@ public class FieldFormService {
             completeness = myRequired > 0 ? (myFilled * 100.0 / myRequired) : 0.0;
         }
 
-        return new FieldFormResponse(dpp.getDppId(), dpp.getPublicUuid(), domain, status, completeness, filled, required, fields);
+        return new FieldFormResponse(dpp.getDppId(), dpp.getPublicUuid(), dpp.getDisplayName(), domain, status, completeness, filled, required,
+                fields, sectionsOf(fields), codeOptionsOf(fields));
     }
 
     @Transactional
@@ -197,12 +214,25 @@ public class FieldFormService {
             access = Access.forOwner();
         }
 
+        // DPP 이름은 소유 조직만 바꿀 수 있다 - 참여 협력사는 자기 담당 필드만 채운다.
+        // null이면 이름 칸을 건드리지 않은 저장이라 기존 값을 유지하고, 빈 문자열이면 지운다.
+        if (access.owner() && request.displayName() != null) {
+            String name = request.displayName().trim();
+            dpp.setDisplayName(name.isEmpty() ? null : trimTo(name, 120));
+            dppRepository.save(dpp);
+        }
+
         upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode());
         recalc(dpp.getDppId());
         if (!access.owner()) {
             participantSubmitStatusService.refresh(dpp, orgId, access.participantRoleCode());
         }
         return getForm(userId, dpp.getDppId());
+    }
+
+    /** display_name은 VARCHAR(120) - 넘치면 DB가 예외를 던지므로 여기서 자른다. */
+    private static String trimTo(String s, int max) {
+        return s.length() > max ? s.substring(0, max) : s;
     }
 
     @Transactional
@@ -215,13 +245,22 @@ public class FieldFormService {
         if (!orgId.equals(dpp.getOwnerOrgId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP를 발급할 권한이 없습니다.");
         }
-        dpp.setStatus("PENDING");
+        // 발급 완료 = ACTIVE. 전에는 PENDING으로 뒀는데, 그 상태를 ACTIVE로 올리는 코드가
+        // 어디에도 없어서 DPP가 영원히 PENDING에 머물렀다. 그 결과 "발급 완료(ACTIVE)된 DPP만
+        // 통관 신청할 수 있습니다"를 요구하는 통관 신청 버튼이 실제로는 한 번도 통과하지
+        // 못했다(2026-08-20 발견). 스키마의 status CHECK도 DRAFT/PENDING/ACTIVE/SUSPENDED/EOL
+        // 이고 ACTIVE가 "유통 중인 여권"을 뜻한다.
+        dpp.setStatus("ACTIVE");
         dpp.setIssuedAt(OffsetDateTime.now());
         dppRepository.save(dpp);
         recalc(dpp.getDppId());
         String anchorTxId = anchorDppSnapshot(dpp, userId, orgId);
         auditLogService.record(userId, "CREATE", "DPP", dpp.getDppId(),
                 String.valueOf(dpp.getPublicUuid()), "성공", anchorTxId);
+        // 발급된 DPP를 세관 심사 큐로 바로 흘려보낸다(2026-08-20 강 요청). 수입국은 데모
+        // 전제상 프랑스 고정 - 자세한 사정은 CustomsClearanceService.autoCreateOnIssue 참고.
+        // 여기서 실패해도 발급은 이미 끝난 일이라 되돌리지 않는다(메서드가 예외를 안 던진다).
+        customsClearanceService.autoCreateOnIssue(dpp.getDppId(), userId, orgId);
         return getForm(userId, dpp.getDppId());
     }
 
@@ -246,7 +285,7 @@ public class FieldFormService {
             log.warn("dppId={} 발급 스냅샷 생성 실패 - 발급 자체는 계속 진행: {}", dpp.getDppId(), e.getMessage(), e);
             return null;
         }
-        if (snapshotId == null || blockchainClient.isEmpty()) {
+        if (snapshotId == null) {
             return null;
         }
         String contentHash = dppRepository.findSnapshotContentHash(snapshotId);
@@ -259,6 +298,12 @@ public class FieldFormService {
             return null;
         }
         BlockchainAnchor anchor = anchorOpt.get();
+        if (blockchainClient.isEmpty()) {
+            // fn_create_dpp_snapshot이 p_mock=true로 이미 status='MOCK', tx_id='mock-'||해시인
+            // 앵커 행을 만들어 놓은 상태다. 예전엔 여기서 blockchainClient가 비면 곧장 null을
+            // 반환해서, 감사 로그의 tx_id 칸만 비어 보였다(앵커 행 자체는 있었다).
+            return anchor.getTxId();
+        }
         try {
             BlockchainClient.ChainResult result = blockchainClient.get().recordDocumentHash(
                     "snapshot:" + snapshotId,
@@ -308,6 +353,78 @@ public class FieldFormService {
         DppParticipant participant = participantRepository.findByDppIdAndOrgId(dpp.getDppId(), orgId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP에 접근할 권한이 없습니다."));
         return new Access(false, participant.getRoleCode());
+    }
+
+    // ── 폼 응답 조립 ──────────────────────────────────────────────────────
+    // 이 세 메서드가 requirement_field 한 줄을 화면이 쓸 수 있는 모양으로 바꾼다.
+    // 필드가 361개가 되면서 "필드 목록"만 내려보내면 FE가 그릴 수 없게 됐다 - 섹션 묶음과
+    // Enum 선택지가 같이 가야 한다.
+
+    private FieldFormItemDto toItem(RequirementField f, String value) {
+        return new FieldFormItemDto(
+                f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getLabelEn(), f.getUnit(),
+                f.getHelpText(), f.isRequired(), value,
+                f.getDataType(), f.getCodeGroup(), f.getDataSource(), f.getTier(),
+                f.getDisclosureScope(), f.getLegalBasis(), f.getT1Condition());
+    }
+
+    /**
+     * 폼에 실제로 등장한 섹션만, code_master(FIELD_SECTION) 순서대로 돌려준다.
+     * 도메인마다 뜨는 섹션이 다르다 - 철강엔 BMS(배터리 동적데이터)가 없고 배터리엔
+     * MECHANICAL(기계적 물성)이 없다. 안 쓰는 섹션 헤더를 빈 채로 그리지 않기 위해
+     * 서버에서 걸러 보낸다.
+     */
+    private List<FieldFormSectionDto> sectionsOf(List<FieldFormItemDto> fields) {
+        if (fields.isEmpty()) {
+            return List.of();
+        }
+        Map<String, CodeMaster> labels = codeMasterRepository
+                .findByCodeGroupAndActiveTrueOrderBySortOrder(SECTION_CODE_GROUP).stream()
+                .collect(Collectors.toMap(CodeMaster::getCode, c -> c, (a, b) -> a, LinkedHashMap::new));
+
+        Map<String, List<FieldFormItemDto>> grouped = new LinkedHashMap<>();
+        for (FieldFormItemDto f : fields) {
+            grouped.computeIfAbsent(f.section(), k -> new ArrayList<>()).add(f);
+        }
+
+        // code_master에 라벨이 없는 섹션(기존 8개 중 안 심은 것 등)은 맨 뒤로 보내고 코드를
+        // 그대로 라벨로 쓴다 - 화면이 비어 보이는 것보다 영문 코드라도 뜨는 게 낫다.
+        Comparator<Map.Entry<String, List<FieldFormItemDto>>> bySectionOrder =
+                Comparator.comparingInt(entry -> {
+                    CodeMaster c = labels.get(entry.getKey());
+                    return c == null ? Integer.MAX_VALUE : c.getSortOrder();
+                });
+
+        List<FieldFormSectionDto> result = new ArrayList<>();
+        grouped.entrySet().stream().sorted(bySectionOrder).forEach(entry -> {
+            CodeMaster c = labels.get(entry.getKey());
+            List<FieldFormItemDto> items = entry.getValue();
+            int req = (int) items.stream().filter(FieldFormItemDto::required).count();
+            int done = (int) items.stream().filter(FieldFormItemDto::required)
+                    .filter(i -> i.value() != null && !i.value().isBlank()).count();
+            result.add(new FieldFormSectionDto(entry.getKey(),
+                    c == null ? entry.getKey() : c.getNameKo(),
+                    c == null ? null : c.getNameEn(),
+                    items.size(), req, done));
+        });
+        return List.copyOf(result);
+    }
+
+    /**
+     * 폼에 등장한 CODE 필드가 참조하는 code_group의 선택지만 모아서 내려준다.
+     * code_master 전체(수백 줄)를 매번 보내지 않기 위해 필요한 그룹만 조회한다.
+     */
+    private List<CodeOptionDto> codeOptionsOf(List<FieldFormItemDto> fields) {
+        Set<String> groups = fields.stream()
+                .map(FieldFormItemDto::codeGroup)
+                .filter(g -> g != null && !g.isBlank())
+                .collect(Collectors.toSet());
+        if (groups.isEmpty()) {
+            return List.of();
+        }
+        return codeMasterRepository.findByCodeGroupInAndActiveTrueOrderByCodeGroupAscSortOrderAsc(groups).stream()
+                .map(c -> new CodeOptionDto(c.getCodeGroup(), c.getCode(), c.getNameKo(), c.getNameEn()))
+                .toList();
     }
 
     private List<RequirementField> fieldsFor(List<String> domains, String participantRoleCode) {
@@ -380,12 +497,27 @@ public class FieldFormService {
                 : fieldsFor(fieldDomains(domain), participantRoleCode).stream()
                         .map(RequirementField::getFieldCode).collect(Collectors.toSet());
 
+        // 영업비밀(TRADE_SECRET) 필드는 사람이 직접 값을 넣을 수 없다 - 그 칸의 값은
+        // 성적서에서 파싱한 실측치이고, 실측치는 저장하지 않는 게 원칙이다. 저장되는 건
+        // ZKP 판정("충족"/"미충족")뿐이며 그건 문서 업로드 경로에서만 쓰인다
+        // (SpecFieldAutoFillService 주석 참고, 2026-08-20 강 지적). FE도 이 칸을 읽기
+        // 전용으로 그리지만, 요청을 직접 만들어 보내는 경우까지 여기서 막는다.
+        Set<String> tradeSecretCodes = fieldsFor(fieldDomains(domain), participantRoleCode).stream()
+                .filter(f -> "TRADE_SECRET".equals(f.getDisclosureScope()))
+                .map(RequirementField::getFieldCode)
+                .collect(Collectors.toSet());
+
         for (Map.Entry<String, String> entry : values.entrySet()) {
             String text = entry.getValue();
             if (text == null || text.isBlank()) {
                 continue;
             }
             if (allowedFieldCodes != null && !allowedFieldCodes.contains(entry.getKey())) {
+                continue;
+            }
+            if (tradeSecretCodes.contains(entry.getKey())) {
+                log.debug("dppId={} field={} 영업비밀 필드 직접 입력 무시 - 값은 문서 파싱+ZKP 판정으로만 채운다",
+                        dppId, entry.getKey());
                 continue;
             }
             DppFieldValue value = fieldValueRepository.findByDppIdAndFieldCode(dppId, entry.getKey())

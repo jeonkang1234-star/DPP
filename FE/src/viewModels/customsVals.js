@@ -1,5 +1,6 @@
 import React from 'react';
 import QRCode from 'qrcode';
+import { publicPassportUrl } from '../publicUrl.js';
 
 /**
  * 세관 통관 검증 화면 - 2026-08-19 강 요청 "실 데이터로 연결해야함... 세관마다 확인해야
@@ -116,10 +117,10 @@ export function customsVals(ctx) {
     // 인코딩했었다).
     showQr: () => {
       if (!summary) return;
-      const url = summary.publicUuid ? (window.location.origin + '/p/' + summary.publicUuid) : short(summary.publicUuid);
+      const url = publicPassportUrl(summary.publicUuid) || short(summary.publicUuid);
       QRCode.toDataURL(url, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
         .then((dataUrl) => {
-          setState({ qrModal: { id: cIdLabel(summary), dataUrl, badge: '통관 조회', title: '해당 DPP의 QR 코드입니다', hint: '수입업체·현장 검수 시 이 QR로 동일한 DPP를 다시 조회할 수 있습니다.' } });
+          setState({ qrModal: { id: cIdLabel(summary), dataUrl, url, badge: '통관 조회', title: '해당 DPP의 QR 코드입니다', hint: '수입업체·현장 검수 시 이 QR로 동일한 DPP를 다시 조회할 수 있습니다.' } });
         })
         .catch(() => ctx.say('QR 생성에 실패했습니다.'));
     },

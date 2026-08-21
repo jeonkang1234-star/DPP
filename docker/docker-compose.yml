@@ -81,6 +81,14 @@ services:
     build:
       context: ../FE
       dockerfile: Dockerfile
+      args:
+        # 공개 여권 QR 주소의 "최후 수단" 값 - 브라우저가 접속한 origin이 localhost/
+        # 127.0.0.1일 때만 쓰인다(FE/src/publicUrl.js). EC2나 PC의 LAN IP로 열었다면
+        # 지금 보고 있는 그 주소가 자동으로 우선한다 - 그 DPP가 실제로 있는 DB는 지금
+        # 접속한 서버의 DB이기 때문.
+        # 기본값은 EC2 퍼블릭 IP(2026-08-20, 도메인 구매 전). 다른 값을 쓰려면:
+        #   VITE_PUBLIC_BASE_URL=http://192.168.0.10 docker compose ... build frontend
+        VITE_PUBLIC_BASE_URL: "${VITE_PUBLIC_BASE_URL:-http://15.134.9.240}"
     container_name: dpp-frontend
     restart: unless-stopped
     depends_on:

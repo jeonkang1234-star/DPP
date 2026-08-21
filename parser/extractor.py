@@ -2,6 +2,8 @@
 """문서 인스턴스 텍스트에서 공통 메타데이터 + DPP 주석(있는 경우) 추출."""
 import re
 
+import spec_extractor
+
 MOCK_ID_PAT = re.compile(r"MOCK\s*/\s*DEMONSTRATION DATA\s*[·\-]\s*([A-Za-z0-9\-\._]+)")
 ISSUE_DATE_PAT = re.compile(r"발행일\s+(\d{4}-\d{2}-\d{2})")
 BIZ_REG_PAT = re.compile(r"사업자/법인번호\s+([0-9\-]+)")
@@ -394,15 +396,21 @@ TYPE_SPECIFIC_EXTRACTORS = {
 }
 
 
-def extract_extended_fields(registry_code: str, text: str) -> dict:
+def extract_extended_fields(registry_code: str, text: str, domain: str = None) -> dict:
     """공통 필드 이후에 붙이는 2단계 확장 필드.
     - sustainability_metrics: 모든 유형에 시도 (해당 없으면 전부 None)
     - numbered_sections: 모든 유형에 시도 (섹션 번호 구조 없으면 빈 dict)
+    - spec_fields: requirement_field 라벨 사전으로 뽑은 {field_code: value} (spec_extractor)
     - 그 외 registry_code별 전용 필드는 TYPE_SPECIFIC_EXTRACTORS에 등록된 것만 추가
+
+    domain(STEEL/TEXTILE/BATTERY)을 주면 spec_fields가 그 도메인 + COMMON 필드만 본다.
+    안 주면 도메인이 갈라야 하는 라벨(섬유·배터리에 같이 있는 'SVHC 1 물질명' 등)은
+    채우지 않는다 - 어느 쪽인지 알 수 없는데 찍는 것보다 비우는 게 낫다.
     """
     result = {
         "sustainability_metrics": extract_sustainability_metrics(text),
         "numbered_sections": extract_numbered_sections(text),
+        "spec_fields": spec_extractor.extract_spec_fields(text, domain),
     }
     specific = TYPE_SPECIFIC_EXTRACTORS.get(registry_code)
     if specific:

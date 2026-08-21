@@ -10,6 +10,18 @@ import './hover.css';
 export default function AppView(v) {
   const {
     anchorBars,
+    adminAnchorStatusLabel,
+    adminLastAnchoredLabel,
+    adminLastAnchorBlockLabel,
+    adminAnchorSuccessLabel,
+    adminTotalUsersLabel,
+    adminUserBreakdownLabel,
+    adminTotalDppsLabel,
+    adminDppBreakdownLabel,
+    adminPendingCountLabel,
+    adminPendingBadge,
+    adminRefreshedAtLabel,
+    membersEmpty,
     apTabs,
     apEmpty,
     approvals,
@@ -111,14 +123,17 @@ export default function AppView(v) {
     editUrl,
     fieldCheck,
     fieldCheckOpen,
+    openFieldCheck,
     fieldCount,
     fieldFilledCount,
     fieldTotalCount,
     fields,
+    fieldSections,
     documentSlots,
     documentSlotsEmpty,
     partnerDocumentSlots,
     formTitle,
+    dppTitle, onDppTitle, dppTitlePlaceholder,
     goApprove,
     goInput,
     goLogin,
@@ -127,7 +142,7 @@ export default function AppView(v) {
     hazardRisk,
     hazardSafe,
     inputTitle,
-    inquiries,
+    inquiries, inquiriesEmpty, inquiryTotalLabel,
     addInviteRow,
     inviteRows,
     inviteRoleOptions,
@@ -177,12 +192,11 @@ export default function AppView(v) {
     manualName,
     members,
     missingFields,
-    myDocs,
     myPerms,
     myTier,
     myTierDesc,
     myTierName,
-    notifCats,
+    notifCats, notifCatsVisible,
     notifEmpty,
     notifOpen,
     notifications,
@@ -365,7 +379,6 @@ export default function AppView(v) {
     userInitial,
     userName,
     userRole,
-    validations,
     workspace,
     // --- DPP 발급 게이팅 / QR 발급·조회 / Tier·권한 신청 (2026-08-17 추가) ---
     issueReady,
@@ -378,6 +391,9 @@ export default function AppView(v) {
     qrModalBadge,
     qrModalTitle,
     qrModalHint,
+    qrModalUrl, qrModalUrlWarning,
+    memberModalOpen, memberModalName, memberModalRows, closeMemberModal,
+    qrBaseEditing, qrBaseInput, qrBaseOnChange, openQrBaseEditor, cancelQrBaseEditor, saveQrBase,
     closeQrModal,
     goToProductsFromQr,
     tierRequestPending,
@@ -403,9 +419,7 @@ export default function AppView(v) {
     productFilterTabs,
     dppDetailQrImg,
     dppDetailQrPending,
-    validationOpen,
-    toggleValidation,
-    validationWarnCount
+    dppTitleOpen, toggleDppTitle, dppTitleUnset
   } = v;
 
   return (
@@ -657,27 +671,27 @@ export default function AppView(v) {
               <input placeholder="회사명으로 회원 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
               <span style={{ height: '36px', padding: '0 16px', display: 'grid', placeItems: 'center', borderRadius: '11px', background: '#F2F6FC', color: '#6B7A93', fontSize: '12.5px', fontWeight: '600' }}>검색</span>
             </div>
-            <span style={{ marginLeft: 'auto', fontSize: '12.5px', color: '#8494AC' }}>최근 갱신 2026-07-30 09:41 KST</span>
+            <span style={{ marginLeft: 'auto', fontSize: '12.5px', color: '#8494AC' }}>{adminRefreshedAtLabel}</span>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.6fr', gap: '16px' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>전체 가입자 수</span></div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>1,284</span><span style={{ padding: '3px 8px', borderRadius: '8px', background: 'rgba(18,161,80,.12)', color: '#0E7A3D', fontSize: '12px', fontWeight: '700' }}>+4.2%</span></div>
-              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>기업 1,097 · 개인 187</span>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalUsersLabel}</span></div>
+              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminUserBreakdownLabel}</span>
             </div>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>48,392</span><span style={{ padding: '3px 8px', borderRadius: '8px', background: 'rgba(18,161,80,.12)', color: '#0E7A3D', fontSize: '12px', fontWeight: '700' }}>+1,204</span></div>
-              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>철강 26,110 · 배터리 13,482 · 섬유 8,800</span>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalDppsLabel}</span></div>
+              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminDppBreakdownLabel}</span>
             </div>
             <div style={{ background: '#0B1B33', borderRadius: '18px', padding: '20px 22px', color: '#fff', display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '8px', height: '8px', borderRadius: '5px', background: '#4ADE80', boxShadow: '0 0 0 4px rgba(74,222,128,.20)' }}></span><span style={{ fontSize: '14px', fontWeight: '600' }}>블록체인 앵커 상태</span><span style={{ padding: '3px 9px', borderRadius: '8px', background: 'rgba(74,222,128,.16)', color: '#86EFAC', fontSize: '11.5px', fontWeight: '700' }}>정상</span></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '8px', height: '8px', borderRadius: '5px', background: adminAnchorStatusLabel === '정상' ? '#4ADE80' : '#8494AC', boxShadow: adminAnchorStatusLabel === '정상' ? '0 0 0 4px rgba(74,222,128,.20)' : 'none' }}></span><span style={{ fontSize: '14px', fontWeight: '600' }}>블록체인 앵커 상태</span><span style={{ padding: '3px 9px', borderRadius: '8px', background: adminAnchorStatusLabel === '정상' ? 'rgba(74,222,128,.16)' : 'rgba(255,255,255,.16)', color: adminAnchorStatusLabel === '정상' ? '#86EFAC' : 'rgba(255,255,255,.8)', fontSize: '11.5px', fontWeight: '700' }}>{adminAnchorStatusLabel}</span></div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,auto)', gap: '22px', justifyContent: 'start' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>2분 전</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>최근 앵커링</span></div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>#8,412,930</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>블록 높이</span></div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>99.98%</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>30일 성공률</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>{adminLastAnchoredLabel}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>최근 앵커링</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>{adminLastAnchorBlockLabel}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>블록 높이</span></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '19px', fontWeight: '700' }}>{adminAnchorSuccessLabel}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>30일 성공률</span></div>
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '64px' }}>
@@ -688,11 +702,11 @@ export default function AppView(v) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '16px', alignItems: 'start' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>운영현황</span><span style={{ fontSize: '12px', color: '#8494AC' }}>처리 대기 37건</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>운영현황</span><span style={{ fontSize: '12px', color: '#8494AC' }}>{adminPendingCountLabel}</span></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button onClick={goApprove} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: '14px', padding: '16px 18px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv8">
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>가입 승인 대기</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>증빙서류 검토 후 승인 필요</span></span>
-                  <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '22px', fontWeight: '700', color: '#0045A9' }}>18</span>
+                  <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '22px', fontWeight: '700', color: '#0045A9' }}>{adminPendingBadge}</span>
                   <span style={{ fontSize: '12px', color: '#8494AC' }}>→</span>
                 </button>
               </div>
@@ -701,8 +715,11 @@ export default function AppView(v) {
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>유형별 문의</span></div>
-                <span style={{ height: '32px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>최근 30일 · 412건</span>
+                <span style={{ height: '32px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>{inquiryTotalLabel}</span>
               </div>
+              {inquiriesEmpty ? (
+              <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>접수된 문의가 없습니다.</div>
+              ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {(inquiries || []).map((q, $index) => (<React.Fragment key={$index}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
@@ -711,6 +728,7 @@ export default function AppView(v) {
                 </div>
                 </React.Fragment>))}
               </div>
+              )}
             </div>
           </div>
 
@@ -723,6 +741,9 @@ export default function AppView(v) {
                 <button style={{ height: '40px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv12">국가 전체</button>
               </div>
             </div>
+            {membersEmpty ? (<>
+            <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>승인된 회원이 없습니다.</div>
+            </>) : (<>
             <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr .8fr 1fr .9fr .9fr 64px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
               <span>회사명</span><span>가입시기</span><span>국가</span><span>도메인</span><span style={{ textAlign: 'right' }}>보유 DPP</span><span style={{ textAlign: 'right' }}>발행 DPP</span><span></span>
             </div>
@@ -739,6 +760,7 @@ export default function AppView(v) {
               </div>
               </React.Fragment>))}
             </div>
+            </>)}
           </div>
         </div>
         </>) : null}
@@ -747,7 +769,7 @@ export default function AppView(v) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '20px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>국내(KR) 사업자등록번호 체크섬 자동 검증 · 그 외 국가는 관리자 수동 심사</span>
+              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>제출 문서 형식 OCR 자동검증 · 그 외는 관리자 수동 심사</span>
               <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>회원 관리</h1>
             </div>
           </div>
@@ -868,7 +890,8 @@ export default function AppView(v) {
                     <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', fontWeight: '600', color: '#0045A9', textDecoration: 'underline', textUnderlineOffset: '3px' }}>{c.id}</span>
                     <span style={{ fontSize: '12.5px', color: '#44546F', lineHeight: '1.35' }}>{c.name}</span>
                   </button>
-                  <div style={{ display: 'flex', height: '22px', borderRadius: '7px', overflow: 'hidden', ...c.trackStyle }}>
+                  {/* 트랙이 흰색이 되면서 카드 배경(흰색)과 경계가 사라져 막대 길이를 못 읽는다 - 얇은 테두리를 준다. */}
+                  <div style={{ display: 'flex', height: '22px', borderRadius: '7px', overflow: 'hidden', border: '1px solid rgba(16,32,64,.14)', boxSizing: 'border-box', ...c.trackStyle }}>
                     {(c.segs || []).map((g, $index) => (<React.Fragment key={$index}><span style={g.style}></span></React.Fragment>))}
                   </div>
                   <span style={c.pctStyle}>{c.pct}%</span>
@@ -895,26 +918,28 @@ export default function AppView(v) {
                 <button onClick={setBatch} style={batchBtn}>배치 대량 발급</button>
               </div>
               </>) : null}
-              <button onClick={toggleValidation} style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '46px', padding: '0 16px', border: '1px solid ' + (validationOpen ? '#0045A9' : 'rgba(16,32,64,.10)'), borderRadius: '14px', background: validationOpen ? 'rgba(0,69,169,.06)' : '#fff', color: validationOpen ? '#0045A9' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>
-                입력 검증 결과
-                {validationWarnCount ? (<span style={{ display: 'inline-grid', placeItems: 'center', minWidth: '18px', height: '18px', padding: '0 5px', borderRadius: '999px', background: '#E3A008', color: '#fff', fontSize: '10.5px', fontWeight: '700' }}>{validationWarnCount}</span>) : null}
-                <span style={{ display: 'inline-block', fontSize: '10px', transform: validationOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
+              <button onClick={toggleDppTitle} style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '46px', padding: '0 16px', border: '1px solid ' + (dppTitleOpen ? '#0045A9' : 'rgba(16,32,64,.10)'), borderRadius: '14px', background: dppTitleOpen ? 'rgba(0,69,169,.06)' : '#fff', color: dppTitleOpen ? '#0045A9' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>
+                DPP 이름
+                {dppTitleUnset ? (<span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#E3A008' }}></span>) : null}
+                <span style={{ display: 'inline-block', fontSize: '10px', transform: dppTitleOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
               </button>
             </div>
           </div>
 
-          {validationOpen ? (<>
-          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '600' }}>입력 검증 결과</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(validations || []).map((v, $index) => (<React.Fragment key={$index}>
-              <button onClick={v.open} style={v.rowStyle}>
-                <span style={v.dot}></span>
-                <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}><span style={{ fontSize: '13px', fontWeight: '600', lineHeight: '1.35' }}>{v.label}</span><span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.5' }}>{v.detail}</span></span>
-                <span style={{ fontSize: '12px', color: '#8494AC' }}>{v.arrow}</span>
-              </button>
-              </React.Fragment>))}
-            </div>
+          {/*
+            DPP 이름(2026-08-20 강 요청) - 사용자가 이 DPP를 부르는 이름. 시스템 내부
+            목록/조회에서만 쓰이고, 공개 여권과 EU 레지스트리는 지금처럼 public_uuid·
+            모델명으로만 조회한다. 예전에 이 자리에 있던 "입력 검증 결과" 패널은
+            바로 아래 기본 정보 카드 헤더와 같은 숫자를 반복해서 삭제했다.
+          */}
+          {dppTitleOpen ? (<>
+          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: '600' }}>DPP 이름</span>
+              <span style={{ fontSize: '11.5px', color: '#8494AC' }}>내부 식별용 · 선택</span>
+            </span>
+            <input value={dppTitle} onChange={onDppTitle} placeholder={dppTitlePlaceholder} maxLength={120}
+              style={{ height: '48px', padding: '0 14px', border: '1.5px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', width: '100%', boxSizing: 'border-box' }} />
           </div>
           </>) : null}
 
@@ -932,7 +957,7 @@ export default function AppView(v) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.3fr', gap: '16px', alignItems: 'start' }}>
               {!documentSlotsEmpty ? (<>
               <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                <span style={{ fontSize: '15px', fontWeight: '600' }}>필수 문서</span>
+                <span style={{ fontSize: '15px', fontWeight: '600' }}>문서 검증</span>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                   {(documentSlots || []).map((d, $index) => (<React.Fragment key={$index}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '13px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1.5px solid ' + d.tileBorderColor }}>
@@ -986,36 +1011,90 @@ export default function AppView(v) {
               </>) : null}
 
               <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: fieldFormOpen ? '18px' : '0' }}>
-                <button onClick={toggleFieldForm} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '0', background: 'transparent', padding: '0', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
-                  <span style={{ fontSize: '15px', fontWeight: '600' }}>{formTitle}</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '12px', color: '#8494AC' }}>{fieldFilledCount}/{fieldTotalCount} 입력됨</span>
+                {/*
+                  "n/m 입력됨"을 접기 버튼 밖으로 뺐다 - 이 숫자를 누르면 "필수 필드 충족
+                  현황" 모달이 열린다. 예전엔 그 모달을 삭제된 "입력 검증 결과" 패널에서만
+                  열 수 있었다(2026-08-20). 버튼 안에 버튼을 중첩할 수 없어 형제로 둔다.
+                */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                  <button onClick={toggleFieldForm} style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '0', background: 'transparent', padding: '0', cursor: 'pointer', textAlign: 'left', flex: '1' }}>
+                    <span style={{ fontSize: '15px', fontWeight: '600' }}>{formTitle}</span>
                     <span style={{ display: 'inline-block', fontSize: '11px', color: '#8494AC', transform: fieldFormOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
-                  </span>
-                </button>
+                  </button>
+                  <button onClick={openFieldCheck} style={{ height: '28px', padding: '0 10px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '9px', background: '#FBFCFE', fontSize: '12px', color: '#44546F', fontWeight: '600', cursor: 'pointer', flex: 'none' }}>{fieldFilledCount}/{fieldTotalCount} 입력됨</button>
+                </div>
                 {fieldFormOpen ? (<>
                 {(() => {
-                  const parsedFields = (fields || []).filter(f => f.autoFillable);
-                  const manualFields = (fields || []).filter(f => !f.autoFillable);
+                  // 2026-08-19: 필드가 80 -> 361개가 되면서 화면 구조를 두 단계로 바꿨다.
+                  //   1단계 섹션(식별자 / 화학 성분 / 탄소·CBAM ...) - 접었다 펼 수 있고,
+                  //          헤더에 그 섹션의 필수 입력 진행도(3/7)를 붙인다.
+                  //   2단계 섹션 안에서 파싱/수기 구분 - 예전 화면의 두 블록을 그대로 유지.
+                  // 예전처럼 파싱/수기 두 덩어리만 두면 각 덩어리가 150줄짜리 벽이 된다.
+                  // fieldSections가 비어 있으면(구버전 BE, 또는 목데이터 폼 역할) 예전
+                  // 방식으로 그대로 그린다.
+                  const renderInput = (f) => {
+                    const base = { height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: f.locked ? '#F2F4F8' : '#fff', color: f.locked ? '#6B7A93' : '#0B1B33', cursor: f.locked ? 'not-allowed' : 'text', width: '100%', boxSizing: 'border-box' };
+                    // 영업비밀(ZKP 대체) 항목은 입력칸을 아예 두지 않는다. 실측값은 저장하지도
+                    // 표시하지도 않고, 한계값 충족 여부(O/X)만 보여준다(2026-08-20 강 지적).
+                    if (f.zkpOnly) {
+                      return (
+                        <span style={{ ...base, display: 'flex', alignItems: 'center', gap: '10px', background: '#F7F9FD', borderStyle: 'dashed', cursor: 'default' }}>
+                          <span style={{ width: '26px', height: '26px', flex: 'none', display: 'grid', placeItems: 'center', borderRadius: '999px', background: f.zkpBg, color: f.zkpFg, fontSize: '14px', fontWeight: '800' }}>{f.zkpMark}</span>
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0 }}>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: f.zkpFg }}>{f.zkpLabel}</span>
+                            <span style={{ fontSize: '10.5px', color: '#8494AC' }}>{f.zkpHint}</span>
+                          </span>
+                        </span>
+                      );
+                    }
+                    if (!f.onChange) {
+                      return <input placeholder={f.ph} defaultValue={f.value} style={{ ...base, background: '#fff' }} />;
+                    }
+                    const onChange = f.locked ? undefined : f.onChange;
+                    if (f.inputKind === 'select') {
+                      return (
+                        <select value={f.value} onChange={onChange} disabled={f.locked} style={base}>
+                          <option value="">선택하세요</option>
+                          {(f.options || []).map(o => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                        </select>
+                      );
+                    }
+                    if (f.inputKind === 'boolean') {
+                      return (
+                        <select value={f.value} onChange={onChange} disabled={f.locked} style={base}>
+                          <option value="">선택하세요</option>
+                          <option value="true">예 / 해당됨</option>
+                          <option value="false">아니오 / 해당 없음</option>
+                        </select>
+                      );
+                    }
+                    if (f.inputKind === 'textarea') {
+                      return <textarea placeholder={f.ph} value={f.value} onChange={onChange} readOnly={f.locked} rows={3} style={{ ...base, height: 'auto', padding: '12px 14px', resize: 'vertical', fontFamily: 'inherit' }} />;
+                    }
+                    const type = f.inputKind === 'number' ? 'number'
+                      : f.inputKind === 'date' ? 'date'
+                      : f.inputKind === 'datetime' ? 'datetime-local'
+                      : f.inputKind === 'url' ? 'url' : 'text';
+                    return <input type={type} placeholder={f.ph} value={f.value} onChange={onChange} readOnly={f.locked} style={base} />;
+                  };
                   const renderField = (f, $index) => (<React.Fragment key={$index}>
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
                       <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '7px' }}>
-                        <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
                           {f.label}{f.req === '필수' ? (<span style={{ color: '#C22B2B' }}>*</span>) : null}
+                          {f.tierLabel ? (<span title={f.basisTip} style={{ ...f.tierStyle, fontSize: '10px', cursor: f.basisTip ? 'help' : 'default' }}>{f.tierLabel}</span>) : null}
+                          {f.disclosureLabel ? (<span style={{ fontSize: '10px', color: '#8494AC' }}>· {f.disclosureLabel}</span>) : null}
                         </span>
                         {f.locked ? (<button type="button" onClick={f.unlock} style={{ height: '22px', padding: '0 9px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '7px', background: '#fff', fontSize: '10.5px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', flex: 'none' }}>수정</button>) : null}
                       </span>
-                      {f.onChange
-                        ? <input placeholder={f.ph} value={f.value} onChange={f.locked ? undefined : f.onChange} readOnly={f.locked} style={{ height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: f.locked ? '#F2F4F8' : '#fff', color: f.locked ? '#6B7A93' : '#0B1B33', cursor: f.locked ? 'not-allowed' : 'text' }} />
-                        : <input placeholder={f.ph} defaultValue={f.value} style={{ height: '48px', padding: '0 14px', border: '1.5px solid ' + f.inputBorderColor, borderRadius: '12px', fontSize: '14px', background: '#fff' }} />}
+                      {renderInput(f)}
                       <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.sourceLabel}</span>
                     </label>
                     </React.Fragment>);
                   // 2026-08-18(2차) 강 요청: "파싱되는 데이터랑 그냥 입력하는 데이터랑
-                  // 블록으로 구분" - 예전엔 위/아래로 나뉜 섹션 제목 텍스트만 있고 눈에 띄는
-                  // 경계가 없어서 헷갈렸다. 각 그룹을 옅은 배경 + 테두리가 있는 카드형 블록
-                  // 으로 감싸서(파싱=초록 톤, 수기=회색 톤) 한눈에 구분되게 한다.
-                  return (
+                  // 블록으로 구분" - 각 그룹을 옅은 배경 + 테두리가 있는 카드형 블록으로
+                  // 감싼다(파싱=초록 톤, 수기=회색 톤).
+                  const renderGroups = (parsedFields, manualFields) => (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                       {parsedFields.length ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '14px', borderRadius: '14px', background: 'rgba(18,161,80,.05)', border: '1px solid rgba(18,161,80,.18)' }}>
@@ -1033,6 +1112,29 @@ export default function AppView(v) {
                           </div>
                         </div>
                       ) : null}
+                    </div>
+                  );
+                  if (!fieldSections || !fieldSections.length) {
+                    return renderGroups((fields || []).filter(f => f.autoFillable), (fields || []).filter(f => !f.autoFillable));
+                  }
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      {fieldSections.map((sec) => (
+                        <div key={sec.key} style={{ border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', overflow: 'hidden' }}>
+                          <button type="button" onClick={sec.toggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', width: '100%', padding: '12px 14px', border: '0', background: sec.open ? '#F7F9FD' : '#fff', cursor: 'pointer', textAlign: 'left' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: sec.progressColor, flex: 'none' }}></span>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#0B1B33' }}>{sec.label}</span>
+                              <span style={{ fontSize: '11px', color: '#8494AC' }}>{sec.total}개 항목</span>
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              {sec.requiredCount ? (<span style={{ fontSize: '11.5px', fontWeight: '600', color: sec.progressColor }}>필수 {sec.filledRequiredCount}/{sec.requiredCount}</span>) : null}
+                              <span style={{ fontSize: '11px', color: '#8494AC', transform: sec.open ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
+                            </span>
+                          </button>
+                          {sec.open ? (<div style={{ padding: '4px 14px 14px' }}>{renderGroups(sec.parsed, sec.manual)}</div>) : null}
+                        </div>
+                      ))}
                     </div>
                   );
                 })()}
@@ -1462,7 +1564,7 @@ export default function AppView(v) {
           </div>
 
           <div style={{ width: '100%', maxWidth: '760px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <span style={{ fontSize: '13px', fontWeight: '700' }}>내 세관 심사 대기 큐</span>
+            <span style={{ fontSize: '13px', fontWeight: '700' }}>통관 대기 목록</span>
             {cQueueEmpty ? (
               <span style={{ fontSize: '12.5px', color: '#8494AC' }}>현재 배정된 심사 대기 건이 없습니다. 수출/수입 관할이 이 세관과 일치하는 통관 신청이 들어오면 여기에 표시됩니다.</span>
             ) : (
@@ -1652,9 +1754,11 @@ export default function AppView(v) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '17px', fontWeight: '700' }}>알림센터</span><span style={tier2Chip}>읽지 않음 {notifUnreadCount || 0}</span></div>
               <button onClick={closeNotif} style={{ width: '34px', height: '34px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '11px', background: '#fff', fontSize: '13px', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
             </div>
+            {notifCatsVisible ? (
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {(notifCats || []).map((c, $index) => (<React.Fragment key={$index}><button onClick={c.go} style={c.style}>{c.label}</button></React.Fragment>))}
             </div>
+            ) : null}
           </div>
           <div style={{ flex: '1', overflow: 'auto', padding: '16px 20px 28px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {notifEmpty ? (<>
@@ -1990,6 +2094,21 @@ export default function AppView(v) {
           <span style={{ fontSize: '15px', fontWeight: '700', textAlign: 'center' }}>{qrModalTitle}</span>
           {qrModalImg ? (<img src={qrModalImg} alt="DPP QR" style={{ width: '200px', height: '200px', borderRadius: '14px', border: '1px solid rgba(16,32,64,.08)' }} />) : null}
           <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '13px', fontWeight: '600', color: '#44546F' }}>{qrModalId}</span>
+          {qrModalUrl ? (<span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#6B7A93', textAlign: 'center', wordBreak: 'break-all', lineHeight: '1.5' }}>{qrModalUrl}</span>) : null}
+          {qrModalUrlWarning ? (
+          <span style={{ fontSize: '11.5px', color: '#C22B2B', textAlign: 'center', lineHeight: '1.6' }}>{qrModalUrlWarning}</span>
+          ) : null}
+          {qrBaseEditing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+            <input value={qrBaseInput} onChange={qrBaseOnChange} placeholder="http://192.168.0.10" style={{ height: '40px', padding: '0 12px', border: '1px solid rgba(16,32,64,.16)', borderRadius: '10px', fontSize: '13px', fontFamily: '\'JetBrains Mono\',monospace' }} />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={cancelQrBaseEditor} style={{ flex: 1, height: '38px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', fontSize: '12.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>취소</button>
+              <button onClick={saveQrBase} style={{ flex: 1, height: '38px', border: '0', borderRadius: '10px', background: '#0045A9', color: '#fff', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>저장하고 QR 다시 만들기</button>
+            </div>
+          </div>
+          ) : (
+          <button onClick={openQrBaseEditor} style={{ border: '0', background: 'transparent', color: '#0045A9', fontSize: '11.5px', fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' }}>공개 주소 변경</button>
+          )}
           <span style={{ fontSize: '11.5px', color: '#8494AC', textAlign: 'center', lineHeight: '1.6' }}>{qrModalHint}</span>
           <div style={{ display: 'flex', gap: '9px', width: '100%' }}>
             <button onClick={closeQrModal} style={{ flex: 1, height: '44px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
@@ -1997,6 +2116,27 @@ export default function AppView(v) {
             <button onClick={goToProductsFromQr} style={{ flex: 1, height: '44px', border: '0', borderRadius: '12px', background: '#0045A9', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>제품 조회에서 보기</button>
             </>) : null}
           </div>
+        </div>
+      </div>
+      </>) : null}
+
+      {memberModalOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '90', display: 'grid', placeItems: 'center', padding: '40px' }}>
+        <div onClick={closeMemberModal} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.55)' }}></div>
+        <div style={{ position: 'relative', width: '460px', maxHeight: '80vh', overflowY: 'auto', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', padding: '26px 28px', gap: '18px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#0045A9' }}>회원 상세</span>
+            <span style={{ fontSize: '19px', fontWeight: '700' }}>{memberModalName}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+            {(memberModalRows || []).map((r) => (
+              <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '12px', padding: '11px 0', borderTop: '1px solid rgba(16,32,64,.07)', alignItems: 'baseline' }}>
+                <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{r.label}</span>
+                <span style={{ fontSize: '13.5px', fontWeight: '600', color: '#0B1B33', wordBreak: 'break-all', fontFamily: r.mono ? '\'JetBrains Mono\',monospace' : 'inherit' }}>{r.value}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={closeMemberModal} style={{ height: '44px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
         </div>
       </div>
       </>) : null}

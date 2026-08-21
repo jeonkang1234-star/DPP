@@ -3,6 +3,7 @@ package com.dpp.dpp.repository;
 import com.dpp.dpp.entity.RequirementField;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 
 public interface RequirementFieldRepository extends JpaRepository<RequirementField, String> {
@@ -17,6 +18,13 @@ public interface RequirementFieldRepository extends JpaRepository<RequirementFie
      */
     List<RequirementField> findByDomainInAndFieldKindAndStorageTargetAndAutoFalseAndActiveTrueOrderBySortOrder(
             List<String> domains, String fieldKind, String storageTarget);
+
+    /**
+     * 파서가 돌려준 field_code 뭉치를 검증할 때 쓴다(SpecFieldAutoFillService).
+     * dpp_field_value.field_code에는 FK가 걸려 있어서, 존재하지 않는 코드를 그대로 쓰면
+     * 업로드가 FK 위반으로 죽는다 - 쓰기 전에 반드시 이걸로 걸러야 한다.
+     */
+    List<RequirementField> findByFieldCodeInAndActiveTrue(Collection<String> fieldCodes);
 
     /** 협력사(참여 조직) 전용 - 자기 role_code가 담당인 필드만. */
     List<RequirementField> findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(

@@ -143,7 +143,7 @@ class DppLedgerContractTest {
 
             assertThatThrownBy(() ->
                     contract.recordZkpVerification(
-                            ctx, "doc-1", "proof-1", "{\"threshold\":30}", true, "verifier-a", "now"))
+                            ctx, "doc-1", "proof-1", "{\"threshold\":30}", true, "verifier-a", "now", "a1b2c3"))
                     .isInstanceOf(ChaincodeException.class)
                     .hasMessageContaining("먼저 문서 해시를 기록");
 
@@ -156,7 +156,7 @@ class DppLedgerContractTest {
             when(stub.getStringState("ZKP_doc-1_proof-1")).thenReturn(null);
 
             ZkpVerificationRecord result = contract.recordZkpVerification(
-                    ctx, "doc-1", "proof-1", "{\"threshold\":30}", true, "verifier-a", "2026-08-01T00:00:00Z");
+                    ctx, "doc-1", "proof-1", "{\"threshold\":30}", true, "verifier-a", "2026-08-01T00:00:00Z", "a1b2c3");
 
             assertThat(result.getDocId()).isEqualTo("doc-1");
             assertThat(result.getProofId()).isEqualTo("proof-1");
@@ -174,9 +174,33 @@ class DppLedgerContractTest {
 
             assertThatThrownBy(() ->
                     contract.recordZkpVerification(
-                            ctx, "doc-1", "proof-1", "{\"threshold\":30}", true, "verifier-a", "now"))
+                            ctx, "doc-1", "proof-1", "{\"threshold\":30}", true, "verifier-a", "now", "a1b2c3"))
                     .isInstanceOf(ChaincodeException.class)
                     .hasMessageContaining("이미 기록된 증명");
+        }
+
+        @Test
+        void proofHash가_비어있으면_PROOF_HASH_REQUIRED_예외() {
+            when(stub.getStringState("DOC_doc-1")).thenReturn("{\"docId\":\"doc-1\"}");
+
+            assertThatThrownBy(() ->
+                    contract.recordZkpVerification(
+                            ctx, "doc-1", "proof-9", "{\"threshold\":30}", true, "verifier-a", "now", "  "))
+                    .isInstanceOf(ChaincodeException.class)
+                    .hasMessageContaining("증명 해시");
+
+            verify(stub, never()).putStringState(startsWith("ZKP_"), anyString());
+        }
+
+        @Test
+        void proofHash가_기록에_그대로_담긴다() {
+            when(stub.getStringState("DOC_doc-1")).thenReturn("{\"docId\":\"doc-1\"}");
+            when(stub.getStringState("ZKP_doc-1_proof-8")).thenReturn(null);
+
+            ZkpVerificationRecord result = contract.recordZkpVerification(
+                    ctx, "doc-1", "proof-8", "{\"threshold\":30}", true, "verifier-a", "now", "deadbeef");
+
+            assertThat(result.getProofHash()).isEqualTo("deadbeef");
         }
 
         @Test
@@ -185,7 +209,7 @@ class DppLedgerContractTest {
             when(stub.getStringState("ZKP_doc-1_proof-2")).thenReturn(null);
 
             ZkpVerificationRecord result = contract.recordZkpVerification(
-                    ctx, "doc-1", "proof-2", "{\"threshold\":30}", false, "verifier-a", "now");
+                    ctx, "doc-1", "proof-2", "{\"threshold\":30}", false, "verifier-a", "now", "a1b2c3");
 
             assertThat(result.isVerified()).isFalse();
         }
@@ -197,7 +221,7 @@ class DppLedgerContractTest {
         @Test
         void 존재하는_검증기록은_역직렬화되어_반환된다() {
             ZkpVerificationRecord original = new ZkpVerificationRecord(
-                    "doc-1", "proof-1", "{\"threshold\":30}", true, "verifier-a", "now", "tx-0001");
+                    "doc-1", "proof-1", "{\"threshold\":30}", true, "verifier-a", "now", "a1b2c3", "tx-0001");
             when(stub.getStringState("ZKP_doc-1_proof-1")).thenReturn(gson.toJson(original));
 
             ZkpVerificationRecord result = contract.getZkpVerification(ctx, "doc-1", "proof-1");

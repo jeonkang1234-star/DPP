@@ -39,6 +39,17 @@ public class DppFieldValue {
     @Column(name = "value_text")
     private String valueText;
 
+    /**
+     * 이 값이 어느 문서에서 파싱돼 들어왔는지. 수기 입력이면 null.
+     *
+     * 컬럼 자체는 V1__schema.sql 때부터 있었지만 2026-08-19까지 아무 코드도 채우지 않았다 -
+     * 어느 문서에서 온 값인지 모르면 그 문서가 나중에 반려됐을 때 값을 되돌릴 근거가 없고,
+     * 화면에서 "이 값은 성적서에서 왔다"고 말할 수도 없었다(FE가 세션 안에서만 기억하는
+     * parsedFieldSources로 흉내내고 있었고, 새로고침하면 사라졌다).
+     */
+    @Column(name = "source_document_id")
+    private Long sourceDocumentId;
+
     @Column(name = "submitted_by_org")
     private Long submittedByOrg;
 

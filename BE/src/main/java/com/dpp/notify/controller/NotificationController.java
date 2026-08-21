@@ -26,8 +26,9 @@ public class NotificationController {
     }
 
     @GetMapping("/categories")
-    public ResponseEntity<List<NotificationCategoryDto>> categories() {
-        return ResponseEntity.ok(notificationService.getCategories());
+    public ResponseEntity<List<NotificationCategoryDto>> categories(Authentication authentication) {
+        // 2026-08-20: 계정마다 볼 수 있는 카테고리가 달라져서 인증 정보가 필요해졌다.
+        return ResponseEntity.ok(notificationService.getCategories(parseUserId(authentication)));
     }
 
     @GetMapping

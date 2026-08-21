@@ -19,12 +19,15 @@ export function notifVals(ctx) {
   return {
     notifOpen: state.notifOpen,
     closeNotif: () => setState({ notifOpen: false }),
+    // 서버가 카테고리를 하나도 안 주면(운영자 - 2026-08-20 강 요청 "카테고라이징 자체 X")
+    // '전체' 탭 하나만 남는데, 선택지가 하나뿐인 탭 줄은 의미가 없으니 줄 자체를 감춘다.
+    notifCatsVisible: cats.length > 0,
     notifCats: [{ key: 'all', label: '전체' }, ...cats].map(({ key, label }) => ({
       key, label,
       style: { height: 34, padding: '0 14px', border: 0, borderRadius: 11, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, background: cur === key ? '#0B1B33' : '#F2F6FC', color: cur === key ? '#fff' : '#44546F' },
       go: () => setState({ notifCat: key })
     })),
-    notifications: all.filter(n => cur === 'all' || n.key === cur).map((n, i) => ({
+    notifications: all.filter(n => cats.length === 0 || cur === 'all' || n.key === cur).map((n, i) => ({
       key: n.key + '-' + i, cat: n.label, title: n.title, body: n.body, at: ctx.fmtRelative(n.createdAt),
       dot: ctx.dot(n.colorHex),
       chip: ctx.chip(n.key === 'zkp' ? 'rgba(0,69,169,.10)' : n.key === 'cert' ? 'rgba(227,160,8,.16)' : n.key === 'tier' ? 'rgba(18,161,80,.12)' : 'rgba(16,32,64,.07)', n.key === 'zkp' ? '#0045A9' : n.key === 'cert' ? '#96660A' : n.key === 'tier' ? '#0E7A3D' : '#44546F'),

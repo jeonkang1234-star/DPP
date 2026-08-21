@@ -22,7 +22,12 @@ export const BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? '/api';
 const LATENCY = 180;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const clone = (v) => JSON.parse(JSON.stringify(v));
+// data.json에 없는 키를 읽으면 JSON.stringify(undefined)가 문자열이 아닌 undefined를
+// 돌려주고, JSON.parse(undefined)가 SyntaxError로 터진다 - 그 예외가 fetchAppData의
+// Promise.all을 타고 올라가 App.jsx의 loadError가 되어 화면 전체가 "데이터를 불러오지
+// 못했습니다."로 바뀐다(2026-08-20, data.json에서 inquiries를 지우고 여기 호출을 안
+// 지워서 실제로 로그인 화면이 통째로 죽었다). mock이 없는 키는 그냥 null로 넘긴다.
+const clone = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
 
 async function read(key) {
   await wait(LATENCY);
@@ -38,8 +43,8 @@ export const fetchAccounts = () => read('accounts');
 
 /** 회원 기업 목록 */
 export const fetchMembers = () => read('members');
-/** 문의 유형별 집계 (대시보드 차트) */
-export const fetchInquiries = () => read('inquiries');
+// 문의 유형별 집계는 mock을 버리고 /admin/dashboard의 실집계로 옮겼다(2026-08-20).
+// fetchInquiries/data.json inquiries 모두 삭제 - useAppLogic이 admin.inquiriesByType을 쓴다.
 /** 일별 앵커링 건수 (대시보드 스파크라인) */
 export const fetchAnchors = () => read('anchors');
 /** 가입 승인 대기·완료 목록 */
@@ -82,13 +87,13 @@ export const fetchNotificationColors = () => read('notificationColors');
  */
 export async function fetchAppData() {
   const [
-    accounts, products, members, inquiries, anchors,
+    accounts, products, members, anchors,
     signupApprovals, tierReviews,
     makerKpi, makerQueues, makerInputMeta, makerFieldSets,
     passports, customsItems, dppMissingData,
     notificationCats, notifications, notificationColors,
   ] = await Promise.all([
-    fetchAccounts(), read('products'), fetchMembers(), fetchInquiries(), fetchAnchors(),
+    fetchAccounts(), read('products'), fetchMembers(), fetchAnchors(),
     fetchSignupApprovals(), fetchTierReviews(),
     fetchMakerKpi(), fetchMakerQueues(), fetchMakerInputMeta(), fetchMakerFieldSets(),
     fetchPassports(), fetchCustomsItems(), fetchDppMissingData(),
@@ -96,7 +101,7 @@ export async function fetchAppData() {
   ]);
 
   return {
-    accounts, products, members, inquiries, anchors,
+    accounts, products, members, anchors,
     signupApprovals, tierReviews,
     makerKpi, makerQueues, makerInputMeta, makerFieldSets,
     passports, customsItems, dppMissingData,

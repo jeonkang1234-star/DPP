@@ -13,7 +13,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY api.py extractor.py hasher.py judge.py qr.py registry.py splitter.py pipeline.py biz_reg.py ./
+# 모듈을 손으로 나열하지 않고 최상위 .py 전부를 복사한다.
+#
+# 예전에는 파일명을 하나씩 적었는데, 2026-08-19에 파서 모듈이 2개 늘면서(spec_extractor.py,
+# spec_fields.py) 그 목록에 추가하는 걸 빠뜨렸다. 결과는 이미지 빌드는 멀쩡히 성공하고
+# 컨테이너를 띄우는 순간 ModuleNotFoundError로 죽는 것 - docker compose up 로그에는
+# "dependency parser failed to start"만 뜨고 진짜 원인은 컨테이너 로그를 따로 봐야 보인다.
+#
+# 최상위에는 서비스 모듈만 있고 테스트는 tests/ 아래라 이 패턴에 안 걸린다. main.py(배치
+# CLI)가 같이 들어오지만 몇 KB짜리고, 목록 누락으로 서비스가 죽는 것보다 낫다.
+COPY *.py ./
 
 EXPOSE 8000
 

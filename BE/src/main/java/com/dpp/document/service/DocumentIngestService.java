@@ -24,6 +24,7 @@ import com.dpp.document.zkp.SteelZkpMapper;
 import com.dpp.dpp.entity.DppFieldValue;
 import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
+import com.dpp.dpp.service.SpecFieldAutoFillService;
 import com.dpp.notify.entity.Notification;
 import com.dpp.notify.entity.NotificationCategory;
 import com.dpp.notify.repository.NotificationRepository;
@@ -81,6 +82,7 @@ public class DocumentIngestService {
     private final MaterialCompositionRepository materialCompositionRepository;
     private final DppFieldValueRepository dppFieldValueRepository;
     private final ParserClient parserClient;
+    private final SpecFieldAutoFillService specFieldAutoFillService;
     private final ZkpClient zkpClient;
     private final Optional<BlockchainClient> blockchainClient;
     private final DocumentIntegrationProperties properties;
@@ -98,6 +100,7 @@ public class DocumentIngestService {
                                   MaterialCompositionRepository materialCompositionRepository,
                                   DppFieldValueRepository dppFieldValueRepository,
                                   ParserClient parserClient,
+                                  SpecFieldAutoFillService specFieldAutoFillService,
                                   ZkpClient zkpClient,
                                   Optional<BlockchainClient> blockchainClient,
                                   DocumentIntegrationProperties properties,
@@ -114,6 +117,7 @@ public class DocumentIngestService {
         this.materialCompositionRepository = materialCompositionRepository;
         this.dppFieldValueRepository = dppFieldValueRepository;
         this.parserClient = parserClient;
+        this.specFieldAutoFillService = specFieldAutoFillService;
         this.zkpClient = zkpClient;
         this.blockchainClient = blockchainClient;
         this.properties = properties;
@@ -149,7 +153,7 @@ public class DocumentIngestService {
         // 1) 파서 호출 - 텍스트 추출 + 필드 파싱 + 해시
         Map<String, Object> parsed;
         try {
-            parsed = parserClient.parse(file, REGISTRY_CODE);
+            parsed = parserClient.parse(file, REGISTRY_CODE, dpp.getDomain());
         } catch (RestClientException e) {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "문서 파서 서비스 호출에 실패했습니다: " + e.getMessage(), e);
@@ -271,6 +275,7 @@ public class DocumentIngestService {
         // 덮어쓰지 않는다.
         if (specPassed) {
             persistIdentityFields(dpp.getDppId(), orgId, userId, steelMillValues);
+            applySpecFields(dpp, orgId, userId, parsed, document.getDocumentId(), specPassed);
         }
 
         // 7) zkp_proof 행 저장 - 실측값(private input)은 어디에도 저장하지 않는다.
@@ -339,16 +344,27 @@ public class DocumentIngestService {
 
     /** 실패해도 업로드 자체는 막지 않는다 - blockchain_anchor에 성공/실패를 기록만 하고 넘어간다. */
     private String anchorDocumentHash(Document document, Long orgId) {
-        if (blockchainClient.isEmpty()) {
-            log.info("blockchain.enabled=false - documentId={} 해시 앵커링 생략", document.getDocumentId());
-            return null;
-        }
         BlockchainAnchor anchor = new BlockchainAnchor();
         anchor.setTargetType("DOCUMENT");
         anchor.setTargetId(document.getDocumentId());
         anchor.setContentHash(document.getContentHash());
         anchor.setChannelName("dppchannel");
         anchor.setChaincode("dpp-ledger-chaincode");
+        if (blockchainClient.isEmpty()) {
+            // blockchain.enabled=false(로컬·데모)여도 앵커 기록 자체는 남긴다 - 해시는 진짜고
+            // tx_id만 가상이다(V1__schema.sql: "MOCK = 1차 프로토타입(해시는 실제, tx_id는 가상)",
+            // fn_create_dpp_snapshot의 p_mock=true와 같은 원칙). 예전엔 여기서 그냥 return null
+            // 이라 문서를 아무리 올려도 blockchain_anchor에 행이 하나도 안 생겼고, 그래서 관리자
+            // 대시보드의 "최근 앵커링"이 항상 "기록 없음", "30일 성공률"이 항상 빈칸이었다
+            // (2026-08-20 강 리포트). 체인이 켜진 환경에서는 이 분기를 타지 않는다.
+            anchor.setStatus("MOCK");
+            anchor.setTxId("mock-" + anchor.getContentHash());
+            anchor.setAnchoredAt(OffsetDateTime.now());
+            blockchainAnchorRepository.save(anchor);
+            log.info("blockchain.enabled=false - targetType={} targetId={} MOCK 앵커로 기록",
+                    anchor.getTargetType(), anchor.getTargetId());
+            return anchor.getTxId();
+        }
         try {
             BlockchainClient.ChainResult result = blockchainClient.get().recordDocumentHash(
                     document.getDocumentId().toString(),
@@ -373,16 +389,27 @@ public class DocumentIngestService {
     /** 마찬가지로 실패해도 응답 자체는 정상 반환한다. */
     private String anchorZkpVerification(Document document, ZkpProof zkpProof, String publicSignalsJson,
                                           boolean verified, Long orgId) {
-        if (blockchainClient.isEmpty()) {
-            log.info("blockchain.enabled=false - proofId={} 검증결과 앵커링 생략", zkpProof.getProofId());
-            return null;
-        }
         BlockchainAnchor anchor = new BlockchainAnchor();
         anchor.setTargetType("EVENT");
         anchor.setTargetId(zkpProof.getProofId());
         anchor.setContentHash(sha256Hex(zkpProof.getProofData()));
         anchor.setChannelName("dppchannel");
         anchor.setChaincode("dpp-ledger-chaincode");
+        if (blockchainClient.isEmpty()) {
+            // blockchain.enabled=false(로컬·데모)여도 앵커 기록 자체는 남긴다 - 해시는 진짜고
+            // tx_id만 가상이다(V1__schema.sql: "MOCK = 1차 프로토타입(해시는 실제, tx_id는 가상)",
+            // fn_create_dpp_snapshot의 p_mock=true와 같은 원칙). 예전엔 여기서 그냥 return null
+            // 이라 문서를 아무리 올려도 blockchain_anchor에 행이 하나도 안 생겼고, 그래서 관리자
+            // 대시보드의 "최근 앵커링"이 항상 "기록 없음", "30일 성공률"이 항상 빈칸이었다
+            // (2026-08-20 강 리포트). 체인이 켜진 환경에서는 이 분기를 타지 않는다.
+            anchor.setStatus("MOCK");
+            anchor.setTxId("mock-" + anchor.getContentHash());
+            anchor.setAnchoredAt(OffsetDateTime.now());
+            blockchainAnchorRepository.save(anchor);
+            log.info("blockchain.enabled=false - targetType={} targetId={} MOCK 앵커로 기록",
+                    anchor.getTargetType(), anchor.getTargetId());
+            return anchor.getTxId();
+        }
         try {
             BlockchainClient.ChainResult result = blockchainClient.get().recordZkpVerification(
                     document.getDocumentId().toString(),
@@ -390,7 +417,11 @@ public class DocumentIngestService {
                     publicSignalsJson,
                     verified,
                     orgId.toString(),
-                    OffsetDateTime.now().format(TIMESTAMP_FORMAT));
+                    OffsetDateTime.now().format(TIMESTAMP_FORMAT),
+                    // 증명 산출물(proof_data)의 SHA-256 - 이 앵커 행의 content_hash와 같은 값이다.
+                    // 원장에 판정(기준값/참거짓)만 남기면 뒷받침한 증명이 나중에 바뀌어도
+                    // 확인할 수 없어서 함께 기록한다(2026-08-20 강 지적).
+                    anchor.getContentHash());
             anchor.setTxId(result.txId());
             anchor.setStatus("CONFIRMED");
             anchor.setAnchoredAt(OffsetDateTime.now());
@@ -547,4 +578,25 @@ public class DocumentIngestService {
             throw new IllegalStateException("SHA-256 알고리즘을 사용할 수 없습니다.", e);
         }
     }
+
+    /**
+     * 라벨 사전 기반 일괄 채움(parser/spec_extractor.py -> spec_fields).
+     * requirement_field.data_source='PARSER'인 필드를 문서에서 뽑아 field_code 그대로
+     * 돌려주므로 문서 유형별 분기 없이 그대로 넘긴다. 이 서비스가 원래부터 채우던 필드와
+     * 겹쳐도 양쪽 다 "비어 있을 때만" 쓰기 때문에 먼저 채운 쪽이 이긴다.
+     *
+     * 규격 판정에 실패한 문서(specPassed=false)에서는 호출하지 않는다 - "증명에 실패했으면
+     * 데이터 파싱 안되게"(2026-08-18 피드백)라는 기존 원칙 그대로다.
+     */
+    @SuppressWarnings("unchecked")
+    private void applySpecFields(Dpp dpp, Long orgId, Long userId, Map<String, Object> parsed,
+                                 Long documentId, Boolean zkpPassed) {
+        Object raw = parsed.get("spec_fields");
+        if (!(raw instanceof Map)) {
+            return;
+        }
+        specFieldAutoFillService.apply(dpp.getDppId(), dpp.getDomain(), orgId, userId,
+                (Map<String, Object>) raw, documentId, zkpPassed);
+    }
+
 }

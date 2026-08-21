@@ -51,6 +51,16 @@ public class CustomsClearanceService {
 
     private static final Logger log = LoggerFactory.getLogger(CustomsClearanceService.class);
 
+    /**
+     * 발급 자동 통관의 수입국. 데모에서는 "모든 물건이 프랑스로 나간다"고 전제한다
+     * (2026-08-20 강 요청, "일단은"). 실제 수출국이 여럿이 되면 제품/주문 정보에서 끌어와야
+     * 하는 값이라, 그때 지울 자리를 남기려고 상수로 한 곳에 모아둔다.
+     */
+    private static final String DEMO_DEFAULT_IMPORT_COUNTRY = "FR";
+
+    /** 발급 시점엔 수입업체가 정해져 있지 않다. 빈칸 대신 그 사실을 적어둔다. */
+    private static final String AUTO_IMPORTER_NAME = "발급 시 자동 생성 (수입업체 미정)";
+
     private static final Set<String> DECIDABLE = Set.of("APPROVE", "HOLD", "REJECT");
     /** EU EORI 번호 형식 - ISO 국가코드 2자 + 영숫자 최대 15자. 실제 등록 여부 조회는 하지 않는다. */
     private static final Pattern EORI_FORMAT = Pattern.compile("^[A-Z]{2}[0-9A-Z]{1,15}$");
@@ -130,6 +140,56 @@ public class CustomsClearanceService {
         log.info("통관 신청 생성: dppId={}, exportCc={}, importCc={}, 생성된 행={}건",
                 dppId, exportCc, importCc, created.size());
         return created;
+    }
+
+    /**
+     * DPP 발급 직후 통관 케이스를 자동으로 만든다 (2026-08-20 강 요청 - "완성된 DPP는 바로
+     * 세관 큐로 모이게").
+     *
+     * ■ 왜 별도 메서드인가
+     * createRequest는 제조사가 화면에서 수입국·수입업체를 직접 채워 넣는 경로다. 발급 자동
+     * 생성은 그 정보가 아직 없다 - 무엇을 어디로 팔지는 발급 시점에 정해지지 않는다.
+     * 그래서 "일단 프랑스로 나간다"는 데모 전제를 여기 한 곳에만 박아두고, 실제 수출이
+     * 확정되면 제조사가 화면에서 다시 신청하는 흐름은 그대로 둔다.
+     *
+     * ■ 중복 방지
+     * 같은 DPP로 이미 만들어진 케이스가 있으면 아무것도 하지 않는다. 발급을 두 번 눌러도
+     * 세관 큐에 같은 건이 쌓이면 안 된다.
+     *
+     * ■ 실패해도 발급은 성공해야 한다
+     * 예외를 던지지 않고 0을 돌려준다. 통관 케이스는 발급의 부가 결과이지 발급의 필요조건이
+     * 아니다(앵커링과 같은 원칙 - FieldFormService.anchorDppSnapshot 주석 참고).
+     */
+    @Transactional
+    public int autoCreateOnIssue(Long dppId, Long requesterUserId, Long requesterOrgId) {
+        try {
+            if (!customsClearanceRepository.findByDppIdOrderByCreatedAtDesc(dppId).isEmpty()) {
+                return 0;
+            }
+            Dpp dpp = dppRepository.findById(dppId).orElse(null);
+            if (dpp == null) {
+                return 0;
+            }
+            Organization ownerOrg = organizationRepository.findById(dpp.getOwnerOrgId()).orElse(null);
+            String exportCc = ownerOrg == null ? null : ownerOrg.getCountryCode();
+            if (exportCc == null || exportCc.isBlank()) {
+                log.warn("dppId={} 발급 자동 통관 생략 - 수출 조직에 국가 정보가 없음", dppId);
+                return 0;
+            }
+            String importCc = DEMO_DEFAULT_IMPORT_COUNTRY;
+
+            List<CustomsClearance> created = new ArrayList<>(createSideRows("EXPORT", exportCc, dpp,
+                    exportCc, importCc, AUTO_IMPORTER_NAME, null, null, null, requesterOrgId));
+            if (!exportCc.equalsIgnoreCase(importCc)) {
+                created.addAll(createSideRows("IMPORT", importCc, dpp, exportCc, importCc,
+                        AUTO_IMPORTER_NAME, null, null, null, requesterOrgId));
+            }
+            log.info("발급 자동 통관 생성: dppId={}, {}->{}, {}건", dppId, exportCc, importCc, created.size());
+            return created.size();
+        } catch (RuntimeException e) {
+            log.warn("dppId={} 발급 자동 통관 생성 실패(발급은 정상 처리): {}", dppId, e.getMessage());
+            return 0;
+        }
     }
 
     private List<CustomsClearance> createSideRows(String side, String matchCountry, Dpp dpp,
@@ -221,7 +281,11 @@ public class CustomsClearanceService {
     }
 
     private CustomsCaseSummaryDto toSummary(CustomsClearance row) {
-        Object[] dppSummary = customsCaseReadRepository.findDppSummary(row.getDppId()).orElse(null);
+        // firstRow로 감싼 이유: 예전엔 Optional<Object[]>를 그대로 인덱싱해서, 세관 큐를
+        // 부를 때마다 여기서 IndexOutOfBounds가 나 GET /customs/queue 전체가 500이었다.
+        // FE는 그 실패를 조용히 삼켜서(catch(()=>{})) 화면엔 "대기 중인 DPP 없음"으로만
+        // 보였다 - 2026-08-20 강 리포트 "관세청 데이터가 안 바뀌었음"의 실제 원인.
+        Object[] dppSummary = firstRow(customsCaseReadRepository.findDppSummary(row.getDppId()), 5);
         String modelName = dppSummary != null ? (String) dppSummary[1] : null;
         String exporterOrgName = dppSummary != null ? (String) dppSummary[2] : null;
         String publicUuid = dppSummary != null ? String.valueOf(dppSummary[4]) : null;
@@ -235,10 +299,9 @@ public class CustomsClearanceService {
     }
 
     private CustomsCaseDetailDto toDetail(CustomsClearance row) {
-        Optional<Object[]> dppSummaryOpt = customsCaseReadRepository.findDppSummary(row.getDppId());
-        Object[] dppSummary = dppSummaryOpt.orElse(null);
+        Object[] dppSummary = firstRow(customsCaseReadRepository.findDppSummary(row.getDppId()), 6);
         String actualHsCode = dppSummary != null ? (String) dppSummary[0] : null;
-        Long modelId = dppSummary != null ? ((Number) dppSummary[5]).longValue() : null;
+        Long modelId = dppSummary != null && dppSummary[5] instanceof Number n ? n.longValue() : null;
 
         List<CustomsCheckDto> checks = new ArrayList<>();
         checks.add(checkAnchor(row.getDppId()));
@@ -253,15 +316,34 @@ public class CustomsClearanceService {
     }
 
     private CustomsCheckDto checkAnchor(Long dppId) {
-        Optional<Object[]> anchor = customsCaseReadRepository.findLatestAnchor(dppId);
-        if (anchor.isEmpty()) {
+        Object[] anchor = firstRow(customsCaseReadRepository.findLatestAnchor(dppId), 3);
+        if (anchor == null) {
             return new CustomsCheckDto("DPP 서명 검증", false, "블록체인 앵커링 기록이 없습니다.");
         }
-        String status = String.valueOf(anchor.get()[0]);
+        String status = String.valueOf(anchor[0]);
         boolean pass = "MOCK".equals(status) || "CONFIRMED".equals(status);
-        String txId = anchor.get()[1] == null ? "—" : String.valueOf(anchor.get()[1]);
+        String txId = anchor[1] == null ? "—" : String.valueOf(anchor[1]);
         return new CustomsCheckDto("DPP 서명 검증", pass,
                 pass ? "블록체인 앵커 해시 일치 (tx: " + txId + ")" : "앵커 상태: " + status);
+    }
+
+    /**
+     * 네이티브 쿼리 결과의 첫 행을 컬럼 수까지 확인해서 꺼낸다. 행이 없거나 모양이
+     * 예상과 다르면 null - 판정 항목 하나 때문에 통관 상세 화면 전체가 500으로 죽지
+     * 않게 한다(2026-08-20, /admin/dashboard가 같은 이유로 죽었던 것과 짝 -
+     * CustomsCaseReadRepository.findDppSummary 주석 참고).
+     */
+    private Object[] firstRow(List<Object[]> rows, int minColumns) {
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        Object[] r = rows.get(0);
+        if (r == null || r.length < minColumns) {
+            log.warn("예상과 다른 쿼리 결과 모양(컬럼 {}개 필요, 실제 {}개) - 해당 판정은 건너뛴다",
+                    minColumns, r == null ? 0 : r.length);
+            return null;
+        }
+        return r;
     }
 
     private CustomsCheckDto checkHsCode(String declaredHsCode, String actualHsCode) {

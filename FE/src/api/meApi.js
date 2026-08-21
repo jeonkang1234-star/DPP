@@ -116,11 +116,19 @@ export function fetchFieldForm(dppId, domain) {
   return authedFetch(domain ? `/me/field-form?domain=${domain}` : '/me/field-form');
 }
 
-/** 임시저장 - dppId가 없으면(첫 저장) 서버가 새 product_model/dpp를 만들고 dppId를 내려준다. */
-export function saveFieldFormDraft(dppId, domain, values) {
+/**
+ * 임시저장 - dppId가 없으면(첫 저장) 서버가 새 product_model/dpp를 만들고 dppId를 내려준다.
+ *
+ * displayName: 사용자가 붙인 DPP 이름(2026-08-20). undefined면 필드 자체를 안 보내서
+ * 서버가 기존 이름을 유지한다 - 이름 칸을 건드리지 않은 저장이 이름을 지우면 안 된다.
+ * 빈 문자열을 보내면 이름을 지운다.
+ */
+export function saveFieldFormDraft(dppId, domain, values, displayName) {
+  const body = { dppId: dppId || null, domain: domain || 'STEEL', values };
+  if (displayName !== undefined) body.displayName = displayName;
   return authedFetch('/me/field-form/draft', {
     method: 'POST',
-    body: JSON.stringify({ dppId: dppId || null, domain: domain || 'STEEL', values }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -292,6 +300,21 @@ export function searchDppRegistry(q) {
   return authedFetch(`/verify/dpp/search${query}`);
 }
 
+
+/**
+ * 관리자 대시보드 상단 KPI(가입자/DPP/앵커링 현황) - com.dpp.mypage.controller.
+ * AdminDashboardController, ADMIN 계정만 200(그 외는 403). 예전엔 AppView.jsx에
+ * "1,284"/"48,392"/"#8,412,930"/"99.98%" 같은 문자열이 그대로 박혀 있었다
+ * (2026-08-19 강 요청 "현재 전부 다 목데이터인데 전부 실데이터로 변경").
+ */
+export function fetchAdminDashboard() {
+  return authedFetch('/admin/dashboard');
+}
+
+/** 관리자 "회원 관리" 표 - 조직별 보유/발행 DPP 수 포함(예전엔 data.json members 고정 배열). */
+export function fetchAdminMembers() {
+  return authedFetch('/admin/members');
+}
 
 /**
  * 통관 신청 - 발급 완료(status=ACTIVE)된 내 조직 DPP를 어느 나라로 수출하는지 선언한다

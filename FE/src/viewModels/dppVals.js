@@ -20,7 +20,7 @@ export function dppVals(ctx) {
   if (dashRow) {
     id = dashRow.dppId;
     displayId = dashRow.internalSku || ('DPP-' + dashRow.dppId);
-    name = dashRow.modelName || ('DPP #' + id);
+    name = dashRow.displayName || dashRow.modelName || ('DPP #' + id);
     done = Math.round(dashRow.completeness);
     spec = dashRow.domain || '';
   } else {
@@ -40,9 +40,18 @@ export function dppVals(ctx) {
   // 담고 있으므로 dppId로 걸러야 함), 없으면 예전 목데이터로 폴백. MissingFieldDto에는
   // "담당자 이름" 같은 건 없고 responsibleRoleName(책임 역할)/section(구분 코드)만 있어서
   // 그대로 정직하게 쓴다 - section 코드만 영문이라 최소한의 한글 라벨만 매핑.
+  // 2026-08-19: T0·T1 시딩으로 섹션이 8개에서 21개로 늘었다. 여기 없는 섹션은 'HAZARD'
+  // 같은 영문 코드가 그대로 화면에 뜨므로(|| f.section 폴백) 전부 채워둔다. 입력 폼 쪽은
+  // 서버가 code_master(FIELD_SECTION)에서 라벨을 실어 보내지만, 이 미충족 목록이 쓰는
+  // MissingFieldDto에는 section 코드만 있어서 아직 이 map이 필요하다.
   const SECTION_LABEL = {
     IDENTIFIER: '식별자', OPERATOR: '운영자·시설', SPEC: '제품 사양', MATERIAL: '조성·물질',
-    CARBON: '탄소·환경', CIRCULAR: '순환·재생', DOCUMENT: '문서', SYSTEM: '시스템'
+    CARBON: '탄소·환경', CIRCULAR: '순환·재생', DOCUMENT: '문서', SYSTEM: '시스템',
+    COMPOSITION: '셀 화학·구성', CHEMISTRY: '화학 성분', MECHANICAL: '기계적 물성',
+    PERFORMANCE: '성능·내구성', PROCESS: '공정 정보', RESOURCE: '자원·에너지',
+    CRM: '핵심 원자재', HAZARD: '유해물질·SVHC', PACKAGING: '포장재',
+    BMS: '동적 데이터(BMS)', DUE_DILIGENCE: '공급망 실사', TRADE: '원산지·통관',
+    APPROVAL: '최종 승인'
   };
   const missing = dash
     ? dash.missingFields.filter(f => f.dppId === id).map(f => [f.labelKo, f.responsibleRoleName || '제조사', SECTION_LABEL[f.section] || f.section, '#E3A008'])

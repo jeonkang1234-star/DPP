@@ -1,5 +1,6 @@
 import React from 'react';
 import QRCode from 'qrcode';
+import { publicPassportUrl } from '../publicUrl.js';
 import { updateOrganization } from '../api/meApi.js';
 
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -78,6 +79,12 @@ const ZKP_CRITERIA = {
 //  - 섬유: OEKOTEX_CERT_NO(OEKO-TEX 라벨) - OekotexIngestService, FABRIC_LOT_NO/
 //    RECYCLED_FIBER_RATE(케어라벨 또는 GRS/RCS 거래증명서) - CareLabelIngestService/
 //    DocumentSlotService
+// 2026-08-19: 이 화이트리스트는 이제 '폴백'이다. 어떤 필드가 문서에서 자동으로 채워지는지는
+// requirement_field.data_source(PARSER/MANUAL/SYSTEM)가 정답이고, 서버가 폼 응답에 실어
+// 보낸다(FieldFormItemDto.dataSource). 필드가 361개로 늘어난 이상 이 목록을 손으로 유지하는
+// 건 불가능하고, 실제로 Round 4 때 이미 한 번 어긋나서 같은 필드가 "파싱됨"과 "직접 입력"으로
+// 동시에 표시되는 버그가 났었다. 서버가 dataSource를 안 주는 경우(구버전 BE)에만 아래 목록을
+// 쓴다 - 그때는 적어도 예전과 똑같이 동작한다.
 const AUTO_FILL_FIELD_CODES = new Set([
   'GTIN', 'PCF_VALUE', 'PCF_METHOD', 'RECYCLABILITY_NOTE', 'ORIGIN_COUNTRY', 'UOI_MANUFACTURER',
   'RECYCLED_SCRAP_RATE', 'HEAT_NO', 'LOT_NO', 'STEEL_GRADE', 'STEEL_STANDARD', 'DIMENSION', 'NET_WEIGHT_T',
@@ -110,12 +117,137 @@ const AUTO_FILL_DOC_NAME = {
   FABRIC_LOT_NO: '섬유 케어라벨', RECYCLED_FIBER_RATE: '섬유 케어라벨/GRS 거래증명서'
 };
 
+// ── 필드 메타데이터 해석 (2026-08-19, T0·T1 시딩) ───────────────────────────
+// 아래 4개는 전부 "서버가 준 값이 있으면 그걸 쓰고, 없으면 예전처럼 동작한다" 구조다.
+// 구버전 BE와 붙어도 화면이 깨지지 않게 하기 위한 것.
+
+// 배지는 T0(법정필수)에만 붙인다. T1(조건부)·T2·T3·T4는 "써도 되고 안 써도 되는" 칸이라
+// 굳이 라벨을 달 이유가 없고, 361개 필드 옆에 파란 "조건부"가 줄줄이 붙으면 정작 눈에
+// 띄어야 할 빨간 "법정필수"가 묻힌다(2026-08-20 강 요청 "조건부 = 적어도 되고 안 적어도
+// 되는 항목이라면 굳이 표시할 필요 X"). 등급 자체는 f.tier로 남아 있어서 정렬(법정필수
+// 우선)과 근거 조항 툴팁은 그대로 동작한다.
+const TIER_LABEL = { T0: '법정필수' };
+const DISCLOSURE_LABEL = { RESTRICTED: '권한자 한정', TRADE_SECRET: '영업비밀(ZKP 대체)' };
+
+/** 이 필드가 문서 파싱으로 채워지는가. 서버의 data_source가 정답, 없으면 구 화이트리스트. */
+function isParserField(f) {
+  if (f.dataSource) return f.dataSource === 'PARSER';
+  return AUTO_FILL_FIELD_CODES.has(f.fieldCode);
+}
+
+/** data_type -> 입력 위젯 종류. code_group이 붙은 CODE만 드롭다운이 된다(선택지가 실제로
+ *  있는 경우에만 - V22에서 선택지를 못 심은 Enum은 code_group을 비워뒀다). */
+function inputKindOf(f) {
+  if (f.dataType === 'CODE' && f.codeGroup) return 'select';
+  switch (f.dataType) {
+    case 'BOOLEAN': return 'boolean';
+    case 'NUMBER': return 'number';
+    case 'DATE': return 'date';
+    case 'DATETIME': return 'datetime';
+    case 'URL': return 'url';
+    case 'TEXT': return 'textarea';
+    default: return 'text';
+  }
+}
+
+/** 폼 응답의 codeOptions에서 이 필드가 쓸 선택지만 뽑는다. */
+function optionsFor(f, codeOptions) {
+  if (!f.codeGroup || !codeOptions) return [];
+  return codeOptions
+    .filter(o => o.codeGroup === f.codeGroup)
+    .map(o => ({ value: o.code, label: o.nameKo }));
+}
+
+/**
+ * 영업비밀(TRADE_SECRET) 필드의 O/X 표시값. 그 외 필드는 zkpOnly:false만 돌려준다.
+ *
+ * 저장된 값은 실측치가 아니라 판정 토큰이다("충족"/"미충족", SpecFieldAutoFillService).
+ * 혹시 예전 데이터에 숫자가 남아 있어도 화면에는 절대 숫자를 그리지 않는다 - 값이
+ * 비어 있지 않으면 "충족"으로만 본다(미충족은 정확히 그 토큰일 때만).
+ */
+function zkpVerdictOf(f) {
+  if (f.disclosureScope !== 'TRADE_SECRET') {
+    return { zkpOnly: false };
+  }
+  const v = (f.value || '').trim();
+  const failed = v === '미충족';
+  const passed = !!v && !failed;
+  return {
+    zkpOnly: true,
+    zkpMark: passed ? 'O' : failed ? 'X' : '–',
+    zkpLabel: passed ? '한계값 충족' : failed ? '한계값 미충족' : '미제출',
+    zkpFg: passed ? '#0E7A3D' : failed ? '#C22B2B' : '#6B7A93',
+    zkpBg: passed ? 'rgba(18,161,80,.14)' : failed ? 'rgba(194,43,43,.12)' : 'rgba(132,148,172,.14)',
+    zkpHint: passed ? '영지식증명으로 검증됨 · 실측값은 저장하지 않습니다'
+      : failed ? '성적서 규격 미달 · 문서를 다시 제출해 주세요'
+      : '성적서를 업로드하면 영지식증명으로 판정됩니다'
+  };
+}
+
+/**
+ * 섹션별로 필드를 묶는다. 서버가 sections를 주면 그 순서를 그대로 따르고(code_master의
+ * FIELD_SECTION sort_order), 안 주면 필드에 나온 순서대로 만든다.
+ *
+ * 섹션 안에서 다시 파싱/수기로 나누는 이유: 이 두 축은 서로 대체하는 게 아니라 직교한다.
+ * "화학 성분" 섹션 안에도 성적서에서 자동으로 오는 값과 직접 쳐야 하는 값이 같이 있다.
+ * 예전엔 파싱/수기 두 덩어리만 있어서, 361개가 되면 각 덩어리가 그냥 긴 벽이 된다.
+ */
+function groupBySection(fields, sections, openMap, setState) {
+  const order = (sections && sections.length)
+    ? sections.map(sec => sec.section)
+    : [...new Set(fields.map(f => f.section))];
+  const labelOf = {};
+  (sections || []).forEach(sec => { labelOf[sec.section] = sec.labelKo || sec.section; });
+
+  // 법정필수(T0)를 맨 위로(2026-08-20 강 요청). 섹션 사이에서는 T0 필수 항목을 가진
+  // 섹션이 먼저 오고, 섹션 안에서는 T0 필드가 먼저 온다. 같은 등급끼리는 서버가 준
+  // sort_order 순서를 그대로 지킨다(안정 정렬).
+  const t0First = (a, b) => (a.tier === 'T0' ? 0 : 1) - (b.tier === 'T0' ? 0 : 1);
+  const hasT0 = key => fields.some(f => f.section === key && f.tier === 'T0');
+  const sortedOrder = order
+    .map((key, idx) => ({ key, idx }))
+    .sort((a, b) => (hasT0(a.key) ? 0 : 1) - (hasT0(b.key) ? 0 : 1) || a.idx - b.idx)
+    .map(o => o.key);
+
+  return sortedOrder.map((key, idx) => {
+    const mine = fields.filter(f => f.section === key).slice().sort(t0First);
+    const required = mine.filter(f => f.req === '필수');
+    const filled = required.filter(f => f.value && String(f.value).trim());
+    // 첫 섹션만 기본으로 열어둔다. 21개 섹션이 전부 펼쳐진 채로 뜨면 스크롤이 수백 줄이다.
+    const open = openMap && Object.prototype.hasOwnProperty.call(openMap, key)
+      ? !!openMap[key]
+      : idx === 0;
+    return {
+      key,
+      label: labelOf[key] || key,
+      total: mine.length,
+      requiredCount: required.length,
+      filledRequiredCount: filled.length,
+      // 필수 항목이 하나도 안 채워졌으면 빨강, 다 채웠으면 초록, 그 사이는 주황.
+      progressColor: required.length === 0 ? '#8494AC'
+        : filled.length === required.length ? '#12A150'
+        : filled.length === 0 ? '#E03B3B' : '#E3A008',
+      open,
+      toggle: () => setState(st => ({
+        openFieldSections: { ...(st.openFieldSections || {}), [key]: !open }
+      })),
+      parsed: mine.filter(f => f.autoFillable),
+      manual: mine.filter(f => !f.autoFillable)
+    };
+  }).filter(sec => sec.total > 0);
+}
+
 /**
  * Builds the view-model slice consumed by AppView.
  * @param ctx shared context from useAppLogic (state, setState, props, style + helper fns)
  */
 export function makerVals(ctx) {
   const { state, setState, props, data } = ctx;
+  /**
+   * 저장 요청에 실어 보낼 DPP 이름. 사용자가 이름 칸을 한 번도 안 건드렸으면 undefined를
+   * 돌려줘서 필드 자체를 안 보낸다 - 서버가 기존 이름을 그대로 둔다(meApi.js 주석 참고).
+   */
+  const dppNameToSend = () => (state.dppNameInput == null ? undefined : state.dppNameInput.trim());
   const r = state.role;
   const p = ctx.profile();
   const kpi = data.makerKpi[r] || ['0', 0, 0, 0, 0, 0];
@@ -128,7 +260,9 @@ export function makerVals(ctx) {
   const completenessRows = dash
     ? dash.dpps.map(d => {
         const done = Math.round(d.completeness);
-        return [d.dppId, d.internalSku || ('DPP-' + d.dppId), d.modelName || '(이름 없음)', done, 0, 100 - done];
+        // 사용자가 붙인 이름이 있으면 그걸 먼저 보여준다(2026-08-20 강 요청) - 같은
+        // 모델로 여러 DPP를 만들면 모델명만으로는 목록에서 서로 구분이 안 됐다.
+        return [d.dppId, d.internalSku || ('DPP-' + d.dppId), d.displayName || d.modelName || '(이름 없음)', done, 0, 100 - done];
       })
     : ctx.compData().map(([id, name, done, prog, none]) => [id, id, name, done, prog, none]);
   const inputMeta = data.makerInputMeta[r] || {};
@@ -145,6 +279,9 @@ export function makerVals(ctx) {
   const hasRealFieldForm = r === 'steel' || r === 'textile' || r === 'battery';
   const ff = hasRealFieldForm ? ctx.fieldFormData : null;
   const ffInputs = ctx.fieldFormInputs || {};
+  // Enum 필드 드롭다운 선택지(code_master) - 폼 응답에 같이 온다. 구버전 BE면 빈 배열이라
+  // inputKindOf가 select 대신 text로 떨어진다.
+  const codeOptions = ff && ff.codeOptions ? ff.codeOptions : [];
   const ffFilledCount = ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0;
   // 이번 세션에 문서 업로드로 "방금 채워진" 필드 - { [fieldCode]: 문서라벨 }. 파싱된
   // 데이터인지 수기 입력해야 하는 데이터인지 구별해서 보여주기 위함(2026-08-17 강 요청).
@@ -173,8 +310,9 @@ export function makerVals(ctx) {
   // 입력해야만 발급 가능, 그 전엔 임시저장만 가능. ff(실 폼)가 없는 레거시 경로(아직 시딩
   // 안 된 도메인)는 이 조건이 적용될 데이터 자체가 없으므로 기존 동작(항상 발급 가능)을
   // 그대로 둔다 - 정확한 검증 근거 없이 막으면 오히려 더 헷갈린다.
-  // 제품조회 작성중/작성완료 필터(2026-08-17 강 요청) - 완성도 100%(=isIssued)를
-  // "작성완료", 그 미만을 "작성중" 기준으로 나눈다. 기존에도 버튼 자리(상태 전체/기간
+  // 제품조회 작성중/발급 완료 필터(2026-08-17 강 요청) - 완성도 100%(=isIssued)를
+  // "발급 완료", 그 미만을 "작성중" 기준으로 나눈다. 라벨을 "작성완료"에서 바꾼 이유:
+  // 같은 상태를 화면마다 다른 이름으로 부르고 있었다(2026-08-20 강 요청 - "발급 완료"로 통일). 기존에도 버튼 자리(상태 전체/기간
   // 90일)는 있었지만 onClick이 없어 눌러도 아무 동작이 없었다.
   const pStatusFilter = state.productStatusFilter || 'all';
   const requiredFieldsOk = ff ? ff.fields.filter(f => f.required).every(f => !!ffInputs[f.fieldCode]) : true;
@@ -183,6 +321,94 @@ export function makerVals(ctx) {
   const issueDisabledHint = issueReady ? '' : !requiredFieldsOk
     ? `필수 필드를 모두 입력해야 발급할 수 있습니다. (${ffFilledCount}/${ff ? ff.fields.length : 0})`
     : '필수 문서를 모두 제출·검증 완료해야 발급할 수 있습니다.';
+  // 입력 폼 필드 목록. 예전엔 return 객체 안에 인라인으로 있었는데, 섹션 묶음
+  // (fieldSections)이 같은 목록을 다시 봐야 해서 밖으로 뺐다.
+  const formFields = ff
+    // 파싱되는(자동 채움) 필드를 위쪽에, 수기 입력 필드를 아래쪽에 배치(2026-08-18 강
+    // 요청) - AUTO_FILL_FIELD_CODES 화이트리스트 기준 안정 정렬(같은 그룹 안에서는
+    // 서버가 내려준 원래 순서 유지), documentSlots의 required 정렬과 동일한 패턴.
+    ? [...ff.fields].sort((a, b) => (isParserField(b) ? 1 : 0) - (isParserField(a) ? 1 : 0)).map(f => {
+        const value = ffInputs[f.fieldCode] || '';
+        const parsedFrom = parsedSources[f.fieldCode];
+        const isAutoFillable = isParserField(f);
+        // 파싱됨/수기 입력 구분(2026-08-17 강 요청, 재수정): 어떤 필드가 실제로 문서에서
+        // 자동 채워지는지는 백엔드 로직(AUTO_FILL_FIELD_CODES 주석 참고)에 정확히 정의돼
+        // 있으므로, 그 화이트리스트를 기준으로 판정한다 - 이번 세션에 업로드로 방금 채운
+        // 게 감지되면 어느 문서에서 왔는지까지 표시하고, 새로고침 등으로 감지를 놓쳤어도
+        // 화이트리스트 필드에 값이 있으면 "파싱됨"으로 인정한다. 화이트리스트 필드인데
+        // 아직 비어있으면 "문서에 없음"이 아니라 "문서 업로드 시 자동 인식"으로 안내한다
+        // (문서를 아직 안 올렸을 뿐, 언젠가 채워질 필드라는 뜻). 화이트리스트 밖의
+        // 필드(Heat No/강종 등 26개)는 애초에 어떤 문서에서도 자동 추출되지 않는
+        // 순수 수기입력 항목이라 "직접 입력 항목"으로 중립적으로 표시한다.
+        // 2026-08-18 강 요청: "~페이지에서 파싱" 문구가 반복되면 너무 길어지니 "파싱(문서명)"
+        // 형태로 축약. sourceChip(항목 이름 옆 배지)은 AppView.jsx에서 더 이상 렌더링하지
+        // 않고(중복 표시 제거 요청) 이 sourceLabel 하나만 항목 아래에 표시한다.
+        let sourceLabel; let sourceChip;
+        if (parsedFrom) {
+          sourceLabel = '파싱(' + parsedFrom + ')';
+          sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
+        } else if (isAutoFillable && value) {
+          sourceLabel = '파싱(' + (AUTO_FILL_DOC_NAME[f.fieldCode] || '업로드 문서') + ')';
+          sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
+        } else if (isAutoFillable && !value) {
+          sourceLabel = (AUTO_FILL_DOC_NAME[f.fieldCode] || '문서') + ' 업로드 시 자동 인식';
+          sourceChip = ctx.chip('rgba(0,69,169,.10)', '#0045A9');
+        } else if (!value) {
+          sourceLabel = '직접 입력 항목';
+          sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
+        } else {
+          sourceLabel = '직접 입력됨';
+          sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
+        }
+        // 2026-08-18 강 요청: "파싱된 이후로는 안지워지게 막기 - 수정하려면 수정 버튼
+        // 누르고 수정". 파싱된 상태(이번 세션에 감지됐거나, 화이트리스트 필드에 값이
+        // 이미 있는 경우)인 필드는 기본적으로 읽기 전용으로 잠그고, "수정" 버튼을 눌러
+        // 이 세션에서 한 번 잠금 해제해야 편집 가능해진다. 수기 입력 필드는 애초에
+        // 잠글 대상이 아니라 항상 편집 가능.
+        const isParsed = !!parsedFrom || (isAutoFillable && !!value);
+        const unlocked = !!(state.unlockedFields && state.unlockedFields[f.fieldCode]);
+        const locked = isParsed && !unlocked;
+        return {
+          key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
+          labelEn: f.labelEn || '',
+          req: f.required ? '필수' : '선택', ph: f.helpText || '', value,
+          hint: f.helpText || '', sourceLabel, sourceChip,
+          autoFillable: isAutoFillable,
+          section: f.section || 'SYSTEM',
+          // 입력 위젯 종류. 지금까지 361개 필드를 전부 <input type=text>로 받았다 -
+          // 날짜에 "2026/08/19"와 "26.8.19"가 섞여 들어오고, Enum에는 "코일"과 "Coil"이
+          // 같이 들어왔다. data_type/code_group으로 위젯을 갈라준다.
+          inputKind: inputKindOf(f),
+          options: optionsFor(f, codeOptions),
+          // T0(법정필수)인지 T1(조건부필수)인지. 제조사 입장에서 "EU 법이 요구하는 칸"과
+          // "우리가 그냥 받는 칸"은 채우는 우선순위가 완전히 다른데 지금까지 화면에서
+          // 구분이 안 됐다.
+          tier: f.tier || '',
+          tierLabel: TIER_LABEL[f.tier] || '',
+          // 배경 없는 입체 글자(2026-08-20 강 요청) - 색만으로 등급을 구분한다.
+          tierStyle: ctx.badgeText3d(f.tier === 'T0' ? '#C22B2B' : f.tier === 'T1' ? '#0045A9' : '#6B7A93'),
+          // 근거 조항 + T1 발동 조건. 항상 펼쳐두면 폼이 법령 인용으로 뒤덮이니
+          // 툴팁(title 속성)으로만 붙인다.
+          basisTip: [f.legalBasis, f.t1Condition ? '발동 조건: ' + f.t1Condition : '']
+            .filter(Boolean).join(' / '),
+          restricted: f.disclosureScope && f.disclosureScope !== 'PUBLIC',
+          disclosureLabel: DISCLOSURE_LABEL[f.disclosureScope] || '',
+          // 영업비밀(ZKP 대체) 항목은 실측값을 아예 다루지 않는다(2026-08-20 강 지적:
+          // "규정을 검수하는 데이터면 O, X만 보여줘야 하는 것 아닌지"). 서버도 이 필드에는
+          // 값 대신 판정 토큰("충족"/"미충족")만 저장한다 - SpecFieldAutoFillService 참고.
+          // 그래서 화면도 입력칸 대신 O/X 배지로 그린다.
+          ...zkpVerdictOf(f),
+          // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
+          inputBorderColor: value ? '#12A150' : '#E03B3B',
+          locked,
+          unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [f.fieldCode]: true } })),
+          onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
+        };
+      })
+    : fieldSets.map(([label, req, ph, value, hint]) => ({
+        key: label, label, req, ph, value, hint, sourceLabel: '', sourceChip: null, onChange: undefined
+      }));
+
   return {
     kpiTotal: dash ? String(dash.totalCount) : kpi[0],
     // "이번 달 신규" - 2026-08-19 수정: 예전엔 실데이터 쪽에 대응하는 집계가 없어서
@@ -223,7 +449,7 @@ export function makerVals(ctx) {
       ctx.setRecyclingResult(null);
       ctx.setFieldFormInputs({});
       ctx.setDocumentFormData(null);
-      setState({ tab: 'input', fieldFormDppId: null, parsedFieldSources: {}, unlockedFields: {}, qrModal: null });
+      setState({ tab: 'input', fieldFormDppId: null, dppNameInput: null, parsedFieldSources: {}, unlockedFields: {}, qrModal: null });
     },
     // 최근 작업 조회 DPP(2026-08-17 강 요청) - 예전 "대기작업 큐"(마감일 D-1/D-2 같은
     // 가짜 워크플로 문구)를 걷어내고, 실제 있는 DPP 중 최근 것 몇 건만 핵심 데이터
@@ -240,7 +466,7 @@ export function makerVals(ctx) {
         ...(done === 100 ? ctx.badgeText3d('#0E7A3D') : done === 0 ? ctx.badgeText3d('#6B7A93') : ctx.badgeText3d('#96660A')),
         fontSize: '11.5px'
       },
-      open: () => setState({ tab: 'input', fieldFormDppId: openId, parsedFieldSources: {}, unlockedFields: {}, qrModal: null })
+      open: () => setState({ tab: 'input', fieldFormDppId: openId, dppNameInput: null, parsedFieldSources: {}, unlockedFields: {}, qrModal: null })
     })),
     recentDppsEmpty: completenessRows.length === 0,
     // 2026-08-17 강 정정: "완성도" 그래프/목록 카드는 원래대로 유지하고(제목만 "입력률"로),
@@ -249,10 +475,13 @@ export function makerVals(ctx) {
     completeness: completenessRows.map(([openId, displayId, name, done, prog, none]) => ({
       key: openId, id: displayId, name, pct: done,
       pctStyle: ctx.pctStyle(done),
-      // 2026-08-19 강 요청: "DPP 입력률 그래프가 너무 2D라 생동감 없고 재미없음" - 단색
-      // 평면 세그먼트를 광택+음영이 있는 segStyle3D로 교체(색은 기존과 동일).
-      segs: [{ key: 'a', style: ctx.segStyle3D(done, '#12A150') }, { key: 'b', style: ctx.segStyle3D(prog, '#E3A008') }, { key: 'c', style: ctx.segStyle3D(none, '#E03B3B') }],
-      trackStyle: ctx.groove3d('#EEF2F8'),
+      // 색 구성(2026-08-20 강 요청 "파란색 - 흰색으로 구성"): 채운 만큼이 파랑, 남은
+      // 만큼이 흰색이다. 예전엔 초록/주황/빨강 3색 신호등이었는데, 입력률은 좋고 나쁨을
+      // 판정하는 값이 아니라 "얼마나 찼는가"라서 한 가지 색의 농담으로 읽는 게 맞다.
+      // 부분 입력(prog)은 정보를 버리지 않도록 옅은 파랑으로 남긴다.
+      // 입체감(segStyle3D + groove3d)은 2026-08-19 요청대로 유지.
+      segs: [{ key: 'a', style: ctx.segStyle3D(done, '#0045A9') }, { key: 'b', style: ctx.segStyle3D(prog, '#7FA8E0') }, { key: 'c', style: ctx.segStyle3D(none, '#FFFFFF') }],
+      trackStyle: ctx.groove3d('#FFFFFF'),
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
     // KPI 카드 줄의 "평균 완성도" 자리에 들어갈 정적 규정 업데이트 안내 - 카드 폭이 좁아서
@@ -284,20 +513,35 @@ export function makerVals(ctx) {
     // "입력 검증 결과" 패널(2026-08-17 강 요청) - 예전엔 오른쪽 사이드 컬럼에 항상 펼쳐진
     // 채로 자리를 차지했는데, 어차피 열고닫는 토글이니 단일발급/배치발급 버튼 옆으로 옮기고
     // 기본은 닫아둬서 필수 문서·기본 정보 카드가 더 넓게 보이게 한다.
-    validationOpen: !!state.validationOpen,
-    toggleValidation: () => setState(s => ({ validationOpen: !s.validationOpen })),
-    validationWarnCount: ff ? (ffFilledCount === ff.fields.length ? 0 : 1) : (fieldSets.every(f => !!f[3]) ? 0 : 1),
+    // "입력 검증 결과" 토글은 삭제했다(2026-08-20 강 요청) - 그 패널이 보여주던 "필수 필드
+    // n/m 입력 완료"는 바로 아래 강재 기본 정보 카드 헤더의 "n/m 입력됨"과 완전히 같은
+    // 숫자였다. 그 자리에는 DPP 이름 토글이 들어간다.
+    dppTitleOpen: state.dppTitleOpen != null ? state.dppTitleOpen : !(ff && ff.dppId),
+    toggleDppTitle: () => setState(s => ({
+      dppTitleOpen: s.dppTitleOpen != null ? !s.dppTitleOpen : !!(ff && ff.dppId)
+    })),
+    // 이름이 아직 없으면 버튼에 점을 찍어 "여기서 이름을 붙일 수 있다"를 알린다.
+    dppTitleUnset: !((state.dppNameInput != null ? state.dppNameInput : ((ff && ff.displayName) || '')).trim()),
     // ff(실 폼)가 있으면 실제로 저장한다 - 없으면(battery/textile, 아직 시딩 없음) 기존
     // 목데이터 토스트만 보여준다.
     lastSavedLabel: (state.draftSavedAt && state.draftSavedAt[r]) ? ('마지막 임시저장 ' + state.draftSavedAt[r]) : '아직 임시저장한 이력이 없습니다',
+    // DPP 이름(2026-08-20 강 요청) - 사용자가 붙이는 내부 식별용 이름이다. 서버가 준 값이
+    // 있으면 그걸 초기값으로 쓰고, 사용자가 타이핑을 시작하면 state 쪽이 우선한다.
+    // 규제 항목이 아니라 requirement_field에 넣지 않았고, 공개 여권·EU 레지스트리에도
+    // 나가지 않는다(V27 주석 참고).
+    // 키 이름이 dppName이 아니라 dppTitle인 이유: dppVals가 상세 드로어 제목을 dppName으로
+    // 이미 내보내고 있고, useAppLogic이 makerVals보다 dppVals를 나중에 펼쳐서 덮어써 버린다.
+    dppTitle: state.dppNameInput != null ? state.dppNameInput : ((ff && ff.displayName) || ''),
+    onDppTitle: (e) => setState({ dppNameInput: e.target.value }),
+    dppTitlePlaceholder: '예) 3월 유럽향 열연코일 1차',
     saveDraft: async () => {
       if (!ff) { ctx.say('임시저장했습니다.'); return; }
       try {
         const isNewDpp = !ff.dppId;
-        const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
+        const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend());
         ctx.setFieldFormData(result);
         ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        setState(s => ({ fieldFormDppId: result.dppId, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
+        setState(s => ({ fieldFormDppId: result.dppId, dppNameInput: null, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
         // 새 DPP가 이번 임시저장으로 처음 생겼으면 dashboardData(제품 조회/최근 작업 DPP
         // 조회의 출처)도 같이 갱신한다 - issueDpp와 같은 이유(2026-08-18 강 리포트).
         if (isNewDpp) ctx.refreshDashboard();
@@ -320,7 +564,7 @@ export function makerVals(ctx) {
         // 하고 임시저장 버튼을 안 누른 값은 서버에 저장 안 된 채로 발급이 진행돼 버렸다
         // (발급은 서버에 이미 저장된 dpp_field_value만 보고 처리하기 때문). dppId 유무와
         // 상관없이 항상 먼저 현재 ffInputs로 저장한 뒤 그 결과로 발급한다.
-        const saved = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
+        const saved = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend());
         const dppId = saved.dppId;
         setState({ fieldFormDppId: dppId });
         const issued = await ctx.issueFieldFormDpp(dppId);
@@ -340,11 +584,11 @@ export function makerVals(ctx) {
         const displayId = issued.internalSku || ('DPP-' + issued.dppId);
         const snapshot = (issued.fields || []).map(f => ({ label: f.labelKo, value: f.value || '', required: f.required }));
         try {
-          const passportUrl = issued.publicUuid ? (window.location.origin + '/p/' + issued.publicUuid) : displayId;
+          const passportUrl = publicPassportUrl(issued.publicUuid) || displayId;
           const dataUrl = await QRCode.toDataURL(passportUrl, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } });
           setState(s => ({
             issuedPassportCache: { ...(s.issuedPassportCache || {}), [displayId]: { material: r, formLabel: inputMeta.form, fields: snapshot } },
-            qrModal: { id: displayId, dataUrl, showProductsLink: true }
+            qrModal: { id: displayId, dataUrl, showProductsLink: true, url: passportUrl }
           }));
         } catch (qrErr) {
           // QR 이미지 생성만 실패해도 발급 자체(실데이터, 블록체인 앵커링)는 이미 끝났으니
@@ -370,66 +614,11 @@ export function makerVals(ctx) {
     goToProductsFromQr: () => setState({ tab: 'products', qrModal: null }),
     // ff가 있으면(철강 역할) requirement_field 실 라벨/필수여부 + dpp_field_value 실 저장값,
     // 없으면 기존 목데이터 폼("SPHC" 같은 예시값 포함, 미시딩 도메인 한정 - 위 주석 참고).
-    fields: ff
-      // 파싱되는(자동 채움) 필드를 위쪽에, 수기 입력 필드를 아래쪽에 배치(2026-08-18 강
-      // 요청) - AUTO_FILL_FIELD_CODES 화이트리스트 기준 안정 정렬(같은 그룹 안에서는
-      // 서버가 내려준 원래 순서 유지), documentSlots의 required 정렬과 동일한 패턴.
-      ? [...ff.fields].sort((a, b) => (AUTO_FILL_FIELD_CODES.has(b.fieldCode) ? 1 : 0) - (AUTO_FILL_FIELD_CODES.has(a.fieldCode) ? 1 : 0)).map(f => {
-          const value = ffInputs[f.fieldCode] || '';
-          const parsedFrom = parsedSources[f.fieldCode];
-          const isAutoFillable = AUTO_FILL_FIELD_CODES.has(f.fieldCode);
-          // 파싱됨/수기 입력 구분(2026-08-17 강 요청, 재수정): 어떤 필드가 실제로 문서에서
-          // 자동 채워지는지는 백엔드 로직(AUTO_FILL_FIELD_CODES 주석 참고)에 정확히 정의돼
-          // 있으므로, 그 화이트리스트를 기준으로 판정한다 - 이번 세션에 업로드로 방금 채운
-          // 게 감지되면 어느 문서에서 왔는지까지 표시하고, 새로고침 등으로 감지를 놓쳤어도
-          // 화이트리스트 필드에 값이 있으면 "파싱됨"으로 인정한다. 화이트리스트 필드인데
-          // 아직 비어있으면 "문서에 없음"이 아니라 "문서 업로드 시 자동 인식"으로 안내한다
-          // (문서를 아직 안 올렸을 뿐, 언젠가 채워질 필드라는 뜻). 화이트리스트 밖의
-          // 필드(Heat No/강종 등 26개)는 애초에 어떤 문서에서도 자동 추출되지 않는
-          // 순수 수기입력 항목이라 "직접 입력 항목"으로 중립적으로 표시한다.
-          // 2026-08-18 강 요청: "~페이지에서 파싱" 문구가 반복되면 너무 길어지니 "파싱(문서명)"
-          // 형태로 축약. sourceChip(항목 이름 옆 배지)은 AppView.jsx에서 더 이상 렌더링하지
-          // 않고(중복 표시 제거 요청) 이 sourceLabel 하나만 항목 아래에 표시한다.
-          let sourceLabel; let sourceChip;
-          if (parsedFrom) {
-            sourceLabel = '파싱(' + parsedFrom + ')';
-            sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
-          } else if (isAutoFillable && value) {
-            sourceLabel = '파싱(' + (AUTO_FILL_DOC_NAME[f.fieldCode] || '업로드 문서') + ')';
-            sourceChip = ctx.chip('rgba(18,161,80,.12)', '#0E7A3D');
-          } else if (isAutoFillable && !value) {
-            sourceLabel = (AUTO_FILL_DOC_NAME[f.fieldCode] || '문서') + ' 업로드 시 자동 인식';
-            sourceChip = ctx.chip('rgba(0,69,169,.10)', '#0045A9');
-          } else if (!value) {
-            sourceLabel = '직접 입력 항목';
-            sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
-          } else {
-            sourceLabel = '직접 입력됨';
-            sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
-          }
-          // 2026-08-18 강 요청: "파싱된 이후로는 안지워지게 막기 - 수정하려면 수정 버튼
-          // 누르고 수정". 파싱된 상태(이번 세션에 감지됐거나, 화이트리스트 필드에 값이
-          // 이미 있는 경우)인 필드는 기본적으로 읽기 전용으로 잠그고, "수정" 버튼을 눌러
-          // 이 세션에서 한 번 잠금 해제해야 편집 가능해진다. 수기 입력 필드는 애초에
-          // 잠글 대상이 아니라 항상 편집 가능.
-          const isParsed = !!parsedFrom || (isAutoFillable && !!value);
-          const unlocked = !!(state.unlockedFields && state.unlockedFields[f.fieldCode]);
-          const locked = isParsed && !unlocked;
-          return {
-            key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
-            req: f.required ? '필수' : '선택', ph: f.helpText || '', value,
-            hint: f.helpText || '', sourceLabel, sourceChip,
-            autoFillable: isAutoFillable,
-            // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
-            inputBorderColor: value ? '#12A150' : '#E03B3B',
-            locked,
-            unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [f.fieldCode]: true } })),
-            onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
-          };
-        })
-      : fieldSets.map(([label, req, ph, value, hint]) => ({
-          key: label, label, req, ph, value, hint, sourceLabel: '', sourceChip: null, onChange: undefined
-        })),
+    fields: formFields,
+    // 섹션 묶음(식별자 / 화학 성분 / 탄소·CBAM ...). 서버가 sections를 주면 그 순서를
+    // 따르고, 안 주면 필드 등장 순서로 만든다. 21개 섹션이 전부 펼쳐지면 스크롤이
+    // 수백 줄이라 첫 섹션만 열어둔다.
+    fieldSections: ff ? groupBySection(formFields, ff.sections, state.openFieldSections, setState) : [],
     fieldCheck: ff
       ? ff.fields.map(f => {
           const value = ffInputs[f.fieldCode] || '';
@@ -660,23 +849,6 @@ export function makerVals(ctx) {
     documentSlotsEmpty: df ? df.documents.length === 0 : true,
     openFieldCheck: () => setState({ fieldCheckOpen: true }),
     closeFieldCheck: () => setState({ fieldCheckOpen: false }),
-    validations: [
-      ['필수 필드 충족', (ff ? ffFilledCount : fieldSets.filter(f => !!f[3]).length) + ' / ' + (ff ? ff.fields.length : fieldSets.length) + '개 입력 완료', (ff ? ffFilledCount === ff.fields.length : fieldSets.every(f => !!f[3])) ? '#12A150' : '#E3A008', true]
-    ].map(([label, detail, c, clickable]) => ({
-      key: label, label, detail, dot: ctx.dot(c),
-      arrow: clickable ? '→' : '',
-      rowStyle: {
-        display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 11, alignItems: 'flex-start',
-        padding: clickable ? '10px 12px' : '10px 12px',
-        margin: '0 -12px',
-        border: clickable ? '1px solid rgba(16,32,64,.09)' : '1px solid transparent',
-        borderRadius: 12,
-        background: clickable ? '#FBFCFE' : 'transparent',
-        cursor: clickable ? 'pointer' : 'default',
-        textAlign: 'left'
-      },
-      open: () => { if (clickable) setState({ fieldCheckOpen: true }); }
-    })),
     // "협력사 초대"는 이제 회사 대 회사 일반 연결이 아니라 특정 DPP에 대한 초대 - 화면에
     // 먼저 이 조직의 DPP 목록을 보여주고, 하나를 고르면 그 DPP에 여러 협력사를 한 번에
     // 초대할 수 있다(DppParticipant가 그 DPP의 "누가 뭘 채우는지" 실제 연결이 됨).
@@ -696,7 +868,7 @@ export function makerVals(ctx) {
       return [...eligible].sort((a, b) => a.dppId - b.dppId).map(d => {
         const selected = state.partnersDppId === d.dppId;
         return {
-          key: d.dppId, id: d.internalSku || ('DPP-' + d.dppId), name: d.modelName || ('DPP #' + d.dppId),
+          key: d.dppId, id: d.internalSku || ('DPP-' + d.dppId), name: d.displayName || d.modelName || ('DPP #' + d.dppId),
           pct: Math.round(d.completeness), selected,
           cardStyle: {
             display: 'flex', flexDirection: 'column', gap: 4, minWidth: 168, padding: '12px 14px',
@@ -712,7 +884,7 @@ export function makerVals(ctx) {
     partnersHasSelection: !!state.partnersDppId,
     partnersSelectedDppName: (() => {
       const found = dash && dash.dpps.find(d => d.dppId === state.partnersDppId);
-      return found ? (found.modelName || ('DPP #' + found.dppId)) : '';
+      return found ? (found.displayName || found.modelName || ('DPP #' + found.dppId)) : '';
     })(),
     // GET /me/invitations?dppId= 실데이터 - 예전엔 6건이 통째로 하드코딩되어 있었다. status는
     // BE가 SENT/ACCEPTED/EXPIRED/REVOKED/REJECTED 원문으로 내려주고, 여기서 한글 라벨/색을
@@ -801,7 +973,7 @@ export function makerVals(ctx) {
       serialNumber: spec.split(' · ')[0], issuedAtDate: null
     }))).filter(d => !state.removedProducts.includes(d.dppId)).map((d) => {
       const id = d.dppId;
-      const name = d.modelName || ('DPP #' + id);
+      const name = d.displayName || d.modelName || ('DPP #' + id);
       const done = Math.round(d.completeness);
       const spec = d.domain || '';
       const status = done === 100 ? '발급 완료' : done === 0 ? '입력 대기' : '작성 중';
@@ -849,7 +1021,7 @@ export function makerVals(ctx) {
     }).filter(p => pStatusFilter === 'all' ? true : pStatusFilter === 'done' ? p.isIssued : !p.isIssued),
     productStatusFilter: pStatusFilter,
     setProductStatusFilter: (k) => setState({ productStatusFilter: k }),
-    productFilterTabs: [['all', '전체'], ['inProgress', '작성중'], ['done', '작성완료']].map(([k, label]) => ({
+    productFilterTabs: [['all', '전체'], ['inProgress', '작성중'], ['done', '발급 완료']].map(([k, label]) => ({
       key: k, label,
       style: {
         height: 40, padding: '0 14px', border: '1px solid ' + (pStatusFilter === k ? '#0045A9' : 'rgba(16,32,64,.12)'),
@@ -879,16 +1051,6 @@ export function makerVals(ctx) {
     saveProfile: () => ctx.say('기업 정보를 수정했습니다.'),
     myPerms: [['DPP 발급·수정', 1], ['협력사 초대', 1], ['ZKP 증명 제출', r === 'steel' ? 1 : 0], ['감사 로그 열람', 0], ['배치 대량 발급', r === 'steel' ? 1 : 0]].map(([label, on]) => ({
       key: label, label, style: on ? ctx.chip('rgba(0,69,169,.10)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#9AA8BE')
-    })),
-    myDocs: [
-      ['사업자등록증.pdf', 'PDF · 1.2MB · 2026-01-04 업로드', '승인'],
-      ['공장등록증.pdf', 'PDF · 0.8MB · 2026-01-04 업로드', '승인'],
-      ['ISO_14001.pdf', 'PDF · 2.4MB · 2026-06-11 업로드', '검증 중'],
-      ['ESG_보고서_2025.pdf', 'PDF · 5.1MB · 2026-03-22 업로드', '승인']
-    ].map(([name, meta, status]) => ({
-      key: name, name, meta, status,
-      dot: ctx.pillDot(status === '승인' ? '#12A150' : '#E3A008'),
-      view: () => setState({ docPreview: { name, meta, status } })
     })),
     // ctx.orgData(GET /me/organization 실 데이터)가 있으면 그걸 우선 쓰고, 없으면(org_id
     // 없는 계정 등) 기존 역할별 목데이터로 폴백한다. state.profile은 로그아웃 전까지 남는

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
+import { publicPassportUrl, publicBaseUrl, setPublicBaseUrl, qrUrlWarning } from './publicUrl.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   pill, roleCard, pillDot, domainCard, tabStyle,
@@ -13,7 +14,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAuditLog } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -58,6 +59,18 @@ function fmtDate(iso) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// 관리자 "회원 관리" 표 아바타 색 - 실 회원 목록(AdminMemberDto)엔 mock처럼 미리 정해둔
+// hue가 없어서, 회사명을 시드로 고정 팔레트에서 결정적으로 골라 쓴다(같은 회사는 항상
+// 같은 색, 새로고침해도 안 바뀜). 장식용 색일 뿐 실제 데이터가 아니므로 이 정도 유도는
+// "가짜 데이터"에 해당하지 않는다.
+const ADMIN_AVATAR_PALETTE = ['#0045A9', '#12A150', '#96660A', '#7C3AED', '#DB2777', '#0EA5E9', '#DC2626', '#059669'];
+function avatarColorFor(seed) {
+  const s = String(seed || '');
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+  return ADMIN_AVATAR_PALETTE[hash % ADMIN_AVATAR_PALETTE.length];
+}
+
 /** 알림 created_at(ISO) -> "방금 전"/"N분 전"/"N시간 전"/"N일 전". */
 function fmtRelative(iso) {
   if (!iso) return '';
@@ -98,6 +111,13 @@ export function useAppLogic(userProps) {
   const [orgApprovalsData, setOrgApprovalsData] = useState(null);
   // EU 시장감시 레지스트리 조회 전용 - 규제기관 계정이 아니면 403으로 null 유지.
   const [euRegistryData, setEuRegistryData] = useState(null);
+  // 관리자 대시보드 KPI(GET /admin/dashboard) - ADMIN 계정이 아니면 403으로 null 유지.
+  // adminDashboardFetchedAt은 "최근 갱신" 표시용 - 하드코딩된 날짜("2026-07-30 09:41
+  // KST") 대신 실제로 이 데이터를 받아온 시각을 보여준다.
+  const [adminDashboardData, setAdminDashboardData] = useState(null);
+  const [adminDashboardFetchedAt, setAdminDashboardFetchedAt] = useState(null);
+  // 관리자 "회원 관리" 표(GET /admin/members) - 마찬가지로 ADMIN 전용, 그 외엔 null 유지.
+  const [adminMembersData, setAdminMembersData] = useState(null);
   // 세관 통관 큐(GET /customs/queue) - org_type=CUSTOMS 계정이 아니면 403으로 null 유지.
   // 심사 대기(PENDING) 목록만 담는다 - "세관마다 확인해야 할 DPP가 달라야 함"(2026-08-19
   // 강 요청)이 실제로 동작하는지 눈에 보이는 자리.
@@ -183,6 +203,8 @@ export function useAppLogic(userProps) {
       // { orgId, name } | null. 2026-08-17: window.prompt 대신 팝업으로 교체.
       rejectModal: null,
       rejectReasonInput: '',
+      // 회원 관리 "상세" 모달에 표시할 조직(AdminMemberDto) | null.
+      memberModal: null,
       // 제품조회 "상세" 모달에서 발급완료 DPP의 QR을 그 자리에서 바로 볼 수 있게(2026-08-17).
       // 세션 캐시가 아니라 표시할 때마다 필요한 식별자로 새로 생성해서 dppId에 매핑해 둔다.
       dppQrCache: {},
@@ -234,6 +256,9 @@ export function useAppLogic(userProps) {
     fetchOrgApprovals().then((res) => { if (alive) setOrgApprovalsData(res || []); }).catch(() => {});
     // EU_AUTHORITY/CUSTOMS org_type이거나 ADMIN이 아니면 403 - 마찬가지로 조용히 무시.
     searchDppRegistry('').then((res) => { if (alive) setEuRegistryData(res || []); }).catch(() => {});
+    // ADMIN 계정이 아니면 403 - 관리자 대시보드 KPI/회원 목록도 마찬가지로 조용히 무시.
+    fetchAdminDashboard().then((res) => { if (alive) { setAdminDashboardData(res); setAdminDashboardFetchedAt(new Date()); } }).catch(() => {});
+    fetchAdminMembers().then((res) => { if (alive) setAdminMembersData(res || []); }).catch(() => {});
     // 세관(org_type=CUSTOMS) 계정이 아니면 403 - 마찬가지로 조용히 무시.
     fetchCustomsQueue(false).then((res) => { if (alive) setCustomsQueueData(res || []); }).catch(() => {});
     // ADMIN이거나 EU_AUTHORITY 계정이 아니면 403 - 마찬가지로 조용히 무시.
@@ -470,7 +495,7 @@ export function useAppLogic(userProps) {
     let alive = true;
     // 2026-08-18 강 리포트: QR이 텍스트만 인코딩해서 스캐너가 구글 검색으로 처리하던
     // 버그 - 공개 조회 URL(/p/{publicUuid})을 인코딩한다(makerVals.js issueDpp와 동일).
-    const passportUrl = row.publicUuid ? (window.location.origin + '/p/' + row.publicUuid) : displayId;
+    const passportUrl = publicPassportUrl(row.publicUuid) || displayId;
     QRCode.toDataURL(passportUrl, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } })
       .then((dataUrl) => {
         if (!alive) return;
@@ -585,9 +610,9 @@ export function useAppLogic(userProps) {
   function profile() {
     const m = {
       admin: { ws: 'IEUM 운영 콘솔', dl: '관리자', un: '김도현', ur: '플랫폼 운영자', ini: '김' },
-      steel: { ws: '대성제강', dl: '철강', un: '박지우', ur: 'DPP 담당자 · Tier 3', ini: '박' },
-      battery: { ws: '루멘셀', dl: '배터리', un: '이서준', ur: 'DPP 담당자 · Tier 2', ini: '이' },
-      textile: { ws: '아라텍스', dl: '섬유·패션', un: '최유진', ur: 'DPP 담당자 · Tier 2', ini: '최' },
+      steel: { ws: '대성제강', dl: '철강', un: '박지우', ur: 'DPP 담당자', ini: '박' },
+      battery: { ws: '루멘셀', dl: '배터리', un: '이서준', ur: 'DPP 담당자', ini: '이' },
+      textile: { ws: '아라텍스', dl: '섬유·패션', un: '최유진', ur: 'DPP 담당자', ini: '최' },
       eu: { ws: '국가기술표준원 · 제품안전조사과', dl: '시장감독기관', un: '윤가람', ur: 'DPP 감독관', ini: '윤' },
       customs: { ws: '인천세관 · 수입통관과', dl: '세관', un: '한지원', ur: '통관 심사관', ini: '한' },
       personal: { ws: '개인 회원', dl: '개인', un: '정민수', ur: '개인 계정', ini: '정' },
@@ -613,9 +638,26 @@ export function useAppLogic(userProps) {
     const s = state;
     const p = profile();
     const isMaker = s.role === 'steel' || s.role === 'battery' || s.role === 'textile';
-    const anchorSeq = data.anchors;
-    const inqData = data.inquiries;
-    const memberData = data.members;
+    // 관리자 KPI/스파크라인 - 예전엔 data.anchors(mock 배열)였다. ADMIN 로그인 후 위
+    // useEffect가 /admin/dashboard를 불러와 adminDashboardData를 채우기 전까지는(또는
+    // ADMIN이 아니면 계속) 빈 배열로 둔다 - mock으로 되돌아가지 않는다("real data over
+    // fake" 원칙, 2026-08-19 강 요청).
+    const admin = adminDashboardData;
+    const anchorSeq = admin ? admin.anchorSparkline14d : [];
+    // "유형별 문의"도 mock(data.json inquiries: 계정·인증 140건 / Tier 심사 78건 ...)을
+    // 버리고 /admin/dashboard의 실집계(notification category='INQUIRY', 최근 30일,
+    // sub_type별)로 바꿨다(2026-08-20 강 요청). 문의 접수 기능이 아직 없어서 지금은
+    // 항상 빈 배열이고, 화면은 그대로 "접수된 문의가 없습니다"를 보여준다 - 없는 숫자를
+    // 지어내지 않는 게 이 코드베이스 원칙이다. Tier 심사 유형은 BE 쿼리에서 제외된다.
+    const inqData = admin ? admin.inquiriesByType : [];
+    const adminMembersList = adminMembersData || [];
+    const adminAnchorOk = !!(admin && admin.lastAnchoredMinutesAgo != null && admin.lastAnchoredMinutesAgo < 60 * 24);
+    const adminLastAnchoredLabel = !admin || admin.lastAnchoredMinutesAgo == null
+      ? '기록 없음'
+      : admin.lastAnchoredMinutesAgo < 1 ? '방금 전'
+      : admin.lastAnchoredMinutesAgo < 60 ? `${admin.lastAnchoredMinutesAgo}분 전`
+      : admin.lastAnchoredMinutesAgo < 60 * 24 ? `${Math.floor(admin.lastAnchoredMinutesAgo / 60)}시간 전`
+      : `${Math.floor(admin.lastAnchoredMinutesAgo / (60 * 24))}일 전`;
     return {
       workspace: p.ws,
       domainLabel: p.dl,
@@ -715,14 +757,60 @@ export function useAppLogic(userProps) {
       tier1Chip: chip('rgba(16,32,64,.07)', '#44546F'),
       tier2Chip: chip('rgba(0,69,169,.10)', '#0045A9'),
       tier3Chip: chip('rgba(18,161,80,.12)', '#0E7A3D'),
-      anchorBars: anchorSeq.map((h, i) => ({ key: i, style: { display: 'block', width: 6, height: h, borderRadius: 3, background: i > 12 ? 'rgba(134,239,172,.9)' : 'rgba(255,255,255,.24)' } })),
-      inquiries: inqData.map(([label, count, pct]) => ({ key: label, label, count, pct, style: bar(pct * 2.6, '#0045A9') })),
-      members: memberData.map(([name, biz, joined, country, domain, held, issued, hue, initial]) => ({
-        key: name, name, biz, joined, country, domain, held, issued, initial,
-        avatar: avatarStyle(hue), domainChip: domainChipFor(domain),
-        domainDot: { width: 8, height: 8, flex: 'none', borderRadius: 999, background: domain === '철강' ? '#0045A9' : domain === '배터리' ? '#12A150' : '#E3A008' },
-        view: () => say(name + ' 회원 상세 정보를 조회했습니다.')
+      // 최근 14일 앵커링 건수 스파크라인(실데이터) - 최댓값 기준으로 막대 높이를
+      // 정규화한다(BE가 건수를 그대로 내려주므로 px로 바로 쓰면 하루 몰림에 따라
+      // 막대가 너무 작거나 커질 수 있어서).
+      anchorBars: (() => {
+        const seq = anchorSeq || [];
+        const max = Math.max(1, ...seq);
+        return seq.map((h, i) => ({ key: i, style: { display: 'block', width: 6, height: Math.max(2, Math.round((h / max) * 48)), borderRadius: 3, background: i > 12 ? 'rgba(134,239,172,.9)' : 'rgba(255,255,255,.24)' } }));
+      })(),
+      adminAnchorStatusLabel: admin ? (adminAnchorOk ? '정상' : '데이터 없음') : '—',
+      adminAnchorStatusOk: adminAnchorOk,
+      adminLastAnchoredLabel,
+      adminLastAnchorBlockLabel: admin && admin.lastAnchorBlockNo != null ? `#${admin.lastAnchorBlockNo.toLocaleString()}` : '—',
+      adminAnchorSuccessLabel: admin && admin.anchorSuccessRate30d != null ? `${admin.anchorSuccessRate30d}%` : '집계 없음',
+      adminTotalUsersLabel: admin ? admin.totalUsers.toLocaleString() : '—',
+      adminUserBreakdownLabel: admin ? `기업 ${admin.businessUsers.toLocaleString()} · 개인 ${admin.personalUsers.toLocaleString()}` : '',
+      adminTotalDppsLabel: admin ? admin.totalDpps.toLocaleString() : '—',
+      adminDppBreakdownLabel: admin ? `철강 ${admin.steelDpps.toLocaleString()} · 배터리 ${admin.batteryDpps.toLocaleString()} · 섬유 ${admin.textileDpps.toLocaleString()}` : '',
+      adminPendingCountLabel: admin ? `처리 대기 ${admin.pendingApprovalCount.toLocaleString()}건` : '처리 대기 —',
+      adminPendingBadge: admin ? admin.pendingApprovalCount.toLocaleString() : '—',
+      adminRefreshedAtLabel: adminDashboardFetchedAt ? `최근 갱신 ${fmtDateTime(adminDashboardFetchedAt.toISOString())}` : '',
+      // 막대 길이는 최다 유형을 100%로 놓고 상대 비교한다. 예전 mock 시절엔 pct*2.6이라는
+      // 고정 배율이었는데(최대값이 34%인 걸 전제로 눈대중으로 맞춘 수), 실데이터에서
+      // 한 유형이 100%면 폭이 260%가 되어 막대가 트랙 밖으로 잘려 나간다.
+      inquiries: (() => {
+        const max = inqData.reduce((m, q) => Math.max(m, q.count), 0);
+        return inqData.map((q) => ({ key: q.key, label: q.label, count: q.count, pct: q.pct,
+          style: bar(max > 0 ? Math.round(q.count * 100 / max) : 0, '#0045A9') }));
+      })(),
+      inquiriesEmpty: inqData.length === 0,
+      inquiryTotalLabel: admin ? `최근 30일 · ${admin.inquiryTotal30d.toLocaleString()}건` : '최근 30일 · —',
+      members: adminMembersList.map((m) => ({
+        key: m.orgId, name: m.orgName, biz: m.bizRegNo, joined: m.joinedDate, country: m.countryCode,
+        domain: m.domainLabel, held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),
+        avatar: avatarStyle(avatarColorFor(m.orgName)), domainChip: domainChipFor(m.domainLabel),
+        domainDot: { width: 8, height: 8, flex: 'none', borderRadius: 999, background: m.domainLabel === '철강' ? '#0045A9' : m.domainLabel === '배터리' ? '#12A150' : '#E3A008' },
+        // 예전엔 토스트 한 줄만 띄우고 끝이었다("...회원 상세 정보를 조회했습니다").
+        // 2026-08-20 강 요청으로 실제 상세 모달을 띄운다.
+        view: () => setState({ memberModal: m })
       })),
+      membersEmpty: adminMembersList.length === 0,
+      memberModalOpen: !!s.memberModal,
+      memberModalName: s.memberModal ? s.memberModal.orgName : '',
+      memberModalRows: s.memberModal ? [
+        { key: 'biz', label: '사업자등록번호', value: s.memberModal.bizRegNo || '—', mono: true },
+        { key: 'country', label: '국가', value: s.memberModal.countryCode || '—', mono: true },
+        { key: 'phone', label: '전화번호', value: s.memberModal.contactPhone || '—', mono: true },
+        { key: 'contact', label: '담당자', value: s.memberModal.contactName || '—', mono: false },
+        { key: 'email', label: '이메일', value: s.memberModal.contactEmail || '—', mono: false },
+        { key: 'domain', label: '도메인', value: s.memberModal.domainLabel || '—', mono: false },
+        { key: 'joined', label: '가입일', value: s.memberModal.joinedDate || '—', mono: true },
+        { key: 'dpp', label: '보유 / 발행 DPP',
+          value: (s.memberModal.heldDppCount ?? 0) + '건 / ' + (s.memberModal.issuedDppCount ?? 0) + '건', mono: true }
+      ] : [],
+      closeMemberModal: () => setState({ memberModal: null }),
       isLogin: s.view === 'login',
       isSignup: s.view === 'signup',
       isApp: s.view === 'app',
@@ -927,6 +1015,35 @@ export function useAppLogic(userProps) {
       ...notifVals(ctx),
       ...dppVals(ctx),
       ...obVals(ctx),
+      // QR 모달에 인코딩된 실제 주소를 보여준다. 예전엔 QR 이미지만 있어서, 그 안에
+      // http://localhost/p/... 가 들어간 걸 사용자가 알 방법이 없었다 - 휴대폰으로
+      // 찍으면 아무것도 안 뜨는데 원인이 안 보였다(2026-08-20 강 리포트).
+      qrModalUrl: (s.qrModal && s.qrModal.url) || '',
+      // 경고 문구(없으면 빈 문자열) - loopback이라 안 열리는 경우와, 열리긴 하는데
+      // 지금 보고 있는 서버가 아닌 곳을 가리키는 경우를 구분해서 알려준다.
+      qrModalUrlWarning: (s.qrModal && qrUrlWarning(s.qrModal.url)) || '',
+      qrBaseEditing: !!s.qrBaseEditing,
+      qrBaseInput: s.qrBaseInput != null ? s.qrBaseInput : publicBaseUrl(),
+      qrBaseOnChange: (e) => setState({ qrBaseInput: e.target.value }),
+      openQrBaseEditor: () => setState({ qrBaseEditing: true, qrBaseInput: publicBaseUrl() }),
+      cancelQrBaseEditor: () => setState({ qrBaseEditing: false }),
+      saveQrBase: async () => {
+        const next = String(s.qrBaseInput || '').trim();
+        setPublicBaseUrl(next);
+        setState({ qrBaseEditing: false });
+        // 저장한 주소로 QR을 즉시 다시 만든다 - 저장만 하고 이미지가 그대로면
+        // 바뀐 건지 알 수 없다.
+        const cur = s.qrModal;
+        if (!cur || !cur.url) { say('공개 주소를 저장했습니다. 다음 QR부터 적용됩니다.'); return; }
+        const uuid = cur.url.split('/p/')[1];
+        const url = publicPassportUrl(uuid);
+        try {
+          const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } });
+          setState({ qrModal: { ...cur, dataUrl, url } });
+        } catch {
+          say('QR 이미지를 다시 만들지 못했습니다.');
+        }
+      },
       confirmOpen: !!s.confirm,
       confirmTitle: s.confirm && s.confirm.title,
       confirmBody: s.confirm && s.confirm.body,
@@ -942,8 +1059,8 @@ export function useAppLogic(userProps) {
   // saveFieldFormDraft(dppId, domain, values) 대신 (dppId, values)로 부르는 기존 호출부
   // (makerVals.js)를 그대로 두기 위한 래퍼 - 현재 화면의 role에서 도메인을 자동으로
   // 채워 넣는다(2026-08-16, 섬유 도메인 추가하며 domain 파라미터가 새로 생김).
-  const saveFieldFormDraftForRole = useCallback((dppId, values) => {
-    return saveFieldFormDraft(dppId, domainForRole(state.role), values);
+  const saveFieldFormDraftForRole = useCallback((dppId, values, displayName) => {
+    return saveFieldFormDraft(dppId, domainForRole(state.role), values, displayName);
   }, [state.role]);
 
   const ctx = {

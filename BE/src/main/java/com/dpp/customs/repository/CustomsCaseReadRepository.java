@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Optional;
+import java.util.List;
 
 /**
  * 통관 케이스 판정(checks)에 필요한 조회 전용 native query 모음. dpp/product_model/
@@ -17,21 +17,30 @@ import java.util.Optional;
  */
 public interface CustomsCaseReadRepository extends Repository<CustomsClearance, Long> {
 
-    /** product_model.hs_code/model_name, 수출 조직명·국가 - HS 코드 정합성 체크와 화면 표시에 공용으로 쓴다. */
+    /**
+     * product_model.hs_code/model_name, 수출 조직명·국가 - HS 코드 정합성 체크와 화면 표시에 공용.
+     * 행이 있으면 크기 1인 리스트, 없으면 빈 리스트.
+     *
+     * Optional&lt;Object[]&gt;가 아니라 List&lt;Object[]&gt;인 이유: Spring Data JPA는 배열
+     * 반환 타입을 "행 하나"가 아니라 "행들의 모음"으로 해석해서, 다중 컬럼 결과를
+     * Object[]{행} 형태로 한 겹 더 감싸 돌려준다. row[1]을 읽는 순간 500이 난다
+     * (2026-08-20 /admin/dashboard에서 실제로 터졌다 - AdminStatsRepository 주석 참고.
+     * DppQueryRepository도 같은 함정을 이미 겪고 스칼라 프로젝션으로 우회해 뒀다).
+     */
     @Query(value = "SELECT m.hs_code, m.model_name, o.org_name, o.country_code, d.public_uuid, d.model_id "
             + "FROM dpp d "
             + "JOIN product_model m ON m.model_id = d.model_id "
             + "JOIN organization o ON o.org_id = d.owner_org_id "
             + "WHERE d.dpp_id = :dppId", nativeQuery = true)
-    Optional<Object[]> findDppSummary(@Param("dppId") Long dppId);
+    List<Object[]> findDppSummary(@Param("dppId") Long dppId);
 
-    /** 최신 스냅샷의 앵커 상태 - "DPP 서명 검증" 체크용. 스냅샷/앵커가 없으면 empty. */
+    /** 최신 스냅샷의 앵커 상태 - "DPP 서명 검증" 체크용. 스냅샷/앵커가 없으면 빈 리스트(위 주석 참고). */
     @Query(value = "SELECT ba.status, ba.tx_id, ba.content_hash "
             + "FROM dpp_snapshot ds "
             + "JOIN blockchain_anchor ba ON ba.target_type = 'DPP_SNAPSHOT' AND ba.target_id = ds.snapshot_id "
             + "WHERE ds.dpp_id = :dppId "
             + "ORDER BY ds.version_no DESC LIMIT 1", nativeQuery = true)
-    Optional<Object[]> findLatestAnchor(@Param("dppId") Long dppId);
+    List<Object[]> findLatestAnchor(@Param("dppId") Long dppId);
 
     /** doc_type_code 하나에 대해 승인 완료(review_status=APPROVED)된 문서 건수 - MODEL 단위 문서(기술문서/DoC 등). */
     @Query(value = "SELECT COUNT(*) FROM document "
