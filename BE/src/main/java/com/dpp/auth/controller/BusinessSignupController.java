@@ -10,6 +10,7 @@ import com.dpp.auth.service.BusinessSignupService;
 import com.dpp.auth.service.EmailVerificationService;
 import com.dpp.auth.service.PhoneVerificationService;
 import jakarta.validation.Valid;
+import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -54,11 +55,20 @@ public class BusinessSignupController {
         return ResponseEntity.ok().build();
     }
 
-    /** 전화번호로 6자리 인증코드 발급 (5분 유효, 재발송은 60초 쿨다운). */
+    /**
+     * 전화번호로 6자리 인증코드 발급 (5분 유효, 재발송은 60초 쿨다운).
+     *
+     * app.sms.enabled=false(로컬·데모 기본값)면 실제 문자가 안 나가므로 발급된 코드를
+     * {"devCode":"123456"} 로 같이 내려준다 - 화면이 그 값을 안내한다. SMS를 켜는 순간
+     * devCode는 null이 되어 응답에 포함되지 않는다(PhoneVerificationService 주석 참고).
+     */
     @PostMapping("/phone/code")
-    public ResponseEntity<Void> requestPhoneCode(@Valid @RequestBody PhoneCodeRequest request) {
-        phoneVerificationService.requestCode(request.phone());
-        return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+    public ResponseEntity<Map<String, String>> requestPhoneCode(@Valid @RequestBody PhoneCodeRequest request) {
+        String devCode = phoneVerificationService.requestCode(request.phone());
+        if (devCode == null) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("devCode", devCode));
     }
 
     /** 전화번호 인증코드 검증. 통과하면 30분 동안 가입 진행 가능. */

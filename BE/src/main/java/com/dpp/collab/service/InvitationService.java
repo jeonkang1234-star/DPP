@@ -162,15 +162,38 @@ public class InvitationService {
             newlyLinked = true;
         }
 
-        if (newlyLinked) {
-            String inviterOrgName = organizationRepository.findById(invitation.getInviterOrgId())
-                    .map(Organization::getOrgName)
-                    .orElse("협력사");
+        // 알림은 newlyLinked와 무관하게 항상 남긴다(2026-08-21 강 리포트 "초대를 보냈는데
+        // 알림이 안 온다"). 예전엔 "이번 초대로 participant.org_id가 처음 연결됐거나
+        // 초대 상태가 처음 ACCEPTED로 바뀐 경우"에만 알림을 만들었다. 그래서 같은 협력사를
+        // 다른 DPP에 다시 초대하면 - 실무에서 제일 흔한 경우다 - 두 조건이 모두 이미
+        // 만족돼 있어 알림이 하나도 안 갔다.
+        notifyInvitedOrg(invitation, existing.getOrgId());
+    }
+
+    /**
+     * 초대받은 조직의 계정 전원에게 알림을 남긴다.
+     *
+     * 한 사람(email이 일치하는 계정)에게만 보내던 것을 조직 전체로 바꾼 이유: 초대 메일은
+     * 대표 주소로 가는데 실제로 자료를 올리는 담당자는 다른 계정인 경우가 많다.
+     * AdminOrgApprovalService.notifyOrg / ParticipantSubmitStatusService와 같은 패턴이다
+     * (notification 테이블에 recipient_org_id 컬럼이 있지만 조회 쿼리가
+     * recipient_user_id만 보기 때문에, 조직 단위 알림은 이렇게 사람마다 한 행씩 만든다).
+     */
+    private void notifyInvitedOrg(Invitation invitation, Long inviteeOrgId) {
+        String inviterOrgName = organizationRepository.findById(invitation.getInviterOrgId())
+                .map(Organization::getOrgName)
+                .orElse("제조사");
+        String label = dppLabel(invitation.getDppId());
+        List<UserAccount> members = userAccountRepository.findByOrgId(inviteeOrgId);
+        for (UserAccount member : members) {
             Notification notification = new Notification();
-            notification.setRecipientUserId(existing.getUserId());
+            notification.setRecipientUserId(member.getUserId());
             notification.setCategory(NotificationCategory.SYSTEM);
+            notification.setSubType("PARTNER_INVITE");
             notification.setTitle("협력사 참여 요청이 도착했습니다");
-            notification.setBody(inviterOrgName + "에서 DPP 데이터 제출을 요청했습니다. '참여 DPP' 탭에서 확인해 주세요.");
+            notification.setBody(inviterOrgName + "에서 '" + label + "'의 "
+                    + roleLabel(invitation.getRoleCode()) + " 제출을 요청했습니다. '참여 DPP' 탭에서 확인해 주세요.");
+            notification.setLinkUrl("/partner/assigned");
             notificationRepository.save(notification);
         }
     }
@@ -228,11 +251,43 @@ public class InvitationService {
         return toDto(invitation);
     }
 
+    /** 초대 역할 코드 -> 받는 쪽이 알아볼 자료 이름. FE inviteRoleOptions와 같은 문구. */
+    private static String roleLabel(String roleCode) {
+        if (roleCode == null) return "요청 자료";
+        return switch (roleCode) {
+            case "RAW_SUPPLIER" -> "원자재·화학 공급 자료 (스크랩 매입증빙, SDS 등)";
+            case "TEST_LAB" -> "시험·인증 자료 (시험성적서, LCA/EPD, 탄소보고서)";
+            case "RECYCLER" -> "재활용 처리 결과 보고서";
+            default -> roleCode;
+        };
+    }
+
+    /**
+     * 메일·알림에 쓸 DPP 이름. 사용자가 붙인 이름 > 제품명 > "DPP #id" 순.
+     * 받는 쪽은 내부 dpp_id를 봐도 무슨 물건인지 모르므로 사람이 읽을 이름이 필요하다.
+     */
+    private String dppLabel(Long dppId) {
+        if (dppId == null) return "DPP";
+        return dppRepository.findById(dppId)
+                .map(d -> {
+                    String name = d.getDisplayName();
+                    if (name != null && !name.isBlank()) return name;
+                    return "DPP #" + d.getDppId();
+                })
+                .orElse("DPP #" + dppId);
+    }
+
     private void sendMail(Invitation invitation, Long orgId) {
         String inviterOrgName = organizationRepository.findById(orgId)
                 .map(Organization::getOrgName)
-                .orElse("DPP Platform");
-        mailSender.sendInvite(invitation.getInviteeEmail(), inviterOrgName, invitation.getToken());
+                .orElse("IEUM");
+        mailSender.sendInvite(new InviteMailSender.Invite(
+                invitation.getInviteeEmail(),
+                inviterOrgName,
+                dppLabel(invitation.getDppId()),
+                roleLabel(invitation.getRoleCode()),
+                invitation.getToken(),
+                EXPIRY_DAYS));
     }
 
     private Long resolveOrgId(Long userId) {

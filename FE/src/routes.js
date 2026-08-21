@@ -37,6 +37,12 @@ export const ROUTES = [
 
   { path: '/customs/clearance', view: 'app', role: 'customs', tab: 'clearance' },
 
+  // 협력사(원자재공급·시험소·재활용). 2026-08-21까지 이 두 줄이 없어서 협력사 계정만
+  // F5를 누르면 로그아웃된 것처럼 보였다 - pathFor가 null을 돌려주는 바람에 주소창이
+  // /login에 머물렀고, 새로고침 시 그 URL이 저장된 세션을 이겨 로그인 화면으로 갔다.
+  { path: '/partner/assigned', view: 'app', role: 'partner', tab: 'assigned' },
+  { path: '/partner/my-page', view: 'app', role: 'partner', tab: 'my' },
+
   { path: '/me/history', view: 'app', role: 'personal', tab: 'scans' },
   { path: '/me/passport', view: 'app', role: 'personal', tab: 'passport' },
   { path: '/me/account', view: 'app', role: 'personal', tab: 'my' },

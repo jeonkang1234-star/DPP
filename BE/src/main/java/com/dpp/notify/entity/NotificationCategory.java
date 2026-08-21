@@ -56,6 +56,13 @@ public enum NotificationCategory {
      */
     private static final Set<NotificationCategory> MANUFACTURER_VISIBLE =
             Set.of(CERT, SYSTEM);
+    /**
+     * 협력사(원자재공급·시험소·재활용 - org_type이 RAW_SUPPLIER/TEST_LAB/RECYCLER)도
+     * 인증서·시스템 두 가지만 본다(2026-08-21 강 요청). 협력사가 받는 알림은 사실상
+     * "참여 요청이 도착했다"(SYSTEM) 하나뿐이라, 나머지 탭은 계속 비어 있었다.
+     */
+    private static final Set<NotificationCategory> PARTNER_VISIBLE =
+            Set.of(CERT, SYSTEM);
 
     /** viewerRole이 null이거나 규칙이 없는 역할이면 전부 보여준다. */
     public boolean visibleTo(String viewerRole) {
@@ -67,6 +74,7 @@ public enum NotificationCategory {
             case "CUSTOMS" -> CUSTOMS_VISIBLE.contains(this);
             case "EU_AUTHORITY" -> EU_AUTHORITY_VISIBLE.contains(this);
             case "MANUFACTURER" -> MANUFACTURER_VISIBLE.contains(this);
+            case "RAW_SUPPLIER", "TEST_LAB", "RECYCLER" -> PARTNER_VISIBLE.contains(this);
             default -> true;
         };
     }

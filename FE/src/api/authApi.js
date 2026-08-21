@@ -20,7 +20,10 @@ async function handleResponse(res) {
     throw err;
   }
 
-  if (res.status === 204 || res.status === 202) return null;
+  // 204는 본문이 없는 게 확정이라 바로 끝낸다. 202는 본문이 있을 수도 없을 수도 있어
+  // (전화 인증코드 발급이 SMS 꺼진 환경에서 devCode를 담아 202로 온다) 파싱을 시도한다 -
+  // 본문이 비어 있으면 아래 catch가 null을 돌려준다(2026-08-21).
+  if (res.status === 204) return null;
   try {
     return await res.json();
   } catch {

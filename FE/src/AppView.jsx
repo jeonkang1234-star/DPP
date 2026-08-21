@@ -295,7 +295,7 @@ export default function AppView(v) {
     zkpPendingCount,
     zkpRejectedCount,
     profileUrl,
-    refreshCaptcha,
+    refreshCaptcha, captchaGlyphs, suCaptcha, onSuCaptcha, captchaBorderColor,
     registry,
     euQuery,
     onEuQueryChange,
@@ -620,19 +620,21 @@ export default function AppView(v) {
                         <circle cx="88" cy="12" r="1.4" fill="rgba(11,27,51,.20)" />
                         <circle cx="150" cy="38" r="1.5" fill="rgba(11,27,51,.18)" />
                         <circle cx="118" cy="50" r="1.3" fill="rgba(11,27,51,.16)" />
+                        {/*
+                          예전엔 k 7 Q 2 m 9 여섯 글자가 그대로 박혀 있었고 새로고침 버튼은
+                          토스트만 띄웠다(2026-08-21 강 리포트 "자동입력방지 새로고침이 안 됨").
+                          이제 글자·기울기·위치를 매번 새로 뽑아 그린다.
+                        */}
                         <g fill="#20304C" fontFamily="Georgia, 'Times New Roman', serif" fontSize="30" fontWeight="700">
-                          <text x="18" y="40" transform="rotate(-14 18 40) skewX(-8)">k</text>
-                          <text x="46" y="42" transform="rotate(11 46 42) skewX(6)">7</text>
-                          <text x="74" y="38" transform="rotate(-7 74 38) skewX(-12)">Q</text>
-                          <text x="106" y="43" transform="rotate(17 106 43)">2</text>
-                          <text x="132" y="37" transform="rotate(-12 132 37) skewX(9)">m</text>
-                          <text x="162" y="41" transform="rotate(6 162 41) skewX(-6)">9</text>
+                          {(captchaGlyphs || []).map((g, i) => (
+                            <text key={i} x={g.x} y={g.y} transform={g.transform}>{g.ch}</text>
+                          ))}
                         </g>
                         <path d="M8 30 Q95 44 182 24" stroke="rgba(11,27,51,.38)" strokeWidth="1.8" fill="none" />
                       </svg>
                     </div>
                     <button onClick={refreshCaptcha} title="다른 이미지 보기" style={{ width: '50px', height: '56px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', background: '#fff', color: '#44546F', cursor: 'pointer' }} className="hv6"><svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M10 3.2a6.8 6.8 0 0 0-6.2 4l1.7.7A5 5 0 0 1 10 5a4.9 4.9 0 0 1 4.1 2.2h-2.3v1.8h5V4h-1.8v1.7A6.8 6.8 0 0 0 10 3.2Zm-6.8 8v5h1.8v-1.7A6.8 6.8 0 0 0 16.4 12.8l-1.7-.7A5 5 0 0 1 10 15a4.9 4.9 0 0 1-4.1-2.2h2.3V11h-5Z" /></svg></button>
-                    <input placeholder="위 문자를 입력하세요" style={{ height: '56px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} />
+                    <input value={suCaptcha} onChange={onSuCaptcha} placeholder="위 문자를 입력하세요" maxLength={8} style={{ height: '56px', padding: '0 15px', border: '1px solid ' + captchaBorderColor, borderRadius: '12px', fontSize: '14.5px' }} />
                   </div>
                   <span style={{ fontSize: '11.5px', color: '#8494AC' }}>대소문자를 구분하지 않습니다. 잘 보이지 않으면 새로고침 버튼을 누르세요.</span>
                 </div>
@@ -1038,11 +1040,12 @@ export default function AppView(v) {
                     // 표시하지도 않고, 한계값 충족 여부(O/X)만 보여준다(2026-08-20 강 지적).
                     if (f.zkpOnly) {
                       return (
-                        <span style={{ ...base, display: 'flex', alignItems: 'center', gap: '10px', background: '#F7F9FD', borderStyle: 'dashed', cursor: 'default' }}>
+                        <span style={{ ...base, height: 'auto', minHeight: '48px', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', background: '#F7F9FD', borderStyle: 'dashed', cursor: 'default' }}>
                           <span style={{ width: '26px', height: '26px', flex: 'none', display: 'grid', placeItems: 'center', borderRadius: '999px', background: f.zkpBg, color: f.zkpFg, fontSize: '14px', fontWeight: '800' }}>{f.zkpMark}</span>
-                          <span style={{ display: 'flex', flexDirection: 'column', gap: '1px', minWidth: 0 }}>
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
                             <span style={{ fontSize: '13px', fontWeight: '700', color: f.zkpFg }}>{f.zkpLabel}</span>
-                            <span style={{ fontSize: '10.5px', color: '#8494AC' }}>{f.zkpHint}</span>
+                            {/* 근거 규정은 길어서 두 줄까지 접힌다 - 잘라내면 어떤 규정인지 못 읽는다. */}
+                            <span style={{ fontSize: '10.5px', color: '#8494AC', lineHeight: '1.45', wordBreak: 'break-word' }}>{f.zkpHint}</span>
                           </span>
                         </span>
                       );

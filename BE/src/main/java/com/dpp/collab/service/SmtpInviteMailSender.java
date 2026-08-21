@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
  * 빈을 그대로 재사용). app.mail.enabled=true + spring.mail.* 설정이 있어야 활성화된다.
  * 메일 본문의 token은 아직 "초대 수락" 화면/API가 없어서 클릭 가능한 링크가 아니라 값
  * 그대로 노출한다 - 그 화면이 생기면 링크로 바꿀 것.
+ *
+ * 제목·본문 문구는 InviteMailSender.Invite에 두어 콘솔 발송기와 완전히 같은 걸 쓴다.
  */
 @Component
 @ConditionalOnProperty(name = "app.mail.enabled", havingValue = "true")
@@ -26,13 +28,12 @@ public class SmtpInviteMailSender implements InviteMailSender {
     }
 
     @Override
-    public void sendInvite(String toEmail, String inviterOrgName, String token) {
+    public void sendInvite(Invite invite) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromAddress);
-        message.setTo(toEmail);
-        message.setSubject("[DPP Platform] " + inviterOrgName + "님의 협력사 초대");
-        message.setText(inviterOrgName + "에서 DPP Platform 협력사로 초대했습니다.\n초대 코드: " + token
-                + "\n유효기간 7일 이내에 담당자에게 문의해 주세요.");
+        message.setTo(invite.toEmail());
+        message.setSubject(invite.subject());
+        message.setText(invite.body());
         javaMailSender.send(message);
     }
 }

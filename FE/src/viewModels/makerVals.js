@@ -159,11 +159,31 @@ function optionsFor(f, codeOptions) {
 }
 
 /**
+ * legal_basis 한 줄을 [규정명] + 기준 두 조각으로 쪼갠다.
+ *   "CBAM Impl.Reg.(EU)2025/2547 Annex IV pt.2 추가 파라미터(Mn 질량%)"
+ *   -> { name: "CBAM Impl.Reg.(EU)2025/2547", detail: "Annex IV pt.2 추가 파라미터(Mn 질량%)" }
+ * 조문 표기가 없으면 전체를 규정명으로 본다.
+ */
+function splitLegalBasis(basis) {
+  const text = (basis || '').trim();
+  if (!text) return null;
+  const m = text.match(/\s(Annex|Art\.|Article|Sec\.|Section|§|부속서|제\s?\d)/);
+  if (!m || m.index <= 0) return { name: text, detail: '' };
+  return { name: text.slice(0, m.index).trim(), detail: text.slice(m.index + 1).trim() };
+}
+
+/**
  * 영업비밀(TRADE_SECRET) 필드의 O/X 표시값. 그 외 필드는 zkpOnly:false만 돌려준다.
  *
  * 저장된 값은 실측치가 아니라 판정 토큰이다("충족"/"미충족", SpecFieldAutoFillService).
  * 혹시 예전 데이터에 숫자가 남아 있어도 화면에는 절대 숫자를 그리지 않는다 - 값이
  * 비어 있지 않으면 "충족"으로만 본다(미충족은 정확히 그 토큰일 때만).
+ *
+ * 2026-08-21 강 요청:
+ *   - "한계값 충족" -> "규정 충족". 이 판정이 답하는 질문은 "어떤 수치인가"가 아니라
+ *     "규정을 지켰는가"라서, 라벨도 그 말로 맞춘다.
+ *   - 보조 문구를 "영지식증명으로 검증됨 · 실측값은 저장하지 않습니다" 대신 실제로
+ *     어떤 규정을 만족한 건지 보여준다([규정명] 기준). 근거는 requirement_field.legal_basis.
  */
 function zkpVerdictOf(f) {
   if (f.disclosureScope !== 'TRADE_SECRET') {
@@ -172,15 +192,18 @@ function zkpVerdictOf(f) {
   const v = (f.value || '').trim();
   const failed = v === '미충족';
   const passed = !!v && !failed;
+  const basis = splitLegalBasis(f.legalBasis);
+  const basisText = basis ? ('[' + basis.name + ']' + (basis.detail ? ' ' + basis.detail : '')) : '';
   return {
     zkpOnly: true,
     zkpMark: passed ? 'O' : failed ? 'X' : '–',
-    zkpLabel: passed ? '한계값 충족' : failed ? '한계값 미충족' : '미제출',
+    zkpLabel: passed ? '규정 충족' : failed ? '규정 미충족' : '미제출',
     zkpFg: passed ? '#0E7A3D' : failed ? '#C22B2B' : '#6B7A93',
     zkpBg: passed ? 'rgba(18,161,80,.14)' : failed ? 'rgba(194,43,43,.12)' : 'rgba(132,148,172,.14)',
-    zkpHint: passed ? '영지식증명으로 검증됨 · 실측값은 저장하지 않습니다'
+    // 근거 규정이 시딩돼 있으면 그걸 보여주고, 없으면 예전 안내 문구로 되돌아간다.
+    zkpHint: basisText || (passed ? '영지식증명으로 검증됨 · 실측값은 저장하지 않습니다'
       : failed ? '성적서 규격 미달 · 문서를 다시 제출해 주세요'
-      : '성적서를 업로드하면 영지식증명으로 판정됩니다'
+      : '성적서를 업로드하면 영지식증명으로 판정됩니다')
   };
 }
 
