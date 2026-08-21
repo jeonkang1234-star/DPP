@@ -475,13 +475,11 @@ export function makerVals(ctx) {
     completeness: completenessRows.map(([openId, displayId, name, done, prog, none]) => ({
       key: openId, id: displayId, name, pct: done,
       pctStyle: ctx.pctStyle(done),
-      // 색 구성(2026-08-20 강 요청 "파란색 - 흰색으로 구성"): 채운 만큼이 파랑, 남은
-      // 만큼이 흰색이다. 예전엔 초록/주황/빨강 3색 신호등이었는데, 입력률은 좋고 나쁨을
-      // 판정하는 값이 아니라 "얼마나 찼는가"라서 한 가지 색의 농담으로 읽는 게 맞다.
-      // 부분 입력(prog)은 정보를 버리지 않도록 옅은 파랑으로 남긴다.
-      // 입체감(segStyle3D + groove3d)은 2026-08-19 요청대로 유지.
-      segs: [{ key: 'a', style: ctx.segStyle3D(done, '#0045A9') }, { key: 'b', style: ctx.segStyle3D(prog, '#7FA8E0') }, { key: 'c', style: ctx.segStyle3D(none, '#FFFFFF') }],
-      trackStyle: ctx.groove3d('#FFFFFF'),
+      // 2026-08-21 강 요청: 입체(segStyle3D/groove3d)를 걷어내고 다시 평면으로,
+      // 색은 흰색 - #007fff. 채운 만큼이 #007fff, 남은 만큼이 흰색이다.
+      // 부분 입력(prog)은 정보를 버리지 않도록 같은 계열의 옅은 파랑으로 둔다.
+      segs: [{ key: 'a', style: ctx.segStyle(done, '#007fff') }, { key: 'b', style: ctx.segStyle(prog, '#8CC8FF') }, { key: 'c', style: ctx.segStyle(none, '#FFFFFF') }],
+      trackStyle: { background: '#FFFFFF' },
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
     // KPI 카드 줄의 "평균 완성도" 자리에 들어갈 정적 규정 업데이트 안내 - 카드 폭이 좁아서
