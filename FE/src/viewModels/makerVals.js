@@ -927,7 +927,9 @@ export function makerVals(ctx) {
           try {
             const updated = await ctx.resendInvitation(i.invitationId);
             ctx.setInvitesData(prev => prev.map(x => x.invitationId === updated.invitationId ? updated : x));
-            ctx.say(i.orgName + '에 초대를 재발송했습니다.');
+            ctx.say(updated && updated.mailSent === false
+              ? (i.orgName + ' 재발송 실패: ' + (updated.mailError || '원인 미상'))
+              : (i.orgName + '에 초대 메일을 재발송했습니다.'));
           } catch (e) {
             ctx.say(e.message || '재발송에 실패했습니다.');
           }
@@ -982,7 +984,16 @@ export function makerVals(ctx) {
         setState({ inviteRows: [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }] });
       }
       if (successCount > 0) {
-        ctx.say(successCount + '건의 초대 메일을 발송했습니다. (유효기간 7일)');
+        // 서버가 메일 발송 결과를 같이 내려준다(mailSent/mailError). 예전엔 결과와
+        // 상관없이 "발송했습니다"만 띄워서, SMTP가 거절해도 알 방법이 없었다
+        // (2026-08-21 강 리포트 "메일이 발송되는지 확인이 안 된다").
+        const failed = created.filter(c => c && c.mailSent === false);
+        if (failed.length === 0) {
+          ctx.say(successCount + '건의 초대 메일을 발송했습니다. (유효기간 7일)');
+        } else {
+          ctx.say('초대 ' + successCount + '건 등록 · 메일 ' + failed.length + '건 발송 실패: '
+            + (failed[0].mailError || '원인 미상'));
+        }
       }
     },
     // dash(GET /me/dashboard)가 있으면 실 DPP 목록(dash.dpps)에서, 없으면 기존 목데이터에서

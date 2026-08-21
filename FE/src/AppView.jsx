@@ -522,10 +522,12 @@ export default function AppView(v) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
                 <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#0B1B33' }}>계정 유형 <span style={{ fontWeight: '500', color: '#8494AC' }}>· 등록된 도메인이면 자동 선택, 아니면 직접 선택</span></span>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
-                  <button onClick={pickMaker} style={suRoleMaker}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>제조사</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>DPP 등록·발급</span></button>
-                  <button onClick={pickPartner} style={suRolePartner}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>협력사</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>원자재공급 등 제출</span></button>
-                  <button onClick={pickCustoms} style={suRoleCustoms}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>세관</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>통관 적법성 검증</span></button>
-                  <button onClick={pickEu} style={suRoleEu}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>시장감독기관</span><span style={{ fontSize: '11.5px', color: '#6B7A93', lineHeight: '1.5' }}>감사·레지스트리</span></button>
+                  {/* 부연 설명 줄 삭제(2026-08-21 강 요청) - 역할 이름만으로 충분하고, 짧은 설명이
+                      오히려 역할 범위를 좁게 오해하게 만들었다. */}
+                  <button onClick={pickMaker} style={suRoleMaker}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>제조사</span></button>
+                  <button onClick={pickPartner} style={suRolePartner}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>협력사</span></button>
+                  <button onClick={pickCustoms} style={suRoleCustoms}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>세관</span></button>
+                  <button onClick={pickEu} style={suRoleEu}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>시장감독기관</span></button>
                 </div>
               </div>
 

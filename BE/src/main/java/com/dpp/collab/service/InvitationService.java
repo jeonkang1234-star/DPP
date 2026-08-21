@@ -15,6 +15,8 @@ import com.dpp.mypage.repository.OrganizationRepository;
 import com.dpp.notify.entity.Notification;
 import com.dpp.notify.entity.NotificationCategory;
 import com.dpp.notify.repository.NotificationRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,6 +56,8 @@ import java.util.UUID;
  */
 @Service
 public class InvitationService {
+
+    private static final Logger log = LoggerFactory.getLogger(InvitationService.class);
 
     private static final String DEFAULT_ROLE_CODE = "RAW_SUPPLIER";
     // RECYCLER는 원래 role 테이블(V3__seed_master.sql)에 있었지만 담당 필드가 하나도 없어
@@ -128,8 +132,8 @@ public class InvitationService {
 
         upsertParticipant(dpp.getDppId(), email, roleCode);
         linkIfAlreadyRegistered(invitation);
-        sendMail(invitation, orgId);
-        return toDto(invitation);
+        String mailError = sendMail(invitation, orgId);
+        return toDto(invitation, mailError == null, mailError);
     }
 
     /**
@@ -247,8 +251,8 @@ public class InvitationService {
         // 남아있던 예전 데이터라면(2026-08-15 수정 이전에 보낸 초대) 재발송 버튼 한 번으로
         // 자동 복구된다.
         linkIfAlreadyRegistered(invitation);
-        sendMail(invitation, orgId);
-        return toDto(invitation);
+        String mailError = sendMail(invitation, orgId);
+        return toDto(invitation, mailError == null, mailError);
     }
 
     /** 초대 역할 코드 -> 받는 쪽이 알아볼 자료 이름. FE inviteRoleOptions와 같은 문구. */
@@ -277,17 +281,38 @@ public class InvitationService {
                 .orElse("DPP #" + dppId);
     }
 
-    private void sendMail(Invitation invitation, Long orgId) {
+    /**
+     * 초대 메일 발송. 실패해도 예외를 던지지 않고 원인을 돌려준다.
+     *
+     * 예전엔 예외가 그대로 올라가 요청 전체가 500이 됐다 - 그러면 초대 자체가 롤백돼서
+     * "SMTP 설정만 틀렸는데 초대가 아예 안 만들어지는" 상태가 된다. 초대 기록은 남기고
+     * 메일 실패는 화면에 그대로 알려주는 쪽이 낫다(2026-08-21 강 리포트).
+     *
+     * @return 성공이면 null, 실패면 화면에 보여줄 원인 한 줄.
+     */
+    private String sendMail(Invitation invitation, Long orgId) {
         String inviterOrgName = organizationRepository.findById(orgId)
                 .map(Organization::getOrgName)
                 .orElse("IEUM");
-        mailSender.sendInvite(new InviteMailSender.Invite(
+        InviteMailSender.Invite invite = new InviteMailSender.Invite(
                 invitation.getInviteeEmail(),
                 inviterOrgName,
                 dppLabel(invitation.getDppId()),
                 roleLabel(invitation.getRoleCode()),
                 invitation.getToken(),
-                EXPIRY_DAYS));
+                EXPIRY_DAYS);
+        try {
+            mailSender.sendInvite(invite);
+            log.info("초대 메일 발송 완료: to={} dppId={} invitationId={}",
+                    invitation.getInviteeEmail(), invitation.getDppId(), invitation.getInvitationId());
+            return null;
+        } catch (Exception e) {
+            log.warn("초대 메일 발송 실패: to={} invitationId={} 원인={}",
+                    invitation.getInviteeEmail(), invitation.getInvitationId(), e.toString(), e);
+            String msg = e.getMessage();
+            return (msg == null || msg.isBlank()) ? e.getClass().getSimpleName()
+                    : (msg.length() > 200 ? msg.substring(0, 200) : msg);
+        }
     }
 
     private Long resolveOrgId(Long userId) {
@@ -300,6 +325,10 @@ public class InvitationService {
     }
 
     private InvitationDto toDto(Invitation invitation) {
+        return toDto(invitation, null, null);
+    }
+
+    private InvitationDto toDto(Invitation invitation, Boolean mailSent, String mailError) {
         boolean canResend = !"ACCEPTED".equals(invitation.getStatus());
         return new InvitationDto(
                 invitation.getInvitationId(),
@@ -309,7 +338,9 @@ public class InvitationService {
                 invitation.getCreatedAt().toLocalDate().toString(),
                 canResend,
                 invitation.getDppId(),
-                invitation.getRoleCode()
+                invitation.getRoleCode(),
+                mailSent,
+                mailError
         );
     }
 }

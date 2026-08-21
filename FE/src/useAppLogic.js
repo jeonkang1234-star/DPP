@@ -933,7 +933,9 @@ export function useAppLogic(userProps) {
         try {
           await requestBusinessSignupCode(email);
           setState({ suCodeSent: true, suVerified: false, suVerifyCode: '' });
-          say('인증코드를 발송했습니다. (SMTP 미설정 상태라 서버 콘솔 로그에서 확인)');
+          // 2026-08-21 강 요청: SMTP를 켠 뒤에도 "미설정 상태" 안내가 그대로 떠서
+          // 실제로 메일이 나갔는지 헷갈렸다. 문구를 결과 그대로로 바꾼다.
+          say('인증 메일을 발송했습니다. 메일함을 확인해 주세요.');
         } catch (err) {
           say(err.message || '인증코드 발송에 실패했습니다.');
         }

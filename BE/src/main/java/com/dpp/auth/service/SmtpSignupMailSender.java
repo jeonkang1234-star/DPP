@@ -29,8 +29,10 @@ public class SmtpSignupMailSender implements SignupMailSender {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromAddress);
         message.setTo(email);
-        message.setSubject("[DPP Platform] 이메일 인증번호");
-        message.setText("인증번호는 " + code + " 입니다. 5분 이내에 입력해 주세요.");
+        message.setSubject("[IEUM] 인증번호 " + code);
+        // 2026-08-21 강 요청: 본문은 "인증번호: 123456" 수준으로 짧게.
+        // 제목에도 코드를 넣어 메일함 목록에서 바로 보이게 한다.
+        message.setText("인증번호: " + code + "\n\n5분 이내에 입력해 주세요.");
         javaMailSender.send(message);
     }
 }
