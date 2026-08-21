@@ -132,6 +132,7 @@ export default function AppView(v) {
     documentSlotsEmpty,
     partnerDocumentSlots,
     formTitle,
+    dppTitle, onDppTitle, dppTitlePlaceholder,
     goApprove,
     goInput,
     goLogin,
@@ -190,12 +191,11 @@ export default function AppView(v) {
     manualName,
     members,
     missingFields,
-    myDocs,
     myPerms,
     myTier,
     myTierDesc,
     myTierName,
-    notifCats,
+    notifCats, notifCatsVisible,
     notifEmpty,
     notifOpen,
     notifications,
@@ -892,7 +892,8 @@ export default function AppView(v) {
                     <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', fontWeight: '600', color: '#0045A9', textDecoration: 'underline', textUnderlineOffset: '3px' }}>{c.id}</span>
                     <span style={{ fontSize: '12.5px', color: '#44546F', lineHeight: '1.35' }}>{c.name}</span>
                   </button>
-                  <div style={{ display: 'flex', height: '22px', borderRadius: '7px', overflow: 'hidden', ...c.trackStyle }}>
+                  {/* 트랙이 흰색이 되면서 카드 배경(흰색)과 경계가 사라져 막대 길이를 못 읽는다 - 얇은 테두리를 준다. */}
+                  <div style={{ display: 'flex', height: '22px', borderRadius: '7px', overflow: 'hidden', border: '1px solid rgba(16,32,64,.14)', boxSizing: 'border-box', ...c.trackStyle }}>
                     {(c.segs || []).map((g, $index) => (<React.Fragment key={$index}><span style={g.style}></span></React.Fragment>))}
                   </div>
                   <span style={c.pctStyle}>{c.pct}%</span>
@@ -1008,6 +1009,21 @@ export default function AppView(v) {
                 </div>
               </div>
               </>) : null}
+
+              {/*
+                DPP 이름 - 사용자가 이 DPP를 부르는 이름이다(2026-08-20 강 요청).
+                시스템 내부 목록/조회에서만 쓰이고, 공개 여권과 EU 레지스트리는 지금처럼
+                public_uuid·모델명으로만 조회한다.
+              */}
+              <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                  <span style={{ fontSize: '15px', fontWeight: '600' }}>DPP 이름</span>
+                  <span style={{ fontSize: '11.5px', color: '#8494AC' }}>내부 식별용 · 선택</span>
+                </span>
+                <input value={dppTitle} onChange={onDppTitle} placeholder={dppTitlePlaceholder} maxLength={120}
+                  style={{ height: '48px', padding: '0 14px', border: '1.5px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', width: '100%', boxSizing: 'border-box' }} />
+                <span style={{ fontSize: '11px', color: '#8494AC' }}>비워두면 제품 코드로 표시됩니다. 공개 여권·EU 레지스트리에는 나가지 않습니다.</span>
+              </div>
 
               <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: fieldFormOpen ? '18px' : '0' }}>
                 <button onClick={toggleFieldForm} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '0', background: 'transparent', padding: '0', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
@@ -1558,7 +1574,7 @@ export default function AppView(v) {
           </div>
 
           <div style={{ width: '100%', maxWidth: '760px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <span style={{ fontSize: '13px', fontWeight: '700' }}>심사를 기다리는 DPP</span>
+            <span style={{ fontSize: '13px', fontWeight: '700' }}>통관 대기 목록</span>
             {cQueueEmpty ? (
               <span style={{ fontSize: '12.5px', color: '#8494AC' }}>현재 배정된 심사 대기 건이 없습니다. 수출/수입 관할이 이 세관과 일치하는 통관 신청이 들어오면 여기에 표시됩니다.</span>
             ) : (
@@ -1748,9 +1764,11 @@ export default function AppView(v) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '17px', fontWeight: '700' }}>알림센터</span><span style={tier2Chip}>읽지 않음 {notifUnreadCount || 0}</span></div>
               <button onClick={closeNotif} style={{ width: '34px', height: '34px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '11px', background: '#fff', fontSize: '13px', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
             </div>
+            {notifCatsVisible ? (
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               {(notifCats || []).map((c, $index) => (<React.Fragment key={$index}><button onClick={c.go} style={c.style}>{c.label}</button></React.Fragment>))}
             </div>
+            ) : null}
           </div>
           <div style={{ flex: '1', overflow: 'auto', padding: '16px 20px 28px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {notifEmpty ? (<>

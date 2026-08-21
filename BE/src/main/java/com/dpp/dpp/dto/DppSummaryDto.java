@@ -19,6 +19,8 @@ import java.util.UUID;
 public record DppSummaryDto(
         Long dppId,
         UUID publicUuid,
+        /** 사용자가 붙인 DPP 이름(내부 식별용, V27). 없으면 null - 화면이 SKU로 폴백한다. */
+        String displayName,
         String internalSku,
         String modelName,
         String domain,

@@ -109,6 +109,7 @@ public class DashboardService {
             summaries.add(new DppSummaryDto(
                     dpp.getDppId(),
                     dpp.getPublicUuid(),
+                    dpp.getDisplayName(),
                     model != null ? model.getInternalSku() : null,
                     model != null ? model.getModelName() : null,
                     dpp.getDomain(),

@@ -243,6 +243,11 @@ function groupBySection(fields, sections, openMap, setState) {
  */
 export function makerVals(ctx) {
   const { state, setState, props, data } = ctx;
+  /**
+   * 저장 요청에 실어 보낼 DPP 이름. 사용자가 이름 칸을 한 번도 안 건드렸으면 undefined를
+   * 돌려줘서 필드 자체를 안 보낸다 - 서버가 기존 이름을 그대로 둔다(meApi.js 주석 참고).
+   */
+  const dppNameToSend = () => (state.dppNameInput == null ? undefined : state.dppNameInput.trim());
   const r = state.role;
   const p = ctx.profile();
   const kpi = data.makerKpi[r] || ['0', 0, 0, 0, 0, 0];
@@ -255,7 +260,9 @@ export function makerVals(ctx) {
   const completenessRows = dash
     ? dash.dpps.map(d => {
         const done = Math.round(d.completeness);
-        return [d.dppId, d.internalSku || ('DPP-' + d.dppId), d.modelName || '(이름 없음)', done, 0, 100 - done];
+        // 사용자가 붙인 이름이 있으면 그걸 먼저 보여준다(2026-08-20 강 요청) - 같은
+        // 모델로 여러 DPP를 만들면 모델명만으로는 목록에서 서로 구분이 안 됐다.
+        return [d.dppId, d.internalSku || ('DPP-' + d.dppId), d.displayName || d.modelName || '(이름 없음)', done, 0, 100 - done];
       })
     : ctx.compData().map(([id, name, done, prog, none]) => [id, id, name, done, prog, none]);
   const inputMeta = data.makerInputMeta[r] || {};
@@ -303,8 +310,9 @@ export function makerVals(ctx) {
   // 입력해야만 발급 가능, 그 전엔 임시저장만 가능. ff(실 폼)가 없는 레거시 경로(아직 시딩
   // 안 된 도메인)는 이 조건이 적용될 데이터 자체가 없으므로 기존 동작(항상 발급 가능)을
   // 그대로 둔다 - 정확한 검증 근거 없이 막으면 오히려 더 헷갈린다.
-  // 제품조회 작성중/작성완료 필터(2026-08-17 강 요청) - 완성도 100%(=isIssued)를
-  // "작성완료", 그 미만을 "작성중" 기준으로 나눈다. 기존에도 버튼 자리(상태 전체/기간
+  // 제품조회 작성중/발급 완료 필터(2026-08-17 강 요청) - 완성도 100%(=isIssued)를
+  // "발급 완료", 그 미만을 "작성중" 기준으로 나눈다. 라벨을 "작성완료"에서 바꾼 이유:
+  // 같은 상태를 화면마다 다른 이름으로 부르고 있었다(2026-08-20 강 요청 - "발급 완료"로 통일). 기존에도 버튼 자리(상태 전체/기간
   // 90일)는 있었지만 onClick이 없어 눌러도 아무 동작이 없었다.
   const pStatusFilter = state.productStatusFilter || 'all';
   const requiredFieldsOk = ff ? ff.fields.filter(f => f.required).every(f => !!ffInputs[f.fieldCode]) : true;
@@ -441,7 +449,7 @@ export function makerVals(ctx) {
       ctx.setRecyclingResult(null);
       ctx.setFieldFormInputs({});
       ctx.setDocumentFormData(null);
-      setState({ tab: 'input', fieldFormDppId: null, parsedFieldSources: {}, unlockedFields: {}, qrModal: null });
+      setState({ tab: 'input', fieldFormDppId: null, dppNameInput: null, parsedFieldSources: {}, unlockedFields: {}, qrModal: null });
     },
     // 최근 작업 조회 DPP(2026-08-17 강 요청) - 예전 "대기작업 큐"(마감일 D-1/D-2 같은
     // 가짜 워크플로 문구)를 걷어내고, 실제 있는 DPP 중 최근 것 몇 건만 핵심 데이터
@@ -458,7 +466,7 @@ export function makerVals(ctx) {
         ...(done === 100 ? ctx.badgeText3d('#0E7A3D') : done === 0 ? ctx.badgeText3d('#6B7A93') : ctx.badgeText3d('#96660A')),
         fontSize: '11.5px'
       },
-      open: () => setState({ tab: 'input', fieldFormDppId: openId, parsedFieldSources: {}, unlockedFields: {}, qrModal: null })
+      open: () => setState({ tab: 'input', fieldFormDppId: openId, dppNameInput: null, parsedFieldSources: {}, unlockedFields: {}, qrModal: null })
     })),
     recentDppsEmpty: completenessRows.length === 0,
     // 2026-08-17 강 정정: "완성도" 그래프/목록 카드는 원래대로 유지하고(제목만 "입력률"로),
@@ -467,10 +475,13 @@ export function makerVals(ctx) {
     completeness: completenessRows.map(([openId, displayId, name, done, prog, none]) => ({
       key: openId, id: displayId, name, pct: done,
       pctStyle: ctx.pctStyle(done),
-      // 2026-08-19 강 요청: "DPP 입력률 그래프가 너무 2D라 생동감 없고 재미없음" - 단색
-      // 평면 세그먼트를 광택+음영이 있는 segStyle3D로 교체(색은 기존과 동일).
-      segs: [{ key: 'a', style: ctx.segStyle3D(done, '#12A150') }, { key: 'b', style: ctx.segStyle3D(prog, '#E3A008') }, { key: 'c', style: ctx.segStyle3D(none, '#E03B3B') }],
-      trackStyle: ctx.groove3d('#EEF2F8'),
+      // 색 구성(2026-08-20 강 요청 "파란색 - 흰색으로 구성"): 채운 만큼이 파랑, 남은
+      // 만큼이 흰색이다. 예전엔 초록/주황/빨강 3색 신호등이었는데, 입력률은 좋고 나쁨을
+      // 판정하는 값이 아니라 "얼마나 찼는가"라서 한 가지 색의 농담으로 읽는 게 맞다.
+      // 부분 입력(prog)은 정보를 버리지 않도록 옅은 파랑으로 남긴다.
+      // 입체감(segStyle3D + groove3d)은 2026-08-19 요청대로 유지.
+      segs: [{ key: 'a', style: ctx.segStyle3D(done, '#0045A9') }, { key: 'b', style: ctx.segStyle3D(prog, '#7FA8E0') }, { key: 'c', style: ctx.segStyle3D(none, '#FFFFFF') }],
+      trackStyle: ctx.groove3d('#FFFFFF'),
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
     // KPI 카드 줄의 "평균 완성도" 자리에 들어갈 정적 규정 업데이트 안내 - 카드 폭이 좁아서
@@ -508,14 +519,23 @@ export function makerVals(ctx) {
     // ff(실 폼)가 있으면 실제로 저장한다 - 없으면(battery/textile, 아직 시딩 없음) 기존
     // 목데이터 토스트만 보여준다.
     lastSavedLabel: (state.draftSavedAt && state.draftSavedAt[r]) ? ('마지막 임시저장 ' + state.draftSavedAt[r]) : '아직 임시저장한 이력이 없습니다',
+    // DPP 이름(2026-08-20 강 요청) - 사용자가 붙이는 내부 식별용 이름이다. 서버가 준 값이
+    // 있으면 그걸 초기값으로 쓰고, 사용자가 타이핑을 시작하면 state 쪽이 우선한다.
+    // 규제 항목이 아니라 requirement_field에 넣지 않았고, 공개 여권·EU 레지스트리에도
+    // 나가지 않는다(V27 주석 참고).
+    // 키 이름이 dppName이 아니라 dppTitle인 이유: dppVals가 상세 드로어 제목을 dppName으로
+    // 이미 내보내고 있고, useAppLogic이 makerVals보다 dppVals를 나중에 펼쳐서 덮어써 버린다.
+    dppTitle: state.dppNameInput != null ? state.dppNameInput : ((ff && ff.displayName) || ''),
+    onDppTitle: (e) => setState({ dppNameInput: e.target.value }),
+    dppTitlePlaceholder: '예) 3월 유럽향 열연코일 1차',
     saveDraft: async () => {
       if (!ff) { ctx.say('임시저장했습니다.'); return; }
       try {
         const isNewDpp = !ff.dppId;
-        const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
+        const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend());
         ctx.setFieldFormData(result);
         ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        setState(s => ({ fieldFormDppId: result.dppId, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
+        setState(s => ({ fieldFormDppId: result.dppId, dppNameInput: null, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
         // 새 DPP가 이번 임시저장으로 처음 생겼으면 dashboardData(제품 조회/최근 작업 DPP
         // 조회의 출처)도 같이 갱신한다 - issueDpp와 같은 이유(2026-08-18 강 리포트).
         if (isNewDpp) ctx.refreshDashboard();
@@ -538,7 +558,7 @@ export function makerVals(ctx) {
         // 하고 임시저장 버튼을 안 누른 값은 서버에 저장 안 된 채로 발급이 진행돼 버렸다
         // (발급은 서버에 이미 저장된 dpp_field_value만 보고 처리하기 때문). dppId 유무와
         // 상관없이 항상 먼저 현재 ffInputs로 저장한 뒤 그 결과로 발급한다.
-        const saved = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
+        const saved = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend());
         const dppId = saved.dppId;
         setState({ fieldFormDppId: dppId });
         const issued = await ctx.issueFieldFormDpp(dppId);
@@ -859,7 +879,7 @@ export function makerVals(ctx) {
       return [...eligible].sort((a, b) => a.dppId - b.dppId).map(d => {
         const selected = state.partnersDppId === d.dppId;
         return {
-          key: d.dppId, id: d.internalSku || ('DPP-' + d.dppId), name: d.modelName || ('DPP #' + d.dppId),
+          key: d.dppId, id: d.internalSku || ('DPP-' + d.dppId), name: d.displayName || d.modelName || ('DPP #' + d.dppId),
           pct: Math.round(d.completeness), selected,
           cardStyle: {
             display: 'flex', flexDirection: 'column', gap: 4, minWidth: 168, padding: '12px 14px',
@@ -875,7 +895,7 @@ export function makerVals(ctx) {
     partnersHasSelection: !!state.partnersDppId,
     partnersSelectedDppName: (() => {
       const found = dash && dash.dpps.find(d => d.dppId === state.partnersDppId);
-      return found ? (found.modelName || ('DPP #' + found.dppId)) : '';
+      return found ? (found.displayName || found.modelName || ('DPP #' + found.dppId)) : '';
     })(),
     // GET /me/invitations?dppId= 실데이터 - 예전엔 6건이 통째로 하드코딩되어 있었다. status는
     // BE가 SENT/ACCEPTED/EXPIRED/REVOKED/REJECTED 원문으로 내려주고, 여기서 한글 라벨/색을
@@ -964,7 +984,7 @@ export function makerVals(ctx) {
       serialNumber: spec.split(' · ')[0], issuedAtDate: null
     }))).filter(d => !state.removedProducts.includes(d.dppId)).map((d) => {
       const id = d.dppId;
-      const name = d.modelName || ('DPP #' + id);
+      const name = d.displayName || d.modelName || ('DPP #' + id);
       const done = Math.round(d.completeness);
       const spec = d.domain || '';
       const status = done === 100 ? '발급 완료' : done === 0 ? '입력 대기' : '작성 중';
@@ -1012,7 +1032,7 @@ export function makerVals(ctx) {
     }).filter(p => pStatusFilter === 'all' ? true : pStatusFilter === 'done' ? p.isIssued : !p.isIssued),
     productStatusFilter: pStatusFilter,
     setProductStatusFilter: (k) => setState({ productStatusFilter: k }),
-    productFilterTabs: [['all', '전체'], ['inProgress', '작성중'], ['done', '작성완료']].map(([k, label]) => ({
+    productFilterTabs: [['all', '전체'], ['inProgress', '작성중'], ['done', '발급 완료']].map(([k, label]) => ({
       key: k, label,
       style: {
         height: 40, padding: '0 14px', border: '1px solid ' + (pStatusFilter === k ? '#0045A9' : 'rgba(16,32,64,.12)'),
@@ -1042,16 +1062,6 @@ export function makerVals(ctx) {
     saveProfile: () => ctx.say('기업 정보를 수정했습니다.'),
     myPerms: [['DPP 발급·수정', 1], ['협력사 초대', 1], ['ZKP 증명 제출', r === 'steel' ? 1 : 0], ['감사 로그 열람', 0], ['배치 대량 발급', r === 'steel' ? 1 : 0]].map(([label, on]) => ({
       key: label, label, style: on ? ctx.chip('rgba(0,69,169,.10)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#9AA8BE')
-    })),
-    myDocs: [
-      ['사업자등록증.pdf', 'PDF · 1.2MB · 2026-01-04 업로드', '승인'],
-      ['공장등록증.pdf', 'PDF · 0.8MB · 2026-01-04 업로드', '승인'],
-      ['ISO_14001.pdf', 'PDF · 2.4MB · 2026-06-11 업로드', '검증 중'],
-      ['ESG_보고서_2025.pdf', 'PDF · 5.1MB · 2026-03-22 업로드', '승인']
-    ].map(([name, meta, status]) => ({
-      key: name, name, meta, status,
-      dot: ctx.pillDot(status === '승인' ? '#12A150' : '#E3A008'),
-      view: () => setState({ docPreview: { name, meta, status } })
     })),
     // ctx.orgData(GET /me/organization 실 데이터)가 있으면 그걸 우선 쓰고, 없으면(org_id
     // 없는 계정 등) 기존 역할별 목데이터로 폴백한다. state.profile은 로그아웃 전까지 남는

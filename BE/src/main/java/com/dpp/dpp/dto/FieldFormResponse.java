@@ -20,6 +20,8 @@ import java.util.UUID;
 public record FieldFormResponse(
         Long dppId,
         UUID publicUuid,
+        /** 사용자가 붙인 DPP 이름. 없으면 null - 화면이 SKU로 폴백한다. */
+        String displayName,
         String domain,
         String status,
         double completeness,

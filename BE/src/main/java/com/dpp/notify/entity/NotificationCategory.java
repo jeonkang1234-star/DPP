@@ -38,20 +38,24 @@ public enum NotificationCategory {
      *
      * 값은 organization.org_type(세관=CUSTOMS, EU=EU_AUTHORITY) 또는 계정 종류(ADMIN)다.
      */
-    private static final Set<NotificationCategory> ADMIN_VISIBLE =
-            Set.of(CERT, SYSTEM, ZKP, ACCOUNT, SECURITY, INQUIRY);
+    /**
+     * 운영자는 카테고리 자체를 쓰지 않는다 - 탭 없이 전체 목록만 본다
+     * (2026-08-20 강 요청 "운영자 알림센터에 한해서만 카테고라이징 삭제").
+     * 빈 집합이면 getCategories가 빈 배열을 내려주고, FE는 '전체' 탭 하나만 남긴다.
+     */
+    private static final Set<NotificationCategory> ADMIN_VISIBLE = Set.of();
     private static final Set<NotificationCategory> CUSTOMS_VISIBLE =
             Set.of(CUSTOMS, ACCOUNT, INQUIRY);
     private static final Set<NotificationCategory> EU_AUTHORITY_VISIBLE =
             Set.of(ZKP, ACCOUNT, INQUIRY);
     /**
-     * 제조사(org_type='MANUFACTURER')는 TIER(Tier 신청)·ZKP를 뺀 나머지를 본다
-     * (2026-08-20 강 요청). Tier 신청은 운영자가 심사하는 절차라 제조사 알림함에 탭만
-     * 남고 알림은 오지 않았고, ZKP 검증 결과는 문서 업로드 화면에서 바로 보여주므로
-     * 알림함에 따로 둘 이유가 없다.
+     * 제조사(org_type='MANUFACTURER')는 인증서·시스템 두 가지만 본다
+     * (2026-08-20 강 요청 - TIER·ZKP에 이어 통관·계정·보안·문의까지 제거).
+     * 통관은 세관 쪽 절차라 제조사에게 알림이 오지 않고, 계정·보안·문의는 알림함이
+     * 아니라 마이페이지/문의 화면에서 다루는 내용이라 빈 탭만 남아 있었다.
      */
     private static final Set<NotificationCategory> MANUFACTURER_VISIBLE =
-            Set.of(CERT, SYSTEM, CUSTOMS, ACCOUNT, SECURITY, INQUIRY);
+            Set.of(CERT, SYSTEM);
 
     /** viewerRole이 null이거나 규칙이 없는 역할이면 전부 보여준다. */
     public boolean visibleTo(String viewerRole) {

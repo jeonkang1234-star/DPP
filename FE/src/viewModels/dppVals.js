@@ -20,7 +20,7 @@ export function dppVals(ctx) {
   if (dashRow) {
     id = dashRow.dppId;
     displayId = dashRow.internalSku || ('DPP-' + dashRow.dppId);
-    name = dashRow.modelName || ('DPP #' + id);
+    name = dashRow.displayName || dashRow.modelName || ('DPP #' + id);
     done = Math.round(dashRow.completeness);
     spec = dashRow.domain || '';
   } else {

@@ -116,11 +116,19 @@ export function fetchFieldForm(dppId, domain) {
   return authedFetch(domain ? `/me/field-form?domain=${domain}` : '/me/field-form');
 }
 
-/** 임시저장 - dppId가 없으면(첫 저장) 서버가 새 product_model/dpp를 만들고 dppId를 내려준다. */
-export function saveFieldFormDraft(dppId, domain, values) {
+/**
+ * 임시저장 - dppId가 없으면(첫 저장) 서버가 새 product_model/dpp를 만들고 dppId를 내려준다.
+ *
+ * displayName: 사용자가 붙인 DPP 이름(2026-08-20). undefined면 필드 자체를 안 보내서
+ * 서버가 기존 이름을 유지한다 - 이름 칸을 건드리지 않은 저장이 이름을 지우면 안 된다.
+ * 빈 문자열을 보내면 이름을 지운다.
+ */
+export function saveFieldFormDraft(dppId, domain, values, displayName) {
+  const body = { dppId: dppId || null, domain: domain || 'STEEL', values };
+  if (displayName !== undefined) body.displayName = displayName;
   return authedFetch('/me/field-form/draft', {
     method: 'POST',
-    body: JSON.stringify({ dppId: dppId || null, domain: domain || 'STEEL', values }),
+    body: JSON.stringify(body),
   });
 }
 

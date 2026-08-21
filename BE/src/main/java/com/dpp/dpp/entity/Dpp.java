@@ -56,6 +56,10 @@ public class Dpp {
     @Column(name = "serial_number", length = 100)
     private String serialNumber;
 
+    /** 사용자가 붙인 이름(내부 식별용). 공개 여권·EU 레지스트리에는 내보내지 않는다(V27). */
+    @Column(name = "display_name", length = 120)
+    private String displayName;
+
     @Column(name = "issued_at")
     private OffsetDateTime issuedAt;
 

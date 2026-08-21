@@ -10,6 +10,12 @@ import java.util.Map;
 public record SaveFieldFormRequest(
         Long dppId,
         String domain,
-        Map<String, String> values
+        Map<String, String> values,
+        /**
+         * 사용자가 붙이는 DPP 이름(내부 식별용, 2026-08-20 강 요청). null이면 기존 이름을
+         * 그대로 둔다 - 이름 칸을 안 건드린 저장 요청이 이름을 지워버리면 안 된다.
+         * 빈 문자열을 보내면 이름을 지운다.
+         */
+        String displayName
 ) {
 }

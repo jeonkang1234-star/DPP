@@ -610,9 +610,9 @@ export function useAppLogic(userProps) {
   function profile() {
     const m = {
       admin: { ws: 'IEUM 운영 콘솔', dl: '관리자', un: '김도현', ur: '플랫폼 운영자', ini: '김' },
-      steel: { ws: '대성제강', dl: '철강', un: '박지우', ur: 'DPP 담당자 · Tier 3', ini: '박' },
-      battery: { ws: '루멘셀', dl: '배터리', un: '이서준', ur: 'DPP 담당자 · Tier 2', ini: '이' },
-      textile: { ws: '아라텍스', dl: '섬유·패션', un: '최유진', ur: 'DPP 담당자 · Tier 2', ini: '최' },
+      steel: { ws: '대성제강', dl: '철강', un: '박지우', ur: 'DPP 담당자', ini: '박' },
+      battery: { ws: '루멘셀', dl: '배터리', un: '이서준', ur: 'DPP 담당자', ini: '이' },
+      textile: { ws: '아라텍스', dl: '섬유·패션', un: '최유진', ur: 'DPP 담당자', ini: '최' },
       eu: { ws: '국가기술표준원 · 제품안전조사과', dl: '시장감독기관', un: '윤가람', ur: 'DPP 감독관', ini: '윤' },
       customs: { ws: '인천세관 · 수입통관과', dl: '세관', un: '한지원', ur: '통관 심사관', ini: '한' },
       personal: { ws: '개인 회원', dl: '개인', un: '정민수', ur: '개인 계정', ini: '정' },
@@ -1059,8 +1059,8 @@ export function useAppLogic(userProps) {
   // saveFieldFormDraft(dppId, domain, values) 대신 (dppId, values)로 부르는 기존 호출부
   // (makerVals.js)를 그대로 두기 위한 래퍼 - 현재 화면의 role에서 도메인을 자동으로
   // 채워 넣는다(2026-08-16, 섬유 도메인 추가하며 domain 파라미터가 새로 생김).
-  const saveFieldFormDraftForRole = useCallback((dppId, values) => {
-    return saveFieldFormDraft(dppId, domainForRole(state.role), values);
+  const saveFieldFormDraftForRole = useCallback((dppId, values, displayName) => {
+    return saveFieldFormDraft(dppId, domainForRole(state.role), values, displayName);
   }, [state.role]);
 
   const ctx = {

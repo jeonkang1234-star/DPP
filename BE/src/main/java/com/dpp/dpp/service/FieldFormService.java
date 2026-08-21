@@ -146,7 +146,7 @@ public class FieldFormService {
             List<FieldFormItemDto> allFields = fieldsFor(fieldDomains(domain), null).stream()
                     .map(f -> toItem(f, null))
                     .toList();
-            return new FieldFormResponse(null, null, domain, "DRAFT", 0.0, 0, 0, allFields,
+            return new FieldFormResponse(null, null, null, domain, "DRAFT", 0.0, 0, 0, allFields,
                     sectionsOf(allFields), codeOptionsOf(allFields));
         }
 
@@ -196,7 +196,7 @@ public class FieldFormService {
             completeness = myRequired > 0 ? (myFilled * 100.0 / myRequired) : 0.0;
         }
 
-        return new FieldFormResponse(dpp.getDppId(), dpp.getPublicUuid(), domain, status, completeness, filled, required,
+        return new FieldFormResponse(dpp.getDppId(), dpp.getPublicUuid(), dpp.getDisplayName(), domain, status, completeness, filled, required,
                 fields, sectionsOf(fields), codeOptionsOf(fields));
     }
 
@@ -214,12 +214,25 @@ public class FieldFormService {
             access = Access.forOwner();
         }
 
+        // DPP 이름은 소유 조직만 바꿀 수 있다 - 참여 협력사는 자기 담당 필드만 채운다.
+        // null이면 이름 칸을 건드리지 않은 저장이라 기존 값을 유지하고, 빈 문자열이면 지운다.
+        if (access.owner() && request.displayName() != null) {
+            String name = request.displayName().trim();
+            dpp.setDisplayName(name.isEmpty() ? null : trimTo(name, 120));
+            dppRepository.save(dpp);
+        }
+
         upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode());
         recalc(dpp.getDppId());
         if (!access.owner()) {
             participantSubmitStatusService.refresh(dpp, orgId, access.participantRoleCode());
         }
         return getForm(userId, dpp.getDppId());
+    }
+
+    /** display_name은 VARCHAR(120) - 넘치면 DB가 예외를 던지므로 여기서 자른다. */
+    private static String trimTo(String s, int max) {
+        return s.length() > max ? s.substring(0, max) : s;
     }
 
     @Transactional
