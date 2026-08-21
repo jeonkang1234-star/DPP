@@ -123,6 +123,7 @@ export default function AppView(v) {
     editUrl,
     fieldCheck,
     fieldCheckOpen,
+    openFieldCheck,
     fieldCount,
     fieldFilledCount,
     fieldTotalCount,
@@ -378,7 +379,6 @@ export default function AppView(v) {
     userInitial,
     userName,
     userRole,
-    validations,
     workspace,
     // --- DPP 발급 게이팅 / QR 발급·조회 / Tier·권한 신청 (2026-08-17 추가) ---
     issueReady,
@@ -419,9 +419,7 @@ export default function AppView(v) {
     productFilterTabs,
     dppDetailQrImg,
     dppDetailQrPending,
-    validationOpen,
-    toggleValidation,
-    validationWarnCount
+    dppTitleOpen, toggleDppTitle, dppTitleUnset
   } = v;
 
   return (
@@ -920,26 +918,28 @@ export default function AppView(v) {
                 <button onClick={setBatch} style={batchBtn}>배치 대량 발급</button>
               </div>
               </>) : null}
-              <button onClick={toggleValidation} style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '46px', padding: '0 16px', border: '1px solid ' + (validationOpen ? '#0045A9' : 'rgba(16,32,64,.10)'), borderRadius: '14px', background: validationOpen ? 'rgba(0,69,169,.06)' : '#fff', color: validationOpen ? '#0045A9' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>
-                입력 검증 결과
-                {validationWarnCount ? (<span style={{ display: 'inline-grid', placeItems: 'center', minWidth: '18px', height: '18px', padding: '0 5px', borderRadius: '999px', background: '#E3A008', color: '#fff', fontSize: '10.5px', fontWeight: '700' }}>{validationWarnCount}</span>) : null}
-                <span style={{ display: 'inline-block', fontSize: '10px', transform: validationOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
+              <button onClick={toggleDppTitle} style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '46px', padding: '0 16px', border: '1px solid ' + (dppTitleOpen ? '#0045A9' : 'rgba(16,32,64,.10)'), borderRadius: '14px', background: dppTitleOpen ? 'rgba(0,69,169,.06)' : '#fff', color: dppTitleOpen ? '#0045A9' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>
+                DPP 이름
+                {dppTitleUnset ? (<span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#E3A008' }}></span>) : null}
+                <span style={{ display: 'inline-block', fontSize: '10px', transform: dppTitleOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
               </button>
             </div>
           </div>
 
-          {validationOpen ? (<>
-          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '600' }}>입력 검증 결과</span>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {(validations || []).map((v, $index) => (<React.Fragment key={$index}>
-              <button onClick={v.open} style={v.rowStyle}>
-                <span style={v.dot}></span>
-                <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'left' }}><span style={{ fontSize: '13px', fontWeight: '600', lineHeight: '1.35' }}>{v.label}</span><span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.5' }}>{v.detail}</span></span>
-                <span style={{ fontSize: '12px', color: '#8494AC' }}>{v.arrow}</span>
-              </button>
-              </React.Fragment>))}
-            </div>
+          {/*
+            DPP 이름(2026-08-20 강 요청) - 사용자가 이 DPP를 부르는 이름. 시스템 내부
+            목록/조회에서만 쓰이고, 공개 여권과 EU 레지스트리는 지금처럼 public_uuid·
+            모델명으로만 조회한다. 예전에 이 자리에 있던 "입력 검증 결과" 패널은
+            바로 아래 기본 정보 카드 헤더와 같은 숫자를 반복해서 삭제했다.
+          */}
+          {dppTitleOpen ? (<>
+          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: '600' }}>DPP 이름</span>
+              <span style={{ fontSize: '11.5px', color: '#8494AC' }}>내부 식별용 · 선택</span>
+            </span>
+            <input value={dppTitle} onChange={onDppTitle} placeholder={dppTitlePlaceholder} maxLength={120}
+              style={{ height: '48px', padding: '0 14px', border: '1.5px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', width: '100%', boxSizing: 'border-box' }} />
           </div>
           </>) : null}
 
@@ -1010,29 +1010,19 @@ export default function AppView(v) {
               </div>
               </>) : null}
 
-              {/*
-                DPP 이름 - 사용자가 이 DPP를 부르는 이름이다(2026-08-20 강 요청).
-                시스템 내부 목록/조회에서만 쓰이고, 공개 여권과 EU 레지스트리는 지금처럼
-                public_uuid·모델명으로만 조회한다.
-              */}
-              <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
-                <span style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <span style={{ fontSize: '15px', fontWeight: '600' }}>DPP 이름</span>
-                  <span style={{ fontSize: '11.5px', color: '#8494AC' }}>내부 식별용 · 선택</span>
-                </span>
-                <input value={dppTitle} onChange={onDppTitle} placeholder={dppTitlePlaceholder} maxLength={120}
-                  style={{ height: '48px', padding: '0 14px', border: '1.5px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', width: '100%', boxSizing: 'border-box' }} />
-                <span style={{ fontSize: '11px', color: '#8494AC' }}>비워두면 제품 코드로 표시됩니다. 공개 여권·EU 레지스트리에는 나가지 않습니다.</span>
-              </div>
-
               <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: fieldFormOpen ? '18px' : '0' }}>
-                <button onClick={toggleFieldForm} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '0', background: 'transparent', padding: '0', cursor: 'pointer', width: '100%', textAlign: 'left' }}>
-                  <span style={{ fontSize: '15px', fontWeight: '600' }}>{formTitle}</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '12px', color: '#8494AC' }}>{fieldFilledCount}/{fieldTotalCount} 입력됨</span>
+                {/*
+                  "n/m 입력됨"을 접기 버튼 밖으로 뺐다 - 이 숫자를 누르면 "필수 필드 충족
+                  현황" 모달이 열린다. 예전엔 그 모달을 삭제된 "입력 검증 결과" 패널에서만
+                  열 수 있었다(2026-08-20). 버튼 안에 버튼을 중첩할 수 없어 형제로 둔다.
+                */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                  <button onClick={toggleFieldForm} style={{ display: 'flex', alignItems: 'center', gap: '8px', border: '0', background: 'transparent', padding: '0', cursor: 'pointer', textAlign: 'left', flex: '1' }}>
+                    <span style={{ fontSize: '15px', fontWeight: '600' }}>{formTitle}</span>
                     <span style={{ display: 'inline-block', fontSize: '11px', color: '#8494AC', transform: fieldFormOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
-                  </span>
-                </button>
+                  </button>
+                  <button onClick={openFieldCheck} style={{ height: '28px', padding: '0 10px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '9px', background: '#FBFCFE', fontSize: '12px', color: '#44546F', fontWeight: '600', cursor: 'pointer', flex: 'none' }}>{fieldFilledCount}/{fieldTotalCount} 입력됨</button>
+                </div>
                 {fieldFormOpen ? (<>
                 {(() => {
                   // 2026-08-19: 필드가 80 -> 361개가 되면서 화면 구조를 두 단계로 바꿨다.

@@ -32,7 +32,9 @@ function CompanyMyPage({
   return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', maxWidth: '900px', margin: '0 auto', alignItems: 'center' }}>
         <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em', textAlign: 'center' }}>마이페이지</h1>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '760px' }}>
+        {/* 2026-08-20 강 요청: 제목과 기본정보 박스를 화면 가운데로. 바깥 컨테이너가
+            maxWidth 900이라 760짜리 박스가 왼쪽에 붙어 있었다 - margin auto로 가운데 정렬. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%', maxWidth: '760px', margin: '0 auto' }}>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>기업 기본정보</span><button onClick={openProfileEdit} style={{ height: '36px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '11px', background: '#fff', fontSize: '12.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv24">수정</button></div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: 'rgba(16,32,64,.08)', borderRadius: '14px', overflow: 'hidden' }}>

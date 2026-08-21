@@ -513,9 +513,15 @@ export function makerVals(ctx) {
     // "입력 검증 결과" 패널(2026-08-17 강 요청) - 예전엔 오른쪽 사이드 컬럼에 항상 펼쳐진
     // 채로 자리를 차지했는데, 어차피 열고닫는 토글이니 단일발급/배치발급 버튼 옆으로 옮기고
     // 기본은 닫아둬서 필수 문서·기본 정보 카드가 더 넓게 보이게 한다.
-    validationOpen: !!state.validationOpen,
-    toggleValidation: () => setState(s => ({ validationOpen: !s.validationOpen })),
-    validationWarnCount: ff ? (ffFilledCount === ff.fields.length ? 0 : 1) : (fieldSets.every(f => !!f[3]) ? 0 : 1),
+    // "입력 검증 결과" 토글은 삭제했다(2026-08-20 강 요청) - 그 패널이 보여주던 "필수 필드
+    // n/m 입력 완료"는 바로 아래 강재 기본 정보 카드 헤더의 "n/m 입력됨"과 완전히 같은
+    // 숫자였다. 그 자리에는 DPP 이름 토글이 들어간다.
+    dppTitleOpen: state.dppTitleOpen != null ? state.dppTitleOpen : !(ff && ff.dppId),
+    toggleDppTitle: () => setState(s => ({
+      dppTitleOpen: s.dppTitleOpen != null ? !s.dppTitleOpen : !!(ff && ff.dppId)
+    })),
+    // 이름이 아직 없으면 버튼에 점을 찍어 "여기서 이름을 붙일 수 있다"를 알린다.
+    dppTitleUnset: !((state.dppNameInput != null ? state.dppNameInput : ((ff && ff.displayName) || '')).trim()),
     // ff(실 폼)가 있으면 실제로 저장한다 - 없으면(battery/textile, 아직 시딩 없음) 기존
     // 목데이터 토스트만 보여준다.
     lastSavedLabel: (state.draftSavedAt && state.draftSavedAt[r]) ? ('마지막 임시저장 ' + state.draftSavedAt[r]) : '아직 임시저장한 이력이 없습니다',
@@ -843,23 +849,6 @@ export function makerVals(ctx) {
     documentSlotsEmpty: df ? df.documents.length === 0 : true,
     openFieldCheck: () => setState({ fieldCheckOpen: true }),
     closeFieldCheck: () => setState({ fieldCheckOpen: false }),
-    validations: [
-      ['필수 필드 충족', (ff ? ffFilledCount : fieldSets.filter(f => !!f[3]).length) + ' / ' + (ff ? ff.fields.length : fieldSets.length) + '개 입력 완료', (ff ? ffFilledCount === ff.fields.length : fieldSets.every(f => !!f[3])) ? '#12A150' : '#E3A008', true]
-    ].map(([label, detail, c, clickable]) => ({
-      key: label, label, detail, dot: ctx.dot(c),
-      arrow: clickable ? '→' : '',
-      rowStyle: {
-        display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 11, alignItems: 'flex-start',
-        padding: clickable ? '10px 12px' : '10px 12px',
-        margin: '0 -12px',
-        border: clickable ? '1px solid rgba(16,32,64,.09)' : '1px solid transparent',
-        borderRadius: 12,
-        background: clickable ? '#FBFCFE' : 'transparent',
-        cursor: clickable ? 'pointer' : 'default',
-        textAlign: 'left'
-      },
-      open: () => { if (clickable) setState({ fieldCheckOpen: true }); }
-    })),
     // "협력사 초대"는 이제 회사 대 회사 일반 연결이 아니라 특정 DPP에 대한 초대 - 화면에
     // 먼저 이 조직의 DPP 목록을 보여주고, 하나를 고르면 그 DPP에 여러 협력사를 한 번에
     // 초대할 수 있다(DppParticipant가 그 DPP의 "누가 뭘 채우는지" 실제 연결이 됨).
