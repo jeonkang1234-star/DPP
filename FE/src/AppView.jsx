@@ -193,7 +193,34 @@ export default function AppView(v) {
     notifUnreadCount,
     obBars,
     obBatteryCard,
-    obC2,
+    orgDetailOpen,
+    orgDetailLoading,
+    orgDetailError,
+    orgDetailTitle,
+    orgDetailSubtitle,
+    orgDetailStatusChip,
+    orgDetailStatusLabel,
+    orgDetailRows,
+    orgDetailMembers,
+    orgDetailMembersEmpty,
+    orgDetailVerifyShown,
+    orgDetailVerifyLabel,
+    orgDetailVerifyStyle,
+    orgDetailVerifyReasons,
+    orgDetailHasCert,
+    orgDetailCertName,
+    orgDetailCertMeta,
+    orgDetailCertUrl,
+    orgDetailCertIsPdf,
+    orgDetailCertIsImage,
+    orgDetailCertDownloadOnly,
+    orgDetailCertError,
+    orgDetailCertLoading,
+    orgDetailCertDownloadName,
+    closeOrgDetail,
+    orgDetailActionsShown,
+    orgDetailApprove,
+    orgDetailReject,
     obClose,
     obComplete,
     obDomainLabel,
@@ -210,7 +237,6 @@ export default function AppView(v) {
     obCompanyName,
     obBizRegNo,
     obLastStep,
-    obM2,
     obNext,
     obNextLabel,
     obOpen,
@@ -497,7 +523,7 @@ export default function AppView(v) {
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,760px)', gap: '20px', alignItems: 'start', justifyContent: 'center' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '20px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '30px 32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
-                <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#0B1B33' }}>계정 유형 <span style={{ fontWeight: '500', color: '#8494AC' }}>· 등록된 도메인이면 자동 선택, 아니면 직접 선택</span></span>
+                <span style={{ fontSize: '12.5px', fontWeight: '700', color: '#0B1B33' }}>계정 유형</span>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px' }}>
                   {/* 부연 설명 줄 삭제(2026-08-21 강 요청) - 역할 이름만으로 충분하고, 짧은 설명이
                       오히려 역할 범위를 좁게 오해하게 만들었다. */}
@@ -563,8 +589,10 @@ export default function AppView(v) {
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호 확인</span><input type="password" value={suPasswordConfirm} onChange={onSuPasswordConfirm} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                  {/* 세관·시장감독기관은 사업자등록증 개념이 맞지 않아 '증빙서류'로 부르고,
+                      온보딩에서 다시 받지 않으므로 여기서 필수로 받는다(2026-08-22 강 요청). */}
                   <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>
-                    사업자등록증{suRoleIsPublicAuthority ? ' (선택)' : ''}
+                    {suRoleIsPublicAuthority ? '증빙서류' : '사업자등록증'}
                   </span>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '10px', height: '50px', padding: '0 15px', border: '1px dashed rgba(16,32,64,.22)', borderRadius: '12px', fontSize: '13.5px', color: '#44546F', cursor: 'pointer', background: '#FAFBFD' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '30px', padding: '0 12px', borderRadius: '9px', background: 'rgba(0,69,169,.08)', color: '#0045A9', fontSize: '12px', fontWeight: '600', flex: 'none' }}>파일 선택</span>
@@ -573,7 +601,7 @@ export default function AppView(v) {
                   </label>
                   <span style={{ fontSize: '11.5px', color: '#8494AC' }}>
                     {suRoleIsPublicAuthority
-                      ? '세관·시장감독기관 계정은 관리자 수동 심사로만 승인되며, 첨부는 참고용입니다.'
+                      ? '기관 지정 공문·재직증명서 등 신원을 확인할 수 있는 서류를 첨부해 주세요. 관리자가 직접 확인한 뒤 승인합니다.'
                       : '문서에서 사업자등록번호·상호를 자동으로 확인해 가입 입력값과 완전히 일치할 때만 즉시 승인됩니다. 일치하지 않으면 관리자 수동 심사로 넘어갑니다.'}
                   </span>
                 </div>
@@ -647,7 +675,7 @@ export default function AppView(v) {
         <AppHeader
           workspace={workspace} domainChip={domainChip} domainLabel={domainLabel}
           showTabs={showTabs} tabs={tabs}
-          openNotif={openNotif}
+          openNotif={openNotif} notifUnreadCount={notifUnreadCount}
           userInitial={userInitial} userName={userName} userRole={userRole}
           resetSession={resetSession}
         />
@@ -759,7 +787,8 @@ export default function AppView(v) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '20px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>제출 문서 형식 OCR 자동검증 · 그 외는 관리자 수동 심사</span>
+              {/* 2026-08-22 강 요청: 제목 위 부연 문구 삭제 - 자동/수동 구분은 각 행의
+                  「검증 경로」 열과 상세 정보 모달에서 이미 보인다. */}
               <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>회원 관리</h1>
             </div>
           </div>
@@ -1878,30 +1907,6 @@ export default function AppView(v) {
             </div>
             </>) : null}
 
-            {obC2 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>기관 지정 공문 등 신원을 확인할 수 있는 서류를 첨부해 주세요. 관리자가 확인 후 계정을 승인합니다.</p>
-              <label style={{ border: '1.5px dashed rgba(0,69,169,.34)', borderRadius: '16px', background: 'rgba(0,69,169,.035)', padding: '30px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                <span style={{ width: '44px', height: '44px', borderRadius: '999px', background: 'rgba(0,69,169,.10)', display: 'grid', placeItems: 'center' }}><span style={{ width: '14px', height: '14px', background: '#0045A9', borderRadius: '3px' }}></span></span>
-                <span style={{ fontSize: '14px', fontWeight: '600' }}>증빙서류를 업로드하세요</span>
-                <span style={{ fontSize: '12px', color: '#6B7A93' }}>기관 지정 공문 · 재직증명서 · PDF/JPG 20MB 이하</span>
-                <input type="file" accept=".pdf,image/*" style={{ display: 'none' }} />
-              </label>
-            </div>
-            </>) : null}
-
-            {obM2 ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <p style={{ margin: '0', fontSize: '13.5px', lineHeight: '1.65', color: '#6B7A93' }}>포털에 직접 접속할 담당자의 신원 정보를 등록합니다. 모든 열람 기록은 이 사번으로 남습니다.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>담당자 성명</span><input placeholder="예) 윤가람" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>고유 사번</span><input placeholder="예) MSA-2026-0417" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>소속 부서 · 직위</span><input placeholder="예) 제품안전조사과 · 사무관" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>업무용 연락처</span><input placeholder="02-0000-0000" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-              </div>
-            </div>
-            </>) : null}
-
             {obIs2 ? (<>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -2036,6 +2041,128 @@ export default function AppView(v) {
             ))}
           </div>
           <button onClick={closeMemberModal} style={{ height: '44px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
+        </div>
+      </div>
+      </>) : null}
+
+      {/* 가입 심사 「상세 정보」 - 가입 화면에서 받은 값 전부 + 제출 서류 원본 뷰어
+          (2026-08-22 강 요청). 예전엔 mock docPreview 모달이라 빈 화면이었다. */}
+      {orgDetailOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '92', display: 'grid', placeItems: 'center', padding: '32px' }}>
+        <div onClick={closeOrgDetail} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.52)' }}></div>
+        <div style={{ position: 'relative', width: '1040px', maxWidth: '100%', maxHeight: '100%', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '22px 26px 18px', borderBottom: '1px solid rgba(16,32,64,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <span style={{ fontSize: '18px', fontWeight: '700' }}>{orgDetailTitle}</span>
+              <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{orgDetailSubtitle}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {orgDetailStatusChip ? (<><span style={orgDetailStatusChip}>{orgDetailStatusLabel}</span></>) : null}
+              <button onClick={closeOrgDetail} style={{ width: '34px', height: '34px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '11px', background: '#fff', fontSize: '13px', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
+            </div>
+          </div>
+
+          {orgDetailLoading ? (<>
+          <div style={{ padding: '54px', textAlign: 'center', fontSize: '13.5px', color: '#8494AC' }}>상세 정보를 불러오는 중입니다…</div>
+          </>) : null}
+
+          {orgDetailError ? (<>
+          <div style={{ padding: '54px', textAlign: 'center', fontSize: '13.5px', color: '#C22B2B' }}>{orgDetailError}</div>
+          </>) : null}
+
+          {!orgDetailLoading && !orgDetailError ? (<>
+          <div style={{ padding: '22px 26px', display: 'grid', gridTemplateColumns: 'minmax(0,380px) minmax(0,1fr)', gap: '22px', overflow: 'auto' }}>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '0' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '.06em', color: '#8494AC' }}>가입 신청 정보</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', background: 'rgba(16,32,64,.08)', borderRadius: '14px', overflow: 'hidden' }}>
+                  {(orgDetailRows || []).map((r, $index) => (<React.Fragment key={$index}>
+                  <div style={{ background: '#fff', padding: '11px 14px', display: 'grid', gridTemplateColumns: '110px 1fr', gap: '10px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: '#8494AC' }}>{r.label}</span>
+                    <span style={{ ...r.valueStyle, wordBreak: 'break-all' }}>{r.value}</span>
+                  </div>
+                  </React.Fragment>))}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '.06em', color: '#8494AC' }}>소속 계정</span>
+                {orgDetailMembersEmpty ? (<>
+                <div style={{ padding: '14px', borderRadius: '13px', background: '#F7F9FD', fontSize: '12.5px', color: '#8494AC' }}>연결된 계정이 없습니다.</div>
+                </>) : null}
+                {(orgDetailMembers || []).map((m, $index) => (<React.Fragment key={$index}>
+                <div style={{ padding: '13px 14px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '600', wordBreak: 'break-all' }}>{m.email}</span>
+                    <span style={m.chip}>{m.verified}</span>
+                  </div>
+                  <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{m.name} · {m.phone} · 가입 {m.joinedAt}</span>
+                </div>
+                </React.Fragment>))}
+              </div>
+
+              {orgDetailVerifyShown ? (<>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '.06em', color: '#8494AC' }}>자동검증 결과</span>
+                <div style={orgDetailVerifyStyle}>
+                  <span style={{ fontWeight: '700', display: 'block', marginBottom: (orgDetailVerifyReasons || []).length ? '6px' : '0' }}>{orgDetailVerifyLabel}</span>
+                  {(orgDetailVerifyReasons || []).map((r, $index) => (<React.Fragment key={$index}>
+                  <span style={{ display: 'block' }}>· {r.line}</span>
+                  </React.Fragment>))}
+                </div>
+              </div>
+              </>) : null}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', minWidth: '0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '.06em', color: '#8494AC' }}>제출 서류</span>
+                {orgDetailCertUrl ? (<>
+                <a href={orgDetailCertUrl} download={orgDetailCertDownloadName} style={{ height: '32px', padding: '0 13px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '10px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '12px', fontWeight: '600', textDecoration: 'none' }}>내려받기</a>
+                </>) : null}
+              </div>
+
+              {!orgDetailHasCert ? (<>
+              <div style={{ padding: '40px 20px', borderRadius: '16px', border: '1.5px dashed rgba(16,32,64,.18)', background: '#FAFBFD', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>제출된 증빙서류가 없습니다.</div>
+              </>) : null}
+
+              {orgDetailCertLoading ? (<>
+              <div style={{ padding: '40px 20px', borderRadius: '16px', background: '#F7F9FD', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>서류를 불러오는 중입니다…</div>
+              </>) : null}
+
+              {orgDetailCertError ? (<>
+              <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(224,59,59,.06)', border: '1px solid rgba(224,59,59,.22)', fontSize: '13px', color: '#C22B2B' }}>{orgDetailCertError}</div>
+              </>) : null}
+
+              {orgDetailHasCert && orgDetailCertUrl ? (<>
+              <span style={{ fontSize: '12px', color: '#8494AC' }}>{orgDetailCertName} · {orgDetailCertMeta}</span>
+              </>) : null}
+
+              {orgDetailCertIsPdf ? (<>
+              <iframe title="제출 서류" src={orgDetailCertUrl} style={{ width: '100%', height: '560px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#F7F9FD' }}></iframe>
+              </>) : null}
+
+              {orgDetailCertIsImage ? (<>
+              <div style={{ padding: '12px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#F7F9FD', overflow: 'auto', maxHeight: '560px' }}>
+                <img src={orgDetailCertUrl} alt="제출 서류" style={{ display: 'block', maxWidth: '100%', margin: '0 auto' }} />
+              </div>
+              </>) : null}
+
+              {orgDetailCertDownloadOnly ? (<>
+              <div style={{ padding: '40px 20px', borderRadius: '16px', background: '#F7F9FD', textAlign: 'center', fontSize: '13px', color: '#44546F', lineHeight: '1.7' }}>화면에서 바로 열 수 없는 형식입니다.<br />위의 「내려받기」로 확인해 주세요.</div>
+              </>) : null}
+            </div>
+          </div>
+
+          <div style={{ padding: '16px 26px', borderTop: '1px solid rgba(16,32,64,.08)', display: 'flex', justifyContent: 'flex-end', gap: '9px' }}>
+            <button onClick={closeOrgDetail} style={{ height: '46px', padding: '0 20px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '13px', background: '#fff', fontSize: '14px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
+            {orgDetailActionsShown ? (<>
+            <button onClick={orgDetailReject} style={{ height: '46px', padding: '0 20px', border: '1px solid rgba(224,59,59,.28)', borderRadius: '13px', background: '#fff', fontSize: '14px', fontWeight: '600', color: '#C22B2B', cursor: 'pointer' }}>반려</button>
+            <button onClick={orgDetailApprove} style={{ height: '46px', padding: '0 24px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>승인</button>
+            </>) : null}
+          </div>
+          </>) : null}
         </div>
       </div>
       </>) : null}

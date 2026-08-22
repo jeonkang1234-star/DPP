@@ -1,5 +1,5 @@
 import React from 'react';
-import { approveOrg, rejectOrg } from '../api/meApi.js';
+import { approveOrg, rejectOrg, fetchOrgApprovalDetail, fetchOrgBizCertBlob } from '../api/meApi.js';
 
 /**
  * 가입승인 화면(관리자) - 예전엔 mock data.json의 signupApprovals 고정 배열을 그대로
@@ -37,6 +37,40 @@ export function approvalVals(ctx) {
     promise.then(() => { ctx.say(successMsg); refetchOrgApprovals(); })
       .catch((err) => ctx.say(err.message || '처리하지 못했습니다.'));
   };
+
+  // ── 「상세 정보」 모달 ────────────────────────────────────────────────
+  // 2026-08-22 강 요청: 예전엔 mock docPreview 모달에 회사명/국가만 찍어서 사실상 빈
+  // 화면이었다. 이제 GET /admin/organizations/{id}로 가입 때 받은 값 전부를 가져오고,
+  // 제출한 사업자등록증은 blob으로 받아 PDF/이미지는 모달 안에서 바로 렌더한다
+  // (그 외 형식이거나 브라우저가 못 그리면 내려받기 버튼으로 폴백).
+  const fmtBytes = (n) => (!n && n !== 0 ? '—' : n < 1024 ? n + ' B' : n < 1024 * 1024 ? (n / 1024).toFixed(0) + ' KB' : (n / 1024 / 1024).toFixed(1) + ' MB');
+
+  const revokeCert = () => {
+    // blob URL은 명시적으로 해제하지 않으면 탭이 닫힐 때까지 메모리에 남는다.
+    if (state.orgDetailCertUrl) URL.revokeObjectURL(state.orgDetailCertUrl);
+  };
+
+  const openDetail = (orgId) => {
+    revokeCert();
+    setState({ orgDetail: null, orgDetailLoading: true, orgDetailError: '', orgDetailCertUrl: '', orgDetailCertKind: '', orgDetailCertError: '' });
+    fetchOrgApprovalDetail(orgId)
+      .then((d) => {
+        setState({ orgDetail: d, orgDetailLoading: false });
+        if (!d.hasBizRegCert) return;
+        return fetchOrgBizCertBlob(orgId)
+          .then((blob) => {
+            const mime = blob.type || d.bizRegCertMime || '';
+            const kind = mime.includes('pdf') ? 'pdf' : mime.startsWith('image/') ? 'image' : 'other';
+            setState({ orgDetailCertUrl: URL.createObjectURL(blob), orgDetailCertKind: kind });
+          })
+          .catch((err) => setState({ orgDetailCertError: err.message || '증빙서류를 불러오지 못했습니다.' }));
+      })
+      .catch((err) => setState({ orgDetailLoading: false, orgDetailError: err.message || '상세 정보를 불러오지 못했습니다.' }));
+  };
+
+  const d = state.orgDetail;
+  const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v);
+  const statusLabel = (st) => (st === 'ACTIVE' ? '승인됨' : st === 'PENDING' ? '심사 대기' : st === 'REJECTED' ? '반려됨' : st === 'SUSPENDED' ? '정지됨' : dash(st));
 
   return {
     apTabs: tabs.map(([k, label, count]) => ({
@@ -83,7 +117,7 @@ export function approvalVals(ctx) {
         // 팝업으로 바뀌게" - window.prompt 대신, 문서 반려 관리 화면(그 자체는 별도
         // 페이지로서는 삭제됨)과 같은 톤의 팝업을 띄워서 사유를 입력받는다.
         reject: () => setState({ rejectModal: { orgId: r.orgId, name }, rejectReasonInput: '' }),
-        detail: () => setState({ docPreview: { name: name + ' · ' + domainLabel(r.domain), meta: country + ' · ' + biz, status: isManual ? '심사 대기' : isRejected ? '반려됨' : '승인됨' } })
+        detail: () => openDetail(r.orgId)
       };
     }),
     rejectModalOpen: !!state.rejectModal,
@@ -96,6 +130,92 @@ export function approvalVals(ctx) {
       key: label, label,
       apply: () => setState((s) => ({ rejectReasonInput: s.rejectReasonInput ? (s.rejectReasonInput + ' / ' + label) : label }))
     })),
+    // ── 상세 정보 모달 바인딩 ──
+    orgDetailOpen: !!(state.orgDetail || state.orgDetailLoading || state.orgDetailError),
+    orgDetailLoading: !!state.orgDetailLoading,
+    orgDetailError: state.orgDetailError || '',
+    orgDetailTitle: d ? d.orgName : '상세 정보',
+    orgDetailSubtitle: d ? (d.orgTypeLabel + ' · ' + statusLabel(d.approvalStatus)) : '',
+    orgDetailStatusChip: d ? ctx.chip(
+      d.approvalStatus === 'ACTIVE' ? 'rgba(18,161,80,.12)' : d.approvalStatus === 'PENDING' ? 'rgba(227,160,8,.16)' : 'rgba(224,59,59,.10)',
+      d.approvalStatus === 'ACTIVE' ? '#0E7A3D' : d.approvalStatus === 'PENDING' ? '#96660A' : '#C22B2B'
+    ) : null,
+    orgDetailStatusLabel: d ? statusLabel(d.approvalStatus) : '',
+    // 가입 화면에서 받은 값 그대로. mono=true면 등폭 글꼴로(번호·코드류).
+    orgDetailRows: d ? [
+      ['회사·기관명', d.orgName, false],
+      ['계정 유형', d.orgTypeLabel, false],
+      ['도메인', domainLabel(d.domain), false],
+      ['국가', dash(d.countryCode), true],
+      ['사업자등록번호', dash(d.bizRegNo), true],
+      ['주소', dash(d.addressLine), false],
+      ['홈페이지', dash(d.websiteUrl), false],
+      ['담당자', dash(d.contactName), false],
+      ['담당자 연락처', dash(d.contactPhone), true],
+      ['담당자 이메일', dash(d.contactEmail), false],
+      ['신청일시', ctx.fmtDateTime(d.createdAt), false],
+      ['심사일시', d.approvedAt ? ctx.fmtDateTime(d.approvedAt) : '—', false],
+    ].map(([label, value, mono]) => ({ key: label, label, value, valueStyle: mono ? { fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 600 } : { fontSize: 13.5, fontWeight: 600 } })) : [],
+    orgDetailMembers: d ? (d.members || []).map((m) => ({
+      key: m.userId,
+      email: m.email,
+      name: dash(m.displayName),
+      phone: dash(m.phone),
+      verified: (m.emailVerified ? '이메일 ✓' : '이메일 ✗') + ' · ' + (m.phoneVerified ? '전화 ✓' : '전화 ✗'),
+      joinedAt: ctx.fmtDateTime(m.createdAt),
+      chip: ctx.chip(m.emailVerified && m.phoneVerified ? 'rgba(18,161,80,.12)' : 'rgba(227,160,8,.16)',
+        m.emailVerified && m.phoneVerified ? '#0E7A3D' : '#96660A')
+    })) : [],
+    orgDetailMembersEmpty: !!d && (!d.members || d.members.length === 0),
+    // 자동검증 판정. 공적 기관은 아예 안 돌리므로 null이고, 그때는 박스를 감춘다.
+    orgDetailVerifyShown: !!(d && d.verifyCheckedAt),
+    orgDetailVerifyPassed: !!(d && d.verifyAutoApprovable),
+    orgDetailVerifyLabel: d && d.verifyAutoApprovable ? 'OCR 자동검증 통과' : 'OCR 자동검증 미통과 · 수동 심사 필요',
+    orgDetailVerifyStyle: d ? {
+      padding: '13px 15px', borderRadius: 13, fontSize: 12.5, lineHeight: 1.6,
+      background: d.verifyAutoApprovable ? 'rgba(18,161,80,.07)' : 'rgba(227,160,8,.08)',
+      border: '1px solid ' + (d.verifyAutoApprovable ? 'rgba(18,161,80,.24)' : 'rgba(227,160,8,.28)'),
+      color: '#44546F'
+    } : null,
+    orgDetailVerifyReasons: d && d.verifyReasons
+      ? d.verifyReasons.split('\n').filter(Boolean).map((line, i) => ({ key: i, line }))
+      : [],
+    // 제출 서류
+    orgDetailHasCert: !!(d && d.hasBizRegCert),
+    orgDetailCertName: d ? dash(d.bizRegCertName) : '',
+    orgDetailCertMeta: d && d.hasBizRegCert
+      ? [dash(d.bizRegCertMime), fmtBytes(d.bizRegCertSize), d.bizRegCertUploadedAt ? ctx.fmtDateTime(d.bizRegCertUploadedAt) : null].filter(Boolean).join(' · ')
+      : '',
+    orgDetailCertUrl: state.orgDetailCertUrl || '',
+    orgDetailCertIsPdf: state.orgDetailCertKind === 'pdf',
+    orgDetailCertIsImage: state.orgDetailCertKind === 'image',
+    // PDF/이미지가 아니거나 아직 못 받았으면 내려받기만 제공한다.
+    orgDetailCertDownloadOnly: !!state.orgDetailCertUrl && state.orgDetailCertKind === 'other',
+    orgDetailCertError: state.orgDetailCertError || '',
+    orgDetailCertLoading: !!(d && d.hasBizRegCert && !state.orgDetailCertUrl && !state.orgDetailCertError),
+    orgDetailCertDownloadName: d ? (d.bizRegCertName || 'biz-reg-cert') : 'biz-reg-cert',
+    closeOrgDetail: () => {
+      revokeCert();
+      setState({ orgDetail: null, orgDetailLoading: false, orgDetailError: '', orgDetailCertUrl: '', orgDetailCertKind: '', orgDetailCertError: '' });
+    },
+    // 모달 안에서 바로 승인/반려까지 끝낼 수 있게. 심사 대기 상태일 때만 보인다.
+    orgDetailActionsShown: !!(d && d.approvalStatus === 'PENDING'),
+    orgDetailApprove: () => {
+      if (!d) return;
+      const name = d.orgName;
+      const orgId = d.orgId;
+      revokeCert();
+      setState({ orgDetail: null, orgDetailCertUrl: '', orgDetailCertKind: '' });
+      runAction(approveOrg(orgId), name + ' 가입을 승인했습니다.');
+    },
+    orgDetailReject: () => {
+      if (!d) return;
+      const name = d.orgName;
+      const orgId = d.orgId;
+      revokeCert();
+      setState({ orgDetail: null, orgDetailCertUrl: '', orgDetailCertKind: '', rejectModal: { orgId, name }, rejectReasonInput: '' });
+    },
+
     confirmReject: () => {
       if (!state.rejectModal) return;
       const { orgId, name } = state.rejectModal;

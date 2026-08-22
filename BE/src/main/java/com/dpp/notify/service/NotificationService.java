@@ -7,12 +7,14 @@ import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
+import com.dpp.notify.entity.Notification;
 import com.dpp.notify.repository.NotificationRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -85,6 +87,31 @@ public class NotificationService {
         // 역할의 노출 집합이 같으므로(CERT·SYSTEM), 최소 집합으로 보수적으로 처리한다.
         // 신규 가입은 OrganizationService.findOrCreateForSignup이 org_type을 바로 채운다.
         return orgType == null ? BUSINESS_UNKNOWN_ROLE : orgType;
+    }
+
+    /**
+     * 이 계정의 안 읽은 알림을 전부 읽음 처리하고, 처리한 건수를 돌려준다.
+     *
+     * 2026-08-22 강 요청 - 헤더의 빨간 점이 항상 켜져 있어서 "새 알림이 있다"는 신호로
+     * 쓸 수가 없었다(AppHeader.jsx에 하드코딩된 span이었다). 이제 FE가 알림센터를 열 때
+     * 이걸 호출하고 목록을 다시 받아서, 점이 실제로 사라진다.
+     *
+     * 개별 알림 단위 읽음 처리는 아직 필요가 없다 - 알림센터가 목록 전체를 한 화면에
+     * 펼쳐 보여주는 구조라, 열었다는 것 자체가 전부 확인했다는 뜻에 가깝다.
+     */
+    @Transactional
+    public int markAllRead(Long userId) {
+        List<Notification> unread = notificationRepository.findByRecipientUserIdAndReadFalse(userId);
+        if (unread.isEmpty()) {
+            return 0;
+        }
+        OffsetDateTime now = OffsetDateTime.now();
+        for (Notification n : unread) {
+            n.setRead(true);
+            n.setReadAt(now);
+        }
+        notificationRepository.saveAll(unread);
+        return unread.size();
     }
 
     @Transactional(readOnly = true)

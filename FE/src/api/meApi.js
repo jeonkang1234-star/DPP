@@ -273,6 +273,12 @@ export function fetchNotifications() {
   return authedFetch('/notifications');
 }
 
+/** 알림센터를 열 때 안 읽은 알림을 전부 읽음 처리한다. 헤더의 "새 알림" 빨간 점이
+ * 이걸로 꺼진다(2026-08-22 강 요청). */
+export function markNotificationsRead() {
+  return authedFetch('/notifications/read-all', { method: 'POST' });
+}
+
 /**
  * 관리자 가입승인 화면(com.dpp.mypage.controller.AdminOrganizationController) - ADMIN
  * 계정만 200을 받는다(그 외는 403). 목록은 필터 없이 전체를 내려주고 FE(approvalVals.js)가
@@ -288,6 +294,35 @@ export function approveOrg(orgId) {
 
 export function rejectOrg(orgId, reason) {
   return authedFetch(`/admin/organizations/${orgId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+/** 가입 심사 「상세 정보」 - 가입 화면에서 받은 값 전부 + 소속 계정 + 자동검증 판정. */
+export function fetchOrgApprovalDetail(orgId) {
+  return authedFetch(`/admin/organizations/${orgId}`);
+}
+
+/**
+ * 제출된 사업자등록증/증빙서류 원본을 blob으로 받는다. 이미지·PDF는 화면에 바로 띄우고,
+ * 그 외 형식은 같은 blob을 내려받기에 쓴다. authedFetch는 JSON만 다루므로 여기서만
+ * fetch를 직접 쓰되, 토큰 주입과 401 처리는 동일하게 맞춘다.
+ */
+export async function fetchOrgBizCertBlob(orgId) {
+  const session = loadSession();
+  const token = session?.accessToken;
+  const res = await fetch(`/admin/organizations/${orgId}/biz-cert`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 401 && !redirectingToLogin) {
+    redirectingToLogin = true;
+    clearSession();
+    window.location.href = '/';
+  }
+  if (!res.ok) {
+    const err = new Error(res.status === 404 ? '제출된 증빙서류가 없습니다.' : '증빙서류를 불러오지 못했습니다.');
+    err.status = res.status;
+    throw err;
+  }
+  return res.blob();
 }
 
 /**

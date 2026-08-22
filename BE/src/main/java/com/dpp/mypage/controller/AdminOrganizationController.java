@@ -1,9 +1,13 @@
 package com.dpp.mypage.controller;
 
+import com.dpp.mypage.dto.OrgApprovalDetailResponse;
 import com.dpp.mypage.dto.OrgApprovalItemResponse;
 import com.dpp.mypage.dto.OrgRejectRequest;
 import com.dpp.mypage.service.AdminOrgApprovalService;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -35,6 +40,36 @@ public class AdminOrganizationController {
     public ResponseEntity<List<OrgApprovalItemResponse>> list(Authentication authentication) {
         Long adminUserId = parseUserId(authentication);
         return ResponseEntity.ok(adminOrgApprovalService.list(adminUserId));
+    }
+
+    /** 「상세 정보」 - 가입 화면에서 받은 값 전부 + 소속 계정 + 자동검증 판정(2026-08-22 강 요청). */
+    @GetMapping("/admin/organizations/{orgId}")
+    public ResponseEntity<OrgApprovalDetailResponse> detail(@PathVariable Long orgId, Authentication authentication) {
+        Long adminUserId = parseUserId(authentication);
+        return ResponseEntity.ok(adminOrgApprovalService.detail(adminUserId, orgId));
+    }
+
+    /**
+     * 가입 시 제출한 사업자등록증/증빙서류 원본. Content-Disposition을 inline으로 내려서
+     * PDF·이미지는 관리자 화면에 그대로 띄울 수 있고(FE가 blob URL로 <iframe>/<img>에 물림),
+     * 그 외 형식은 같은 응답을 내려받기로 쓴다. 파일명은 한글이 섞이므로 RFC 5987
+     * (filename*=UTF-8'') 형식으로 인코딩된다 - ContentDisposition 빌더가 처리한다.
+     */
+    @GetMapping("/admin/organizations/{orgId}/biz-cert")
+    public ResponseEntity<byte[]> bizCert(@PathVariable Long orgId, Authentication authentication) {
+        Long adminUserId = parseUserId(authentication);
+        AdminOrgApprovalService.StoredFile file = adminOrgApprovalService.loadBizRegCert(adminUserId, orgId);
+        MediaType mediaType;
+        try {
+            mediaType = MediaType.parseMediaType(file.contentType());
+        } catch (org.springframework.http.InvalidMediaTypeException e) {
+            mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        }
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(file.fileName(), StandardCharsets.UTF_8).toString())
+                .body(file.content());
     }
 
     @PostMapping("/admin/organizations/{orgId}/approve")

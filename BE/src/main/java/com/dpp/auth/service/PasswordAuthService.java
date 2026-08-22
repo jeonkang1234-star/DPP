@@ -86,7 +86,7 @@ public class PasswordAuthService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.");
         }
 
-        requireApprovedOrganization(user);
+        Organization org = requireApprovedOrganization(user);
 
         user.setFailedLoginCount((short) 0);
         user.setLockedUntil(null);
@@ -105,26 +105,28 @@ public class PasswordAuthService {
         auditLogService.record(user.getUserId(), "LOGIN", "USER_ACCOUNT", user.getUserId(),
                 user.getEmail(), "성공", null);
 
-        return LoginResponse.of(access, refresh, user.getAccountType().name(), user.getEmail(), user.getDisplayName());
+        return LoginResponse.of(access, refresh, user.getAccountType().name(), user.getEmail(), user.getDisplayName(),
+                org == null ? null : org.getOrgType(), org == null ? null : org.getDomain());
     }
 
     /**
      * 세관/시장감독기관 계정은 organization.approval_status가 ACTIVE가 되기 전까지 로그인을
-     * 막는다. 비밀번호 검증을 통과한 뒤에 확인하는 이유는, 승인 상태를 미가입/오답 응답과
+     * 막는다. 통과하면 소속 조직을 그대로 돌려준다 - 응답의 appRole(화면 역할)을 만들 때
+     * org_type/domain이 필요해서, 조회를 두 번 하지 않으려고 여기서 같이 넘긴다. 비밀번호 검증을 통과한 뒤에 확인하는 이유는, 승인 상태를 미가입/오답 응답과
      * 구분해 흘리지 않기 위해서다(계정 존재 여부 노출 방지).
      */
-    private void requireApprovedOrganization(UserAccount user) {
+    private Organization requireApprovedOrganization(UserAccount user) {
         if (user.getOrgId() == null) {
-            return;
+            return null;
         }
         Organization org = organizationRepository.findById(user.getOrgId()).orElse(null);
         if (org == null || org.getOrgType() == null
                 || !APPROVAL_GATED_ORG_TYPES.contains(org.getOrgType())) {
-            return;
+            return org;
         }
         OrgApprovalStatus status = org.getApprovalStatus();
         if (status == OrgApprovalStatus.ACTIVE) {
-            return;
+            return org;
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, switch (status) {
             case REJECTED -> "기관 등록 신청이 반려되었습니다. 관리자에게 문의해 주세요.";
