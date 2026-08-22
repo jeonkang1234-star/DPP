@@ -3,6 +3,7 @@ package com.dpp.mypage.service;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.document.client.ParserClient;
+import com.dpp.document.config.DocumentIntegrationProperties;
 import com.dpp.mypage.dto.OrganizationResponse;
 import com.dpp.mypage.dto.OrganizationUpdateRequest;
 import com.dpp.mypage.entity.OrgApprovalStatus;
@@ -12,8 +13,11 @@ import com.dpp.mypage.repository.OrganizationRepository;
 import com.dpp.mypage.repository.RoleRepository;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -69,15 +73,18 @@ public class OrganizationService {
     private final UserAccountRepository userAccountRepository;
     private final RoleRepository roleRepository;
     private final ParserClient parserClient;
+    private final DocumentIntegrationProperties documentProperties;
 
     public OrganizationService(OrganizationRepository organizationRepository,
                                 UserAccountRepository userAccountRepository,
                                 RoleRepository roleRepository,
-                                ParserClient parserClient) {
+                                ParserClient parserClient,
+                                DocumentIntegrationProperties documentProperties) {
         this.organizationRepository = organizationRepository;
         this.userAccountRepository = userAccountRepository;
         this.roleRepository = roleRepository;
         this.parserClient = parserClient;
+        this.documentProperties = documentProperties;
     }
 
     /** parser(FastAPI) POST /verify-biz-cert 응답 요약. */
@@ -117,9 +124,29 @@ public class OrganizationService {
                 ? organizationRepository.findByCountryCodeAndOrgNameAndDeletedAtIsNull(countryCode, companyName)
                 : organizationRepository.findByCountryCodeAndBizRegNoAndDeletedAtIsNull(countryCode, bizRegNoOrNull);
         if (existing.isPresent()) {
-            log.info("기존 조직에 합류: org_id={}, countryCode={}, bizRegNo={}",
-                    existing.get().getOrgId(), countryCode, bizRegNoOrNull);
-            return existing.get();
+            Organization joined = existing.get();
+            log.info("기존 조직에 합류: org_id={}, countryCode={}, bizRegNo={}, approvalStatus={}",
+                    joined.getOrgId(), countryCode, bizRegNoOrNull, joined.getApprovalStatus());
+            // 아직 승인 전인 조직에 다시 가입하는 경우엔 이번에 낸 서류로 자동심사를 한 번 더
+            // 돌린다(2026-08-22 강 리포트 "다온텍스타일로 회원가입했는데 자동검증이 안 되고
+            // 관리자 수동 심사로 넘어감"). 예전엔 여기서 그냥 return해 버려서, 계정만 지우고
+            // 조직 행이 PENDING으로 남아 있으면 몇 번을 다시 가입해도 검증이 아예 돌지 않고
+            // 영원히 수동 심사로 빠졌다. 이미 ACTIVE/REJECTED로 심사가 끝난 조직은 건드리지
+            // 않는다 - 나중에 합류하는 직원이 회사 승인 상태를 뒤집으면 안 된다.
+            if (joined.getApprovalStatus() == OrgApprovalStatus.PENDING && !isPublicAuthority) {
+                storeBizRegCert(joined, bizRegCertFile);
+                BizCertVerdict verdict = verifyBizCert(bizRegCertFile, bizRegNoOrNull, companyName);
+                recordVerdict(joined, verdict);
+                if (verdict.autoApprovable()) {
+                    joined.setApprovalStatus(OrgApprovalStatus.ACTIVE);
+                    joined.setApprovedAt(OffsetDateTime.now());
+                    log.info("기존 PENDING 조직 자동 승인: org_id={} 재제출 서류 검증 통과", joined.getOrgId());
+                } else {
+                    log.info("기존 PENDING 조직 수동 심사 유지: org_id={} - {}", joined.getOrgId(), verdict.reasons());
+                }
+                return organizationRepository.save(joined);
+            }
+            return joined;
         }
 
         Organization org = new Organization();
@@ -143,6 +170,7 @@ public class OrganizationService {
                     + "관리자 수동 심사로 전환", org.getOrgType(), countryCode);
         } else {
             BizCertVerdict verdict = verifyBizCert(bizRegCertFile, bizRegNoOrNull, companyName);
+            recordVerdict(org, verdict);
             if (verdict.autoApprovable()) {
                 org.setApprovalStatus(OrgApprovalStatus.ACTIVE);
                 org.setApprovedAt(OffsetDateTime.now());
@@ -156,10 +184,59 @@ public class OrganizationService {
             }
         }
 
+        // 심사용 첨부는 승인 여부와 무관하게 항상 남긴다 - 공적 기관은 이 파일이 유일한
+        // 심사 근거이고, 제조사/협력사도 반려 뒤 재심사할 때 원본이 필요하다.
+        storeBizRegCert(org, bizRegCertFile);
+
         Organization saved = organizationRepository.save(org);
         log.info("신규 조직 생성: org_id={}, countryCode={}, bizRegNo={}, orgType={}, approvalStatus={}",
                 saved.getOrgId(), countryCode, bizRegNoOrNull, saved.getOrgType(), saved.getApprovalStatus());
         return saved;
+    }
+
+    /**
+     * 가입 시 제출한 사업자등록증(기관은 지정 공문 등 증빙서류) 원본을 업로드 디렉터리에
+     * 저장하고 organization에 경로를 남긴다. 관리자 심사 화면이 이 파일을 그대로 열어
+     * 보여준다(AdminOrgApprovalService.loadBizRegCert, 2026-08-22 강 요청).
+     *
+     * 저장에 실패해도 가입 자체는 막지 않는다 - 볼륨 권한 문제로 심사 첨부가 안 붙는 것보다
+     * 가입이 되는 게 낫고, 관리자 화면에는 "첨부 없음"으로 표시된다.
+     */
+    private void storeBizRegCert(Organization org, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return;
+        }
+        String original = file.getOriginalFilename();
+        String extension = ".pdf";
+        if (original != null) {
+            int dot = original.lastIndexOf('.');
+            if (dot > 0 && dot < original.length() - 1 && original.length() - dot <= 6) {
+                extension = original.substring(dot).toLowerCase();
+            }
+        }
+        Path uploadDir = Path.of(documentProperties.getUploadDir()).resolve("biz-reg-certs");
+        Path storedPath = uploadDir.resolve(UUID.randomUUID() + extension);
+        try {
+            Files.createDirectories(uploadDir);
+            Files.write(storedPath, file.getBytes());
+        } catch (IOException e) {
+            log.warn("사업자등록증 원본 저장 실패(org={}): {} - 첨부 없이 진행합니다.",
+                    org.getOrgName(), e.getMessage());
+            return;
+        }
+        org.setBizRegCertUri(storedPath.toString());
+        org.setBizRegCertName(original != null && !original.isBlank() ? original : storedPath.getFileName().toString());
+        org.setBizRegCertMime(file.getContentType());
+        org.setBizRegCertSize(file.getSize());
+        org.setBizRegCertUploadedAt(OffsetDateTime.now());
+    }
+
+    /** parser 판정을 조직에 기록해 둔다 - 관리자 상세 화면이 "왜 수동 심사로 왔는지"를 보여준다. */
+    private void recordVerdict(Organization org, BizCertVerdict verdict) {
+        org.setVerifyAutoApprovable(verdict.autoApprovable());
+        String reasons = String.join("\n", verdict.reasons());
+        org.setVerifyReasons(reasons.length() > 1000 ? reasons.substring(0, 1000) : reasons);
+        org.setVerifyCheckedAt(OffsetDateTime.now());
     }
 
     /**

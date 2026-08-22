@@ -23,16 +23,17 @@ export function obVals(ctx) {
   const kind = state.obKind || 'maker';
   const isCustoms = kind === 'customs';
   const isEu = kind === 'eu';
-  const titles = isCustoms
-    ? ['공식 기관 식별 코드', '증빙서류 업로드']
-    : isEu
-      ? ['공식 기관 식별 코드', '개별 신원 정보']
-      : ['도메인 선택하기', '기업 기본정보 확인'];
-  const lastStep = 2;
+  // 세관·시장감독기관은 2단계를 통째로 뺐다(2026-08-22 강 요청). 증빙서류는 이미 회원가입
+  // 화면에서 받고 있어 온보딩에서 또 받으면 같은 문서를 두 번 내는 꼴이었고, 시장감독기관의
+  // 「개별 신원 정보」도 기관 식별 코드와 겹치는 내용이었다.
+  const titles = isCustoms || isEu
+    ? ['공식 기관 식별 코드']
+    : ['도메인 선택하기', '기업 기본정보 확인'];
+  const lastStep = titles.length;
   const hints = isCustoms
-    ? ['국가 및 관할 세관을 나타내는 고유 ID를 등록합니다', '기관 지정 공문 등 신원을 확인할 수 있는 서류를 첨부합니다']
+    ? ['국가 및 관할 세관을 나타내는 고유 ID를 등록합니다']
     : isEu
-      ? ['국가 및 담당 관할 구역을 나타내는 기관 ID를 등록합니다', '포털에 직접 접속할 담당 공무원의 신원 정보를 등록합니다']
+      ? ['국가 및 담당 관할 구역을 나타내는 기관 ID를 등록합니다']
       : ['선택한 도메인에 맞는 입력 화면이 제공됩니다', '회사명·사업자등록번호는 가입 시 확정되어 수정할 수 없습니다'];
   const d = state.obDomain;
   // 가입 때 받은 조직 정보(GET /me/organization). 아직 로드 전이면 가입 화면 입력값을
@@ -68,8 +69,6 @@ export function obVals(ctx) {
     obIs1: st === 1 && kind === 'maker',
     obIs2: st === 2 && kind === 'maker',
     obG1: st === 1 && (isCustoms || isEu),
-    obC2: st === 2 && isCustoms,
-    obM2: st === 2 && isEu,
     obCompanyName,
     obBizRegNo,
     obGovIdLabel: isCustoms ? '관할 세관' : '담당 관할 구역',

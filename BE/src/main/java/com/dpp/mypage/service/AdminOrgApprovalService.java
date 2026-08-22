@@ -4,6 +4,7 @@ import com.dpp.audit.service.AuditLogService;
 import com.dpp.auth.entity.AccountType;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
+import com.dpp.mypage.dto.OrgApprovalDetailResponse;
 import com.dpp.mypage.dto.OrgApprovalItemResponse;
 import com.dpp.mypage.entity.OrgApprovalStatus;
 import com.dpp.mypage.entity.Organization;
@@ -18,6 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -56,6 +60,49 @@ public class AdminOrgApprovalService {
         return organizationRepository.findByDeletedAtIsNullOrderByCreatedAtDesc().stream()
                 .map(OrgApprovalItemResponse::of)
                 .toList();
+    }
+
+    /**
+     * 「상세 정보」 - 가입 화면에서 받은 값 전부 + 소속 계정 + 자동검증 판정.
+     * 2026-08-22 강 요청("상세 정보를 누르면 회원가입 때 받은 정보는 다 보이게").
+     */
+    @Transactional(readOnly = true)
+    public OrgApprovalDetailResponse detail(Long adminUserId, Long orgId) {
+        requireAdmin(adminUserId);
+        Organization org = requireOrg(orgId);
+        return OrgApprovalDetailResponse.of(org, userAccountRepository.findByOrgId(orgId));
+    }
+
+    /** 심사 화면에서 그대로 열어볼 사업자등록증/증빙서류 원본. */
+    public record StoredFile(byte[] content, String fileName, String contentType) {
+    }
+
+    /**
+     * 가입 시 제출한 첨부 원본을 읽어 돌려준다. 파일이 아예 없거나(첨부 없이 가입한 공적
+     * 기관) 디스크에서 사라졌으면 404 - 관리자 화면은 "첨부 없음"으로 표시한다.
+     */
+    @Transactional(readOnly = true)
+    public StoredFile loadBizRegCert(Long adminUserId, Long orgId) {
+        requireAdmin(adminUserId);
+        Organization org = requireOrg(orgId);
+        String uri = org.getBizRegCertUri();
+        if (uri == null || uri.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "제출된 증빙서류가 없습니다.");
+        }
+        Path path = Path.of(uri);
+        if (!Files.isReadable(path)) {
+            log.warn("증빙서류 원본을 찾을 수 없음: org={}, uri={}", orgId, uri);
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "증빙서류 원본을 찾을 수 없습니다.");
+        }
+        try {
+            String name = org.getBizRegCertName() != null && !org.getBizRegCertName().isBlank()
+                    ? org.getBizRegCertName() : path.getFileName().toString();
+            String mime = org.getBizRegCertMime() != null && !org.getBizRegCertMime().isBlank()
+                    ? org.getBizRegCertMime() : "application/octet-stream";
+            return new StoredFile(Files.readAllBytes(path), name, mime);
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "증빙서류를 읽지 못했습니다.", e);
+        }
     }
 
     @Transactional

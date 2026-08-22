@@ -130,4 +130,33 @@ public class Organization {
 
     @Column(name = "deleted_at")
     private OffsetDateTime deletedAt;
+
+    // --- 가입 심사용 첨부/판정 (V28__org_biz_reg_cert.sql, 2026-08-22 강 요청) ---
+    // 가입 화면에서 받은 사업자등록증(기관은 지정 공문 등 증빙서류)을 관리자가 심사 화면에서
+    // 그대로 열어볼 수 있게 원본과 자동검증 결과를 남긴다. 예전엔 parser에 한 번 보내고
+    // 버려서 '상세 정보'에 보여줄 게 아무것도 없었다.
+
+    @Column(name = "biz_reg_cert_uri", length = 500)
+    private String bizRegCertUri;
+
+    @Column(name = "biz_reg_cert_name", length = 255)
+    private String bizRegCertName;
+
+    @Column(name = "biz_reg_cert_mime", length = 100)
+    private String bizRegCertMime;
+
+    @Column(name = "biz_reg_cert_size")
+    private Long bizRegCertSize;
+
+    @Column(name = "biz_reg_cert_uploaded_at")
+    private OffsetDateTime bizRegCertUploadedAt;
+
+    @Column(name = "verify_auto_approvable")
+    private Boolean verifyAutoApprovable;
+
+    @Column(name = "verify_reasons", length = 1000)
+    private String verifyReasons;
+
+    @Column(name = "verify_checked_at")
+    private OffsetDateTime verifyCheckedAt;
 }

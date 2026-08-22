@@ -13,6 +13,7 @@ import com.dpp.collab.entity.Invitation;
 import com.dpp.collab.repository.InvitationRepository;
 import com.dpp.dpp.entity.DppParticipant;
 import com.dpp.dpp.repository.DppParticipantRepository;
+import com.dpp.mypage.entity.OrgApprovalStatus;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
 import com.dpp.mypage.service.OrganizationService;
@@ -112,6 +113,11 @@ public class BusinessSignupService {
             if (request.country() == null || request.country().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "국가는 필수입니다.");
             }
+            // 온보딩에서 서류를 다시 받지 않기로 해서(2026-08-22 강 요청) 이 첨부가 기관
+            // 계정의 유일한 심사 근거다 - 선택이 아니라 필수.
+            if (bizRegCert == null || bizRegCert.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "증빙서류를 첨부해 주세요.");
+            }
         } else {
             if (request.domain() == null || request.domain().isBlank()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "domain은 필수입니다.");
@@ -146,13 +152,66 @@ public class BusinessSignupService {
         user.setOrgId(org.getOrgId());
         userAccountRepository.save(user);
 
+        // 가입 화면에서 받은 이메일·전화번호를 조직 담당자 연락처로도 채워 둔다.
+        // 예전엔 마이페이지에서 따로 입력하기 전까지 비어 있어서, 관리자 심사 화면의
+        // 「담당자 연락처 / 담당자 이메일」이 항상 '—'였다(2026-08-22 강 요청).
+        // 이미 값이 있으면 덮어쓰지 않는다 - 같은 조직의 두 번째 직원이 가입한다고 해서
+        // 회사가 지정해 둔 대표 담당자가 바뀌면 안 된다.
+        if (org.getContactEmail() == null || org.getContactEmail().isBlank()) {
+            org.setContactEmail(request.email());
+        }
+        if (org.getContactPhone() == null || org.getContactPhone().isBlank()) {
+            org.setContactPhone(user.getPhone());
+        }
+        organizationRepository.save(org);
+
         linkPendingCollaborations(request.email(), org.getOrgId(), user.getUserId());
+        notifyAdminsOfPendingSignup(org);
 
         String access = jwtTokenProvider.createAccessToken(
                 user.getUserId().toString(), Map.of("accountType", user.getAccountType().name()));
         String refresh = jwtTokenProvider.createRefreshToken(user.getUserId().toString());
 
-        return LoginResponse.of(access, refresh, user.getAccountType().name(), user.getEmail(), user.getDisplayName());
+        return LoginResponse.of(access, refresh, user.getAccountType().name(), user.getEmail(), user.getDisplayName(),
+                org.getOrgType(), org.getDomain());
+    }
+
+    /**
+     * 관리자 심사가 필요한(approval_status=PENDING) 신규 가입이 들어오면 운영자 전원에게
+     * 알림을 남긴다. 2026-08-22 강 요청 "세관이나 EU에서 가입신청 넣으면 알림센터에 알림이
+     * 도착하게" - 세관·시장감독기관은 항상 수동 심사라 반드시 여기 걸리고, 제조사·협력사도
+     * 사업자등록증 자동승인을 통과하지 못하면 같은 알림이 간다(관리자가 심사할 일이 생긴
+     * 것은 마찬가지다). 자동승인으로 이미 ACTIVE가 된 조직은 알리지 않는다.
+     *
+     * 같은 조직에 두 번째 직원이 가입하는 경우엔 조직이 이미 있으므로 PENDING이 아니면
+     * 조용히 지나간다. 조직이 여전히 PENDING이면 알림이 한 번 더 가는데, 심사가 아직
+     * 안 끝났다는 신호라 중복이라기보다 리마인더에 가깝다.
+     */
+    private void notifyAdminsOfPendingSignup(Organization org) {
+        if (org.getApprovalStatus() != OrgApprovalStatus.PENDING) {
+            return;
+        }
+        String typeLabel = switch (org.getOrgType() == null ? "" : org.getOrgType()) {
+            case "CUSTOMS" -> "세관";
+            case "EU_AUTHORITY" -> "시장감독기관";
+            case "MANUFACTURER" -> "제조사";
+            case "RAW_SUPPLIER", "TEST_LAB", "RECYCLER", "LOGISTICS", "DISTRIBUTOR" -> "협력사";
+            default -> "기업";
+        };
+        List<UserAccount> admins = userAccountRepository.findByAccountType(AccountType.ADMIN);
+        for (UserAccount admin : admins) {
+            Notification notification = new Notification();
+            notification.setRecipientUserId(admin.getUserId());
+            notification.setCategory(NotificationCategory.ACCOUNT);
+            notification.setSubType("ORG_SIGNUP");
+            notification.setTitle("[" + typeLabel + "] 가입 심사 요청이 접수되었습니다");
+            notification.setBody(org.getOrgName() + " 이(가) " + typeLabel
+                    + " 계정으로 가입을 신청했습니다. 회원 관리에서 제출 서류를 확인하고 심사해 주세요.");
+            notification.setLinkUrl("/admin/approvals");
+            notificationRepository.save(notification);
+        }
+        log.info("가입 심사 요청 알림 발송: org_id={}, orgType={}, 관리자 {}명",
+                org.getOrgId(), org.getOrgType(), admins.size());
     }
 
     /**

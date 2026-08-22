@@ -14,6 +14,10 @@ export default function AppHeader({
   workspace, domainChip, domainLabel,
   showTabs, tabs,
   openNotif,
+  // 2026-08-22 강 요청: 빨간 점은 안 읽은 알림이 실제로 있을 때만. 예전엔 span이 조건 없이
+  // 항상 그려져 있어서 "새 알림이 왔다"는 신호로 전혀 쓸 수가 없었다. 알림센터를 열면
+  // useAppLogic.openNotif가 /notifications/read-all을 부르고 목록을 다시 받아 0이 된다.
+  notifUnreadCount,
   userInitial, userName, userRole,
   resetSession,
 }) {
@@ -39,7 +43,7 @@ export default function AppHeader({
         </div>
         </>) : null}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={openNotif} style={{ position: 'relative', height: '46px', padding: '0 16px', border: '1px solid rgba(16,32,64,.08)', borderRadius: '14px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer', boxShadow: '0 1px 2px rgba(16,32,64,.05)', display: 'inline-flex', alignItems: 'center', gap: '8px' }} className="hv7"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2.2a1.1 1.1 0 0 1 1.1 1.1v.5a4.9 4.9 0 0 1 3.8 4.8v2.6l1.3 2.2a.8.8 0 0 1-.7 1.2H4.5a.8.8 0 0 1-.7-1.2l1.3-2.2V8.6a4.9 4.9 0 0 1 3.8-4.8v-.5A1.1 1.1 0 0 1 10 2.2Zm0 15.6a2.1 2.1 0 0 1-2-1.5h4a2.1 2.1 0 0 1-2 1.5Z" /></svg>알림센터<span style={{ position: 'absolute', top: '9px', right: '9px', width: '8px', height: '8px', borderRadius: '5px', background: '#E03B3B', boxShadow: '0 0 0 2px #fff' }}></span></button>
+          <button onClick={openNotif} style={{ position: 'relative', height: '46px', padding: '0 16px', border: '1px solid rgba(16,32,64,.08)', borderRadius: '14px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer', boxShadow: '0 1px 2px rgba(16,32,64,.05)', display: 'inline-flex', alignItems: 'center', gap: '8px' }} className="hv7"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2.2a1.1 1.1 0 0 1 1.1 1.1v.5a4.9 4.9 0 0 1 3.8 4.8v2.6l1.3 2.2a.8.8 0 0 1-.7 1.2H4.5a.8.8 0 0 1-.7-1.2l1.3-2.2V8.6a4.9 4.9 0 0 1 3.8-4.8v-.5A1.1 1.1 0 0 1 10 2.2Zm0 15.6a2.1 2.1 0 0 1-2-1.5h4a2.1 2.1 0 0 1-2 1.5Z" /></svg>알림센터{notifUnreadCount > 0 ? (<span title={`읽지 않은 알림 ${notifUnreadCount}건`} style={{ position: 'absolute', top: '9px', right: '9px', width: '8px', height: '8px', borderRadius: '5px', background: '#E03B3B', boxShadow: '0 0 0 2px #fff' }}></span>) : null}</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '11px', height: '46px', padding: '0 14px 0 8px', border: '1px solid rgba(16,32,64,.08)', borderRadius: '14px', background: '#fff', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
             <span style={{ width: '32px', height: '32px', borderRadius: '999px', background: '#0045A9', color: '#fff', display: 'grid', placeItems: 'center', fontSize: '12.5px', fontWeight: '700' }}>{userInitial}</span>
             <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.25' }}><span style={{ fontSize: '12.5px', fontWeight: '600' }}>{userName}</span><span style={{ fontSize: '11px', color: '#8494AC' }}>{userRole}</span></span>

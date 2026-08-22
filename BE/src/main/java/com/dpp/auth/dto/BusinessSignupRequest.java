@@ -39,6 +39,6 @@ public record BusinessSignupRequest(
         @NotBlank String country,
         String domain,
         String orgTypeHint,
-        @NotBlank @Pattern(regexp = "[0-9-]{9,20}", message = "휴대전화번호 형식이 올바르지 않습니다.") String phone
+        @NotBlank @Pattern(regexp = "[0-9-]{9,20}", message = "전화번호 형식이 맞지 않습니다.") String phone
 ) {
 }

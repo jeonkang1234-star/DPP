@@ -14,7 +14,8 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog } from './api/meApi.js';
+import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications,
+  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -303,6 +304,32 @@ export function useAppLogic(userProps) {
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
+
+  /**
+   * 저장된 세션의 role이 실제 조직 유형과 어긋나 있으면 바로잡는다.
+   *
+   * 2026-08-22 강 리포트 "세관계정으로 가입했는데 로그인하니까 철강제조사가 되어있다" -
+   * 근본 원인은 doLogin이 서버 값 없이 'steel'로 기본 착지시킨 것이고 그건 LoginResponse.
+   * appRole로 고쳤지만, 그 전에 저장된 세션(localStorage의 ieum.session.role='steel')은
+   * 여전히 남아 있다. 그런 브라우저는 다시 로그인하기 전까지 계속 제조사 화면을 보게
+   * 되므로, GET /me/organization이 오면 여기서 한 번 되돌린다.
+   *
+   * org_type이 비어 있는 조직(2026-08-21 이전 가입)은 건드리지 않는다 - 무엇으로 바꿔야
+   * 할지 모르는 상태에서 화면을 흔드는 게 더 나쁘다.
+   */
+  useEffect(() => {
+    if (state.view !== 'app' || !orgData || !orgData.orgType) return;
+    const correct = orgData.orgType === 'CUSTOMS' ? 'customs'
+      : orgData.orgType === 'EU_AUTHORITY' ? 'eu'
+      : orgData.orgType === 'MANUFACTURER'
+        ? (orgData.domain === 'BATTERY' ? 'battery' : orgData.domain === 'TEXTILE' ? 'textile' : 'steel')
+        : ['RAW_SUPPLIER', 'TEST_LAB', 'RECYCLER', 'LOGISTICS', 'DISTRIBUTOR'].includes(orgData.orgType) ? 'partner'
+        : null;
+    if (!correct || correct === state.role) return;
+    saveSession({ ...(loadSession() || {}), role: correct, at: Date.now() });
+    setState({ role: correct, tab: firstTab(correct), notifOpen: false, dppOpen: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgData, state.view]);
 
   /** 세관 큐 새로고침 - 승인/보류/반려 처리 직후 목록에서 방금 그 케이스를 빼기 위해 씀. */
   const refetchCustomsQueue = useCallback(() => {
@@ -629,6 +656,7 @@ export function useAppLogic(userProps) {
       parsedFieldSources: {}, unlockedFields: {}, qrModal: null, issuedPassportCache: {},
       tierRequestPending: {}, permRequestPending: {},
       rejectModal: null, rejectReasonInput: '', dppQrCache: {}, dppQrPending: {}, productStatusFilter: 'all',
+      orgDetail: null, orgDetailLoading: false, orgDetailError: '', orgDetailCertUrl: '', orgDetailCertKind: '', orgDetailCertError: '',
       criteriaOpen: {}
     });
   }
@@ -748,10 +776,16 @@ export function useAppLogic(userProps) {
         if (!target || target.view !== 'app') { say('이동할 수 없는 주소입니다: ' + linkUrl); return; }
         setState({ notifOpen: false, view: 'app', role: target.role, tab: target.tab });
       },
+      // 알림센터를 열면 안 읽은 알림을 서버에서 읽음 처리하고 목록을 다시 받는다 -
+      // 헤더의 "새 알림" 빨간 점이 실제로 꺼지게 하기 위함(2026-08-22 강 요청).
+      // 읽음 처리가 실패해도(네트워크 등) 목록은 그대로 보여준다 - 점만 남을 뿐이다.
       openNotif: () => {
         setState({ notifOpen: true });
-        fetchNotifications().then((res) => setNotifsData(res || [])).catch(() => {});
-        fetchNotificationCategories().then((res) => setNotifCatsData(res || [])).catch(() => {});
+        const reload = () => {
+          fetchNotifications().then((res) => setNotifsData(res || [])).catch(() => {});
+          fetchNotificationCategories().then((res) => setNotifCatsData(res || [])).catch(() => {});
+        };
+        markNotificationsRead().then(reload).catch(reload);
       },
       isMaker,
       scAdminDash: s.role === 'admin' && s.tab === 'dash',
@@ -974,6 +1008,15 @@ export function useAppLogic(userProps) {
       suRequestPhoneCode: async () => {
         const phone = (s.suPhone || '').trim();
         if (!phone) { say('휴대전화번호를 입력해 주세요.'); return; }
+        // 형식 검사는 여기서 먼저 한다(2026-08-22 강 요청 - 정확한 문구를 띄우기 위함).
+        // 서버(PhoneCodeRequest)도 같은 조건을 검사하지만, Bean Validation 실패는
+        // MethodArgumentNotValidException으로 나가서 응답 본문에 message 필드가 없고,
+        // FE는 결국 '인증번호 발송에 실패했습니다'라는 엉뚱한 문구만 보여줬다.
+        // 0으로 시작하는 국번(2~3자리) + 3~4자리 + 4자리, 하이픈은 있어도 없어도 된다.
+        if (!/^0\d{1,2}-?\d{3,4}-?\d{4}$/.test(phone)) {
+          say('전화번호 형식이 맞지 않습니다.');
+          return;
+        }
         try {
           const res = await requestBusinessSignupPhoneCode(phone);
           // SMS가 꺼진 환경(app.sms.enabled=false)에서는 서버가 발급된 코드를 같이
@@ -1019,10 +1062,14 @@ export function useAppLogic(userProps) {
         if (!password) { say('비밀번호를 입력해 주세요.'); return; }
         try {
           const res = await login(email, password);
-          // BE는 아직 steel/battery/textile 같은 세부 도메인을 안 내려준다(org 테이블 미구현, TODO).
-          // 기존 mock 계정 매핑으로 최대한 맞추고, 못 찾으면 관리자는 admin, 그 외는 steel으로 기본 착지.
+          // 서버가 organization.org_type/domain을 화면 역할로 번역해 appRole로 내려준다
+          // (LoginResponse.appRoleOf). 예전엔 이게 없어서 mock 계정 매핑표에 없는 이메일이면
+          // 무조건 'steel'로 착지시켰고, 세관/시장감독기관으로 가입해도 로그인하면 철강
+          // 제조사 화면이 떴다(2026-08-22 강 리포트). appRole이 없을 때만(조직 유형 미지정
+          // 계정) 기존 휴리스틱으로 폴백한다.
           const heuristic = roleFromEmail(email);
-          const role = res.accountType === 'ADMIN' ? 'admin' : (heuristic && heuristic !== 'personal' ? heuristic : 'steel');
+          const role = res.appRole
+            || (res.accountType === 'ADMIN' ? 'admin' : (heuristic && heuristic !== 'personal' ? heuristic : 'steel'));
           go(role, { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType });
         } catch (err) {
           say(err.message || '로그인에 실패했습니다.');
@@ -1063,10 +1110,13 @@ export function useAppLogic(userProps) {
           return;
         }
         const isPublicAuthority = isPublicAuthorityRole;
-        // 제조사/협력사는 사업자등록증 첨부가 필수다(2026-08-19 강 요청 4번 - 가입 시
-        // 업로드 필수화). 세관/시장감독기관은 자동승인을 아예 시도하지 않고 항상 관리자
-        // 수동심사로 가므로(강 요청 3번) 파일이 없어도 통과시킨다.
-        if (!isPublicAuthority && !s.suBizRegCert) { say('사업자등록증 파일을 첨부해 주세요.'); return; }
+        // 첨부는 네 유형 모두 필수다. 제조사/협력사는 사업자등록증으로 자동승인을 판정하고
+        // (2026-08-19 강 요청 4번), 세관/시장감독기관은 온보딩에서 다시 받지 않기로 하면서
+        // 이 첨부가 유일한 심사 근거가 됐다(2026-08-22 강 요청).
+        if (!s.suBizRegCert) {
+          say(isPublicAuthority ? '증빙서류 파일을 첨부해 주세요.' : '사업자등록증 파일을 첨부해 주세요.');
+          return;
+        }
         // partner(협력사)도 domain='steel'로 가입시킨다 - requirement_field가 아직 STEEL만
         // 시딩돼 있어서(V4__seed_requirement_steel.sql) RAW_SUPPLIER 등 협력사 역할이 실제로
         // 뭘 제출할 수 있는 케이스가 철강뿐이다. 배터리/섬유 협력사가 필요해지면 그때
