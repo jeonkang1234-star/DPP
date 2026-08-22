@@ -1017,11 +1017,17 @@ export function useAppLogic(userProps) {
         if (!email) { say('이메일을 입력해 주세요.'); return; }
         if (domainHint(email) === 'personal') { say('개인 메일 도메인으로는 기업 회원가입을 할 수 없습니다.'); return; }
         try {
-          await requestBusinessSignupCode(email);
-          setState({ suCodeSent: true, suVerified: false, suVerifyCode: '' });
-          // 2026-08-21 강 요청: SMTP를 켠 뒤에도 "미설정 상태" 안내가 그대로 떠서
-          // 실제로 메일이 나갔는지 헷갈렸다. 문구를 결과 그대로로 바꾼다.
-          say('인증 메일을 발송했습니다. 메일함을 확인해 주세요.');
+          const res = await requestBusinessSignupCode(email);
+          // SMTP가 꺼진 환경(app.mail.enabled=false)에서는 서버가 발급된 코드를 같이
+          // 내려준다 - 전화번호 인증과 같은 규약. 메일이 실제로 나가지 않는데 "발송했습니다"
+          // 토스트만 뜨는 게 가장 헷갈렸다(2026-08-22 강 리포트: "public ip로 이메일 전송을
+          // 누르면 이메일이 도착하지 않고 토스트 메시지만 올라옴"). 코드를 입력칸에 채우고
+          // 미설정 상태임을 분명히 말한다.
+          const devCode = res && res.devCode;
+          setState({ suCodeSent: true, suVerified: false, suVerifyCode: devCode || '' });
+          say(devCode
+            ? '메일 미설정 환경이라 실제 발송 없이 코드(' + devCode + ')를 자동으로 채웠습니다.'
+            : '인증 메일을 발송했습니다. 메일함을 확인해 주세요.');
         } catch (err) {
           say(err.message || '인증코드 발송에 실패했습니다.');
         }
