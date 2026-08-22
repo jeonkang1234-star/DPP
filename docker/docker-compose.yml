@@ -62,15 +62,30 @@ services:
         condition: service_healthy
       zkp:
         condition: service_healthy
+    # 배포 환경(EC2)용 시크릿. 이 파일이 없으면 아무 것도 주입되지 않고 지금까지와 똑같이
+    # 동작한다(로컬은 application-local.yml이 값을 준다). 채울 키 목록은 .env.example 참고.
+    #
+    # 왜 필요한가: 메일·OAuth 값이 BE/src/main/resources/application-local.yml에만 있었고
+    # 그 파일은 git에 없다. CD로 배포된 EC2에는 값이 아예 존재하지 않아서, 퍼블릭 IP로
+    # 접속하면 SNS 로그인도 인증 메일도 동작하지 않았다(2026-08-22 강 리포트).
+    # 형식을 단순 문자열로 두는 이유: path/required 키는 Compose v2.24+ 에서만 인식된다.
+    # 대신 이 파일은 "항상 존재해야" 하므로, 로컬은 .env.example을 복사해 만들고 배포는
+    # CD 스크립트가 touch로 보장한다(내용이 비어 있어도 문제없다).
+    env_file:
+      - .env
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/dpp
-      SPRING_DATASOURCE_USERNAME: dpp
-      SPRING_DATASOURCE_PASSWORD: dpp
-      # BE/src/main/resources/application-local.yml (git 미포함, 로컬에만 존재)의 값을 읽게 함.
-      # JWT_SECRET, OAuth client-id/secret 등 실제 시크릿은 전부 그 파일 안에 있음.
-      SPRING_PROFILES_ACTIVE: local
-      DOCUMENT_PARSER_URL: http://parser:8000
-      DOCUMENT_ZKP_URL: http://zkp:4001
+      # 리스트 형식인 이유: "이름만" 적으면 호스트/.env에 그 변수가 있을 때만 컨테이너로
+      # 전달되고, 없으면 아예 설정되지 않는다. map 형식으로 ${VAR:-} 를 쓰면 변수가 없어도
+      # 빈 문자열이 "설정된" 상태가 되는데, 스프링에서 환경변수는 application-local.yml보다
+      # 우선순위가 높아서 로컬에서 멀쩡히 쓰던 값을 빈 값으로 덮어써 버린다.
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/dpp
+      - SPRING_DATASOURCE_USERNAME=dpp
+      - SPRING_DATASOURCE_PASSWORD=dpp
+      # 로컬에만 있는 application-local.yml을 읽게 하는 프로파일. EC2에는 그 파일이 없고,
+      # 없어도 오류가 아니다(위 env_file이 그 자리를 대신한다).
+      - SPRING_PROFILES_ACTIVE=local
+      - DOCUMENT_PARSER_URL=http://parser:8000
+      - DOCUMENT_ZKP_URL=http://zkp:4001
     volumes:
       # 업로드된 문서 원본. document.file_uri가 이 안의 경로를 가리킨다.
       - ./document-uploads:/data/document-uploads

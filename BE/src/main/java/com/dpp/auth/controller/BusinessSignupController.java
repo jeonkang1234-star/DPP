@@ -41,11 +41,20 @@ public class BusinessSignupController {
         this.businessSignupService = businessSignupService;
     }
 
-    /** 이메일로 6자리 인증코드 발급 (5분 유효, 재발송은 60초 쿨다운). */
+    /**
+     * 이메일로 6자리 인증코드 발급 (5분 유효, 재발송은 60초 쿨다운).
+     *
+     * SMTP가 꺼져 있으면(app.mail.enabled=false) 발급된 코드를 devCode로 같이 내려준다 -
+     * 전화번호 인증과 같은 규약. 메일이 실제로 나가지 않는 환경에서 "발송했습니다" 토스트만
+     * 뜨고 아무 일도 안 일어나 혼란스러웠다(2026-08-22 강 리포트).
+     */
     @PostMapping("/email/code")
-    public ResponseEntity<Void> requestEmailCode(@Valid @RequestBody EmailCodeRequest request) {
-        emailVerificationService.requestCode(request.email());
-        return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+    public ResponseEntity<Map<String, String>> requestEmailCode(@Valid @RequestBody EmailCodeRequest request) {
+        String devCode = emailVerificationService.requestCode(request.email());
+        if (devCode == null) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+        }
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("devCode", devCode));
     }
 
     /** 이메일 인증코드 검증. 통과하면 30분 동안 가입 진행 가능. */

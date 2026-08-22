@@ -3,6 +3,7 @@ package com.dpp.auth.controller;
 import com.dpp.auth.dto.TokenResponse;
 import com.dpp.auth.entity.SnsProvider;
 import com.dpp.auth.service.SnsAuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,11 +26,45 @@ public class SnsAuthController {
         this.snsAuthService = snsAuthService;
     }
 
-    /** 카카오/구글/네이버 인증 페이지로 리다이렉트. state는 서비스가 발급해서 oauth_state에 저장한다. */
+    /**
+     * 카카오/구글/네이버 인증 페이지로 리다이렉트. state는 서비스가 발급해서 oauth_state에 저장한다.
+     *
+     * 콜백 주소는 지금 사용자가 접속한 주소에서 만든다 - localhost로 들어왔으면 localhost 콜백,
+     * 퍼블릭 IP로 들어왔으면 퍼블릭 IP 콜백. 설정에 박아 두면 한쪽에서만 동작한다
+     * (2026-08-22 강 리포트 "퍼블릭 IP로 접근할 때는 SNS 로그인이 안 됨").
+     */
     @GetMapping("/{provider}/login")
-    public ResponseEntity<Void> login(@PathVariable String provider) {
-        String url = snsAuthService.buildAuthorizeUrl(parseProvider(provider));
+    public ResponseEntity<Void> login(@PathVariable String provider, HttpServletRequest request) {
+        String url = snsAuthService.buildAuthorizeUrl(parseProvider(provider), requestBaseUrl(request));
         return ResponseEntity.status(302).location(URI.create(url)).build();
+    }
+
+    /**
+     * 사용자가 실제로 접속한 주소의 scheme + host[:port].
+     *
+     * nginx가 Host와 X-Forwarded-Proto를 그대로 넘겨주므로(FE/nginx.conf), 그 두 값이면
+     * 브라우저 주소창과 같은 origin을 복원할 수 있다. 헤더가 없으면(직접 호출 등) null을
+     * 돌려주고 서비스가 설정값으로 폴백한다.
+     */
+    private String requestBaseUrl(HttpServletRequest request) {
+        if (request == null) {
+            return null;
+        }
+        String host = request.getHeader("X-Forwarded-Host");
+        if (host == null || host.isBlank()) {
+            host = request.getHeader("Host");
+        }
+        if (host == null || host.isBlank()) {
+            return null;
+        }
+        String proto = request.getHeader("X-Forwarded-Proto");
+        if (proto == null || proto.isBlank()) {
+            proto = "http";
+        }
+        // 프록시가 여러 값을 콤마로 이어 붙이는 경우가 있어 첫 값만 쓴다.
+        proto = proto.split(",")[0].trim();
+        host = host.split(",")[0].trim();
+        return proto + "://" + host;
     }
 
     /**

@@ -15,6 +15,8 @@ import com.dpp.auth.repository.OAuthStateRepository;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.auth.repository.UserSnsLinkRepository;
 import com.dpp.auth.security.JwtTokenProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
@@ -30,6 +32,8 @@ import java.util.UUID;
  */
 @Service
 public class SnsAuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(SnsAuthService.class);
 
     private static final int STATE_TTL_MINUTES = 10;
 
@@ -52,16 +56,26 @@ public class SnsAuthService {
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
-    /** state를 발급하고 oauth_state에 저장한 뒤, 인증 페이지 URL을 반환한다. */
+    /**
+     * state를 발급하고 oauth_state에 저장한 뒤, 인증 페이지 URL을 반환한다.
+     *
+     * @param requestBaseUrl 사용자가 실제로 접속한 주소의 앞부분(예: http://localhost,
+     *                       http://15.134.9.240). 콜백 주소를 여기서 만든다 - 설정에 박아 두면
+     *                       퍼블릭 IP로 접속해도 SNS 인증 후 localhost로 돌아가 버린다
+     *                       (2026-08-22 강 리포트). null이면 설정값을 그대로 쓴다.
+     */
     @Transactional
-    public String buildAuthorizeUrl(SnsProvider provider) {
+    public String buildAuthorizeUrl(SnsProvider provider, String requestBaseUrl) {
         SnsOAuthProperties.Provider cfg = providerConfig(provider);
+        String redirectUri = resolveRedirectUri(provider, requestBaseUrl, cfg.getRedirectUri());
 
         OAuthState state = new OAuthState();
         state.setState(UUID.randomUUID().toString());
         state.setProvider(provider);
         state.setPurpose(OAuthStatePurpose.LOGIN);
-        state.setRedirectUri(cfg.getRedirectUri());
+        // 토큰 교환 때 "인가 때 보낸 것과 똑같은" redirect_uri를 다시 보내야 하므로
+        // 여기서 정한 값을 state 행에 남긴다(exchangeCodeForToken이 이 값을 쓴다).
+        state.setRedirectUri(redirectUri);
         state.setExpiresAt(OffsetDateTime.now().plusMinutes(STATE_TTL_MINUTES));
         oAuthStateRepository.save(state);
 
@@ -73,7 +87,7 @@ public class SnsAuthService {
 
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(authorizeUrl)
                 .queryParam("client_id", cfg.getClientId())
-                .queryParam("redirect_uri", cfg.getRedirectUri())
+                .queryParam("redirect_uri", redirectUri)
                 .queryParam("response_type", "code")
                 .queryParam("state", state.getState());
 
@@ -99,7 +113,7 @@ public class SnsAuthService {
         oAuthState.setUsedAt(OffsetDateTime.now());
         oAuthStateRepository.save(oAuthState);
 
-        String accessToken = exchangeCodeForToken(provider, code);
+        String accessToken = exchangeCodeForToken(provider, code, oAuthState.getRedirectUri());
         Map<String, String> profile = fetchNormalizedProfile(provider, accessToken);
 
         String subject = profile.get("snsId");
@@ -122,6 +136,49 @@ public class SnsAuthService {
                 user.getUserId().toString(), Map.of("accountType", user.getAccountType().name()));
         String refresh = jwtTokenProvider.createRefreshToken(user.getUserId().toString());
         return TokenResponse.of(access, refresh);
+    }
+
+    /**
+     * 실제로 SNS에 보낼 콜백 주소를 정한다.
+     *
+     * 사용자가 접속한 주소(requestBaseUrl)를 그대로 쓰는 것이 기본이다 - localhost로 들어왔으면
+     * localhost 콜백, 퍼블릭 IP로 들어왔으면 퍼블릭 IP 콜백. 그래야 한 벌의 설정으로 로컬과
+     * 배포 환경이 모두 동작한다.
+     *
+     * 다만 요청 호스트는 클라이언트가 조작할 수 있으므로, oauth.allowed-redirect-hosts가
+     * 채워져 있으면 그 목록에 있는 호스트만 인정하고 아니면 설정값으로 되돌린다. 목록이
+     * 비어 있으면(기본값) 요청 호스트를 그대로 쓴다 - 조작된 주소로 인가를 시도해도 각 SNS
+     * 콘솔에 등록되지 않은 redirect_uri는 제공자가 거부하므로 토큰이 새어나가지 않는다.
+     */
+    private String resolveRedirectUri(SnsProvider provider, String requestBaseUrl, String configured) {
+        if (requestBaseUrl == null || requestBaseUrl.isBlank()) {
+            return configured;
+        }
+        String base = requestBaseUrl.endsWith("/")
+                ? requestBaseUrl.substring(0, requestBaseUrl.length() - 1) : requestBaseUrl;
+        String allowList = properties.getAllowedRedirectHosts();
+        if (allowList != null && !allowList.isBlank() && !hostAllowed(base, allowList)) {
+            log.warn("허용되지 않은 콜백 호스트({}) - 설정된 redirect-uri로 대체합니다.", base);
+            return configured;
+        }
+        return base + "/auth/sns/" + provider.name().toLowerCase() + "/callback";
+    }
+
+    /** base(scheme://host[:port])의 호스트가 쉼표로 구분된 허용 목록에 있는지. 포트는 무시한다. */
+    private boolean hostAllowed(String base, String allowList) {
+        String hostPort = base.replaceFirst("^https?://", "");
+        int slash = hostPort.indexOf('/');
+        if (slash >= 0) {
+            hostPort = hostPort.substring(0, slash);
+        }
+        int colon = hostPort.lastIndexOf(':');
+        String host = colon > 0 ? hostPort.substring(0, colon) : hostPort;
+        for (String allowed : allowList.split(",")) {
+            if (host.equalsIgnoreCase(allowed.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private UserSnsLink createUserWithSnsLink(SnsProvider provider, String subject, Map<String, String> profile) {
@@ -157,9 +214,16 @@ public class SnsAuthService {
         return link;
     }
 
+    /**
+     * @param redirectUri 인가 요청 때 보냈던 값 그대로(oauth_state.redirect_uri). 제공자는
+     *                    이 둘이 완전히 같은지 대조하므로 설정값을 다시 읽어 쓰면 안 된다 -
+     *                    접속 주소에 따라 콜백이 달라지기 때문이다.
+     */
     @SuppressWarnings("unchecked")
-    private String exchangeCodeForToken(SnsProvider provider, String code) {
+    private String exchangeCodeForToken(SnsProvider provider, String code, String redirectUri) {
         SnsOAuthProperties.Provider cfg = providerConfig(provider);
+        String effectiveRedirectUri = (redirectUri == null || redirectUri.isBlank())
+                ? cfg.getRedirectUri() : redirectUri;
         String tokenUrl = switch (provider) {
             case KAKAO -> "https://kauth.kakao.com/oauth/token";
             case GOOGLE -> "https://oauth2.googleapis.com/token";
@@ -169,7 +233,7 @@ public class SnsAuthService {
         String body = "grant_type=authorization_code"
                 + "&client_id=" + cfg.getClientId()
                 + "&client_secret=" + cfg.getClientSecret()
-                + "&redirect_uri=" + cfg.getRedirectUri()
+                + "&redirect_uri=" + effectiveRedirectUri
                 + "&code=" + code;
 
         Map<String, Object> response = restClient.post()

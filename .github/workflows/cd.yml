@@ -55,7 +55,16 @@ jobs:
             git log --oneline -1
 
             cd docker                          # docker-compose.yml이 /opt/app/docker 에 위치
-
+            # docker-compose.yml의 env_file(.env)은 반드시 존재해야 한다. 이 파일에는 메일
+            # 계정·OAuth 시크릿처럼 git에 올릴 수 없는 값이 들어가고(.gitignore), 서버에
+            # 사람이 직접 만들어 둔다. git reset --hard는 추적되지 않는 파일을 지우지 않으므로
+            # 한 번 만들어 두면 배포마다 그대로 남는다. 아직 안 만들었으면 빈 파일로 생성해서
+            # 배포 자체가 멈추지 않게 한다(그 상태면 메일/SNS 로그인만 비활성으로 동작).
+            if [ ! -f .env ]; then
+              echo "WARNING: /opt/app/docker/.env 없음 - 빈 파일로 생성합니다."
+              echo "         메일 발송·SNS 로그인을 쓰려면 .env.example을 참고해 값을 채우세요."
+              touch .env
+            fi
             # /opt/app/fabric-identity에 Fabric 인증서(admin-cert.pem 등)가 준비돼 있으면
             # blockchain 오버레이를 자동으로 포함한다. 없으면(예: Fabric 네트워크를 아직 안 띄운
             # 새 EC2 인스턴스) 오버레이 없이 배포해 BLOCKCHAIN_ENABLED=false로 계속 진행 - CD

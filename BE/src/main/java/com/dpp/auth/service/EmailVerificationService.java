@@ -4,6 +4,7 @@ import com.dpp.auth.entity.EmailVerification;
 import com.dpp.auth.entity.EmailVerificationPurpose;
 import com.dpp.auth.repository.EmailVerificationRepository;
 import com.dpp.auth.repository.UserAccountRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,18 +36,29 @@ public class EmailVerificationService {
     private final EmailVerificationRepository verificationRepository;
     private final UserAccountRepository userAccountRepository;
     private final SignupMailSender mailSender;
+    private final boolean mailEnabled;
     private final SecureRandom random = new SecureRandom();
 
     public EmailVerificationService(EmailVerificationRepository verificationRepository,
                                      UserAccountRepository userAccountRepository,
-                                     SignupMailSender mailSender) {
+                                     SignupMailSender mailSender,
+                                     @Value("${app.mail.enabled:false}") boolean mailEnabled) {
         this.verificationRepository = verificationRepository;
         this.userAccountRepository = userAccountRepository;
         this.mailSender = mailSender;
+        this.mailEnabled = mailEnabled;
     }
 
+    /**
+     * @return SMTP가 꺼져 있으면(app.mail.enabled=false) 방금 발급한 코드, 켜져 있으면 null.
+     *         전화번호 인증(PhoneVerificationService.requestCode)과 같은 규약이다.
+     *         메일이 실제로 나가지 않는 환경에서 "발송했습니다" 토스트만 뜨고 아무 일도
+     *         일어나지 않아 혼란스러웠다(2026-08-22 강 리포트) - 코드를 같이 내려주면
+     *         화면이 "메일 미설정 환경"임을 분명히 말할 수 있다. 켜져 있을 땐 절대 내려주지
+     *         않으므로 코드가 새어나갈 일은 없다.
+     */
     @Transactional
-    public void requestCode(String email) {
+    public String requestCode(String email) {
         if (userAccountRepository.existsByEmail(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 가입된 이메일입니다.");
         }
@@ -71,6 +83,7 @@ public class EmailVerificationService {
         verificationRepository.save(verification);
 
         mailSender.sendVerificationCode(email, code);
+        return mailEnabled ? null : code;
     }
 
     @Transactional
