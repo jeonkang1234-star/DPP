@@ -950,7 +950,12 @@ export function makerVals(ctx) {
     inviteRoleOptions: [
       { value: 'RAW_SUPPLIER', label: '원자재·화학 공급사 (스크랩 매입증빙, SDS 등)' },
       { value: 'TEST_LAB', label: '시험·인증기관 (시험성적서, LCA/EPD, 탄소보고서)' },
-      { value: 'RECYCLER', label: '재활용 처리업체 (재활용 처리 결과 보고서)' }
+      // 2026-08-22 강 요청: "재활용 처리 결과 보고서"라고 안내해 놓고 정작 받는 화면에는
+      // 데이터 입력밖에 없다. 그 보고서(RECYCLING_REPORT)는 배터리 도메인 전용 문서라
+      // (V17__seed_requirement_battery.sql), 철강·섬유 DPP로 초대하면 문서 슬롯 자체가
+      // 안 생기고 COMMON 재활용 데이터 필드(V21)만 남는다. 실제로 대부분 받는 것이
+      // 데이터이므로 문구를 그쪽으로 맞춘다.
+      { value: 'RECYCLER', label: '재활용 처리업체 (회수율·해체 절차 데이터 입력)' }
     ],
     inviteRows: (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((row, idx, arr) => ({
       key: idx, orgName: row.orgName, email: row.email, roleCode: row.roleCode || 'RAW_SUPPLIER', canRemove: arr.length > 1,
