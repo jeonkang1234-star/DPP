@@ -40,9 +40,24 @@ public interface AdminStatsRepository extends Repository<Organization, Long> {
      * ("Index 1 out of bounds for length 1" - 앵커 행이 하나라도 생기면 재현된다.
      * 그래서 화면에는 전체 가입자 수·등록 DPP 수까지 전부 '—'로 보였다).
      * List&lt;Object[]&gt;는 해석의 여지가 없으므로 이 함정을 아예 없앤다.
+     *
+     * 2026-08-22 강 리포트("30일 성공률은 100%인데 최근 앵커링은 기록 없음, 블록 높이도 안 뜸")로
+     * 두 군데를 더 고쳤다.
+     *
+     * (1) 시각을 Java로 넘기지 않고 SQL에서 "몇 분 전"까지 계산해서 bigint로 내린다.
+     *     timestamptz를 그대로 내리면 Hibernate가 드라이버/방언 조합에 따라
+     *     java.sql.Timestamp가 아니라 java.time.Instant로 줄 때가 있는데,
+     *     AdminDashboardService.toOffsetDateTime이 그걸 못 받아 조용히 null이 됐다
+     *     (= 화면엔 '기록 없음'). 숫자로 내리면 이 변환 자체가 사라진다.
+     *
+     * (2) block_no는 "그 앵커 행의 속성"이 아니라 "체인이 지금 몇 블록까지 갔는가"로 읽는 게 맞다.
+     *     가장 최근 행이 MOCK(= fn_create_dpp_snapshot이 만든 행, block_no NULL)이면
+     *     실제 CONFIRMED 앵커가 있어도 블록 높이가 '—'로 보였다. 그래서 최댓값을 쓴다.
      */
-    @Query(value = "SELECT COALESCE(anchored_at, created_at) AS at, block_no FROM blockchain_anchor "
-            + "ORDER BY COALESCE(anchored_at, created_at) DESC LIMIT 1", nativeQuery = true)
+    @Query(value = "SELECT CAST(FLOOR(EXTRACT(EPOCH FROM (now() - COALESCE(a.anchored_at, a.created_at))) / 60) AS bigint) AS minutes_ago, "
+            + "(SELECT MAX(block_no) FROM blockchain_anchor WHERE block_no IS NOT NULL) AS block_no "
+            + "FROM blockchain_anchor a "
+            + "ORDER BY COALESCE(a.anchored_at, a.created_at) DESC LIMIT 1", nativeQuery = true)
     List<Object[]> findLatestAnchor();
 
     /** 최근 30일 앵커링 성공률 계산용 - 항상 1행. 각 행은 Object[]: [총 건수, 성공(MOCK/CONFIRMED) 건수]. */
