@@ -68,6 +68,26 @@ export function approvalVals(ctx) {
       .catch((err) => setState({ orgDetailLoading: false, orgDetailError: err.message || '상세 정보를 불러오지 못했습니다.' }));
   };
 
+  // 도메인 확장 증빙서류 뷰어 - 가입 심사 서류와 같은 방식.
+  const openGrantDoc = (g) => {
+    if (state.grantDocUrl) URL.revokeObjectURL(state.grantDocUrl);
+    setState({
+      grantDoc: { grantId: g.grantId, title: g.orgName + ' · ' + g.domainLabel, name: g.evidenceName },
+      grantDocUrl: '', grantDocKind: '', grantDocError: ''
+    });
+    if (!g.hasEvidence) {
+      setState({ grantDocError: '제출된 증빙서류가 없습니다.' });
+      return;
+    }
+    ctx.fetchDomainGrantEvidenceBlob(g.grantId)
+      .then((blob) => {
+        const mime = blob.type || g.evidenceMime || '';
+        const kind = mime.includes('pdf') ? 'pdf' : mime.startsWith('image/') ? 'image' : 'other';
+        setState({ grantDocUrl: URL.createObjectURL(blob), grantDocKind: kind });
+      })
+      .catch((err) => setState({ grantDocError: err.message || '증빙서류를 불러오지 못했습니다.' }));
+  };
+
   const d = state.orgDetail;
   const dash = (v) => (v === null || v === undefined || v === '' ? '—' : v);
   const statusLabel = (st) => (st === 'ACTIVE' ? '승인됨' : st === 'PENDING' ? '심사 대기' : st === 'REJECTED' ? '반려됨' : st === 'SUSPENDED' ? '정지됨' : dash(st));
@@ -214,6 +234,66 @@ export function approvalVals(ctx) {
       const orgId = d.orgId;
       revokeCert();
       setState({ orgDetail: null, orgDetailCertUrl: '', orgDetailCertKind: '', rejectModal: { orgId, name }, rejectReasonInput: '' });
+    },
+
+    // ── 도메인 확장 심사(2026-08-22 강 요청) ─────────────────────────
+    // 회원 관리 탭 안에 「가입 심사 / 도메인 확장」 두 갈래를 둔다. 제출 서류를 여는 방식은
+    // 가입 심사와 같다(blob -> object URL -> iframe/img).
+    apSection: state.apSection === 'domain' ? 'domain' : 'signup',
+    apSectionTabs: [['signup', '가입 심사'], ['domain', '도메인 확장']].map(([k, label]) => ({
+      key: k, label,
+      count: k === 'signup' ? rows.length : (ctx.domainGrantsData || []).length,
+      style: {
+        display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px', border: 0,
+        borderRadius: 999, cursor: 'pointer', fontSize: 13.5, fontWeight: 600,
+        background: (state.apSection === k || (k === 'signup' && state.apSection !== 'domain')) ? '#0B1B33' : '#fff',
+        color: (state.apSection === k || (k === 'signup' && state.apSection !== 'domain')) ? '#fff' : '#44546F'
+      },
+      go: () => setState({ apSection: k })
+    })),
+    domainGrantsEmpty: (ctx.domainGrantsData || []).length === 0,
+    domainGrants: (ctx.domainGrantsData || []).map((g) => ({
+      key: g.grantId,
+      orgName: g.orgName,
+      domain: g.domainLabel,
+      status: g.statusLabel,
+      isPending: g.status === 'PENDING',
+      reason: g.rejectReason || g.requestReason || '—',
+      at: ctx.fmtDateTime(g.requestedAt),
+      chip: ctx.chip(
+        g.status === 'APPROVED' ? 'rgba(18,161,80,.12)' : g.status === 'PENDING' ? 'rgba(227,160,8,.16)' : 'rgba(224,59,59,.10)',
+        g.status === 'APPROVED' ? '#0E7A3D' : g.status === 'PENDING' ? '#96660A' : '#C22B2B'
+      ),
+      openDoc: () => openGrantDoc(g),
+      approve: () => ctx.approveDomainGrant(g.grantId)
+        .then(() => { ctx.say(g.orgName + ' 의 ' + g.domainLabel + ' 도메인 확장을 승인했습니다.'); ctx.refetchDomainGrants(); })
+        .catch((err) => ctx.say(err.message || '처리하지 못했습니다.')),
+      reject: () => setState({ dgRejectModal: { grantId: g.grantId, name: g.orgName + ' · ' + g.domainLabel }, rejectReasonInput: '' })
+    })),
+    grantDocOpen: !!state.grantDoc,
+    grantDocTitle: state.grantDoc ? state.grantDoc.title : '',
+    grantDocName: state.grantDoc ? (state.grantDoc.name || '—') : '',
+    grantDocUrl: state.grantDocUrl || '',
+    grantDocIsPdf: state.grantDocKind === 'pdf',
+    grantDocIsImage: state.grantDocKind === 'image',
+    grantDocDownloadOnly: !!state.grantDocUrl && state.grantDocKind === 'other',
+    grantDocError: state.grantDocError || '',
+    grantDocLoading: !!(state.grantDoc && !state.grantDocUrl && !state.grantDocError),
+    closeGrantDoc: () => {
+      if (state.grantDocUrl) URL.revokeObjectURL(state.grantDocUrl);
+      setState({ grantDoc: null, grantDocUrl: '', grantDocKind: '', grantDocError: '' });
+    },
+    dgRejectModalOpen: !!state.dgRejectModal,
+    dgRejectModalName: state.dgRejectModal ? state.dgRejectModal.name : '',
+    closeDgRejectModal: () => setState({ dgRejectModal: null, rejectReasonInput: '' }),
+    confirmDgReject: () => {
+      if (!state.dgRejectModal) return;
+      const { grantId, name } = state.dgRejectModal;
+      const reason = (state.rejectReasonInput || '').trim();
+      setState({ dgRejectModal: null, rejectReasonInput: '' });
+      ctx.rejectDomainGrant(grantId, reason)
+        .then(() => { ctx.say(name + ' 신청을 반려했습니다.'); ctx.refetchDomainGrants(); })
+        .catch((err) => ctx.say(err.message || '처리하지 못했습니다.'));
     },
 
     confirmReject: () => {

@@ -7,6 +7,7 @@ import com.dpp.blockchain.client.BlockchainClient;
 import com.dpp.blockchain.entity.BlockchainAnchor;
 import com.dpp.blockchain.repository.BlockchainAnchorRepository;
 import com.dpp.customs.service.CustomsClearanceService;
+import com.dpp.mypage.service.DomainGrantService;
 import com.dpp.dpp.dto.CodeOptionDto;
 import com.dpp.dpp.dto.FieldFormItemDto;
 import com.dpp.dpp.dto.FieldFormSectionDto;
@@ -101,6 +102,7 @@ public class FieldFormService {
     private final Optional<BlockchainClient> blockchainClient;
     private final CustomsClearanceService customsClearanceService;
     private final AuditLogService auditLogService;
+    private final DomainGrantService domainGrantService;
 
     public FieldFormService(UserAccountRepository userAccountRepository,
                              ProductModelRepository productModelRepository,
@@ -113,7 +115,8 @@ public class FieldFormService {
                              BlockchainAnchorRepository blockchainAnchorRepository,
                              Optional<BlockchainClient> blockchainClient,
                              CustomsClearanceService customsClearanceService,
-                             AuditLogService auditLogService) {
+                             AuditLogService auditLogService,
+                             DomainGrantService domainGrantService) {
         this.userAccountRepository = userAccountRepository;
         this.productModelRepository = productModelRepository;
         this.dppRepository = dppRepository;
@@ -126,6 +129,7 @@ public class FieldFormService {
         this.blockchainClient = blockchainClient;
         this.customsClearanceService = customsClearanceService;
         this.auditLogService = auditLogService;
+        this.domainGrantService = domainGrantService;
     }
 
     @Transactional(readOnly = true)
@@ -451,6 +455,14 @@ public class FieldFormService {
     // 걷어낼 것.
     private Dpp createDraftDpp(Long orgId, String requestedDomain, Map<String, String> values) {
         String domain = (requestedDomain == null || requestedDomain.isBlank()) ? DEFAULT_DOMAIN : requestedDomain;
+        // 화면에서 못 고르게 막는 것만으로는 부족하다 - 요청을 직접 만들면 승인받지 않은
+        // 도메인으로도 DPP가 생긴다. 실제 허용 목록(주력 도메인 + 승인된 확장)으로 확인한다
+        // (2026-08-22 강 요청, DomainGrantService 참고).
+        List<String> allowed = domainGrantService.allowedDomainsForOrg(orgId);
+        if (!allowed.contains(domain)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "승인되지 않은 도메인입니다. 마이페이지에서 도메인 확장을 신청해 주세요.");
+        }
         String nameFieldCode = switch (domain) {
             case "TEXTILE" -> "FABRIC_TYPE";
             case "BATTERY" -> "BATTERY_MODEL_NO";
