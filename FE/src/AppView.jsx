@@ -225,6 +225,26 @@ export default function AppView(v) {
     obComplete,
     obDomainLabel,
     obG1,
+    domainPickerShown,
+    domainPickerOptions,
+    apSection,
+    apSectionTabs,
+    domainGrants,
+    domainGrantsEmpty,
+    grantDocOpen,
+    grantDocTitle,
+    grantDocName,
+    grantDocUrl,
+    grantDocIsPdf,
+    grantDocIsImage,
+    grantDocDownloadOnly,
+    grantDocError,
+    grantDocLoading,
+    closeGrantDoc,
+    dgRejectModalOpen,
+    dgRejectModalName,
+    closeDgRejectModal,
+    confirmDgReject,
     obGovBanner,
     obGovBannerText,
     obGovCodeSample,
@@ -791,11 +811,47 @@ export default function AppView(v) {
             </div>
           </div>
 
+          {/* 가입 심사 / 도메인 확장 - 회원 관리 탭 안의 두 갈래(2026-08-22 강 요청). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px', background: '#F2F6FC', borderRadius: '999px', width: 'fit-content' }}>
+            {(apSectionTabs || []).map((t, $index) => (<React.Fragment key={$index}>
+            <button onClick={t.go} style={t.style}>{t.label} <span style={{ opacity: '.7' }}>{t.count}</span></button>
+            </React.Fragment>))}
+          </div>
+
+          {apSection === 'signup' ? (<>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '999px', width: 'fit-content', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
             {(apTabs || []).map((t, $index) => (<React.Fragment key={$index}>
             <button onClick={t.go} style={t.style}>{t.label}<span style={t.countStyle}>{t.count}</span></button>
             </React.Fragment>))}
           </div>
+          </>) : null}
+
+          {apSection === 'domain' ? (<>
+          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {domainGrantsEmpty ? (<>
+            <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>도메인 확장 신청 내역이 없습니다.</div>
+            </>) : (<>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1.6fr 1.1fr 1.6fr', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
+              <span>회사명</span><span>도메인</span><span>사유</span><span>신청일시</span><span style={{ textAlign: 'right' }}>심사</span>
+            </div>
+            {(domainGrants || []).map((g, $index) => (<React.Fragment key={$index}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1.6fr 1.1fr 1.6fr', gap: '12px', padding: '13px 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
+              <span style={{ fontSize: '13.5px', fontWeight: '600' }}>{g.orgName}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><span style={{ fontSize: '13px', color: '#44546F' }}>{g.domain}</span><span style={g.chip}>{g.status}</span></span>
+              <span style={{ fontSize: '12px', color: '#6B7A93', lineHeight: '1.5', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.reason}</span>
+              <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{g.at}</span>
+              <span style={{ display: 'flex', gap: '7px', justifyContent: 'flex-end' }}>
+                <button onClick={g.openDoc} style={{ height: '34px', padding: '0 13px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv35">서류 확인</button>
+                {g.isPending ? (<>
+                <button onClick={g.reject} style={{ height: '34px', padding: '0 13px', border: '1px solid rgba(224,59,59,.28)', borderRadius: '10px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#C22B2B', cursor: 'pointer' }}>반려</button>
+                <button onClick={g.approve} style={{ height: '34px', padding: '0 15px', border: '0', borderRadius: '10px', background: '#0045A9', color: '#fff', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>승인</button>
+                </>) : null}
+              </span>
+            </div>
+            </React.Fragment>))}
+            </>)}
+          </div>
+          </>) : (<>
 
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {apEmpty ? (<>
@@ -830,6 +886,7 @@ export default function AppView(v) {
             </React.Fragment>))}
             </>)}
           </div>
+          </>)}
         </div>
         </>) : null}
 
@@ -927,6 +984,18 @@ export default function AppView(v) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
               <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>{domainLabel} 도메인 · 필수 필드 {fieldCount}개</span>
               <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>{inputTitle}</h1>
+              {/* 도메인 확장으로 두 개 이상 쓸 수 있을 때만 선택기를 보여준다(2026-08-22 강 요청).
+                  도메인을 바꾸면 그 도메인의 필드 폼·문서 슬롯으로 통째로 갈아탄다. */}
+              {domainPickerShown ? (<>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
+                <span style={{ fontSize: '12px', color: '#8494AC' }}>발급 도메인</span>
+                <div style={{ display: 'flex', gap: '6px', padding: '5px', background: '#F2F6FC', borderRadius: '14px' }}>
+                  {(domainPickerOptions || []).map((o, $index) => (<React.Fragment key={$index}>
+                  <button onClick={o.go} style={o.style}>{o.label}</button>
+                  </React.Fragment>))}
+                </div>
+              </div>
+              </>) : null}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               {batchIssueEnabled ? (<>
@@ -2152,6 +2221,69 @@ export default function AppView(v) {
             </>) : null}
           </div>
           </>) : null}
+        </div>
+      </div>
+      </>) : null}
+
+      {/* 도메인 확장 증빙서류 뷰어 - 가입 심사 서류와 같은 방식(2026-08-22 강 요청). */}
+      {grantDocOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '92', display: 'grid', placeItems: 'center', padding: '32px' }}>
+        <div onClick={closeGrantDoc} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.52)' }}></div>
+        <div style={{ position: 'relative', width: '760px', maxWidth: '100%', maxHeight: '100%', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '22px 26px 18px', borderBottom: '1px solid rgba(16,32,64,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              <span style={{ fontSize: '17px', fontWeight: '700' }}>{grantDocTitle}</span>
+              <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{grantDocName}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {grantDocUrl ? (<>
+              <a href={grantDocUrl} download={grantDocName} style={{ height: '32px', padding: '0 13px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '10px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '12px', fontWeight: '600', textDecoration: 'none' }}>내려받기</a>
+              </>) : null}
+              <button onClick={closeGrantDoc} style={{ width: '34px', height: '34px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '11px', background: '#fff', fontSize: '13px', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
+            </div>
+          </div>
+          <div style={{ padding: '20px 26px 24px', overflow: 'auto' }}>
+            {grantDocLoading ? (<>
+            <div style={{ padding: '50px 20px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>서류를 불러오는 중입니다…</div>
+            </>) : null}
+            {grantDocError ? (<>
+            <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(224,59,59,.06)', border: '1px solid rgba(224,59,59,.22)', fontSize: '13px', color: '#C22B2B' }}>{grantDocError}</div>
+            </>) : null}
+            {grantDocIsPdf ? (<>
+            <iframe title="증빙서류" src={grantDocUrl} style={{ width: '100%', height: '560px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#F7F9FD' }}></iframe>
+            </>) : null}
+            {grantDocIsImage ? (<>
+            <div style={{ padding: '12px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', background: '#F7F9FD', overflow: 'auto', maxHeight: '560px' }}>
+              <img src={grantDocUrl} alt="증빙서류" style={{ display: 'block', maxWidth: '100%', margin: '0 auto' }} />
+            </div>
+            </>) : null}
+            {grantDocDownloadOnly ? (<>
+            <div style={{ padding: '40px 20px', borderRadius: '16px', background: '#F7F9FD', textAlign: 'center', fontSize: '13px', color: '#44546F', lineHeight: '1.7' }}>화면에서 바로 열 수 없는 형식입니다.<br />위의 「내려받기」로 확인해 주세요.</div>
+            </>) : null}
+          </div>
+        </div>
+      </div>
+      </>) : null}
+
+      {/* 도메인 확장 반려 사유 입력 */}
+      {dgRejectModalOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '93', display: 'grid', placeItems: 'center', padding: '40px' }}>
+        <div onClick={closeDgRejectModal} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.52)' }}></div>
+        <div style={{ position: 'relative', width: '480px', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '22px 26px 16px', borderBottom: '1px solid rgba(16,32,64,.08)', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+            <span style={{ fontSize: '17px', fontWeight: '700' }}>도메인 확장 반려</span>
+            <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{dgRejectModalName}</span>
+          </div>
+          <div style={{ padding: '20px 26px' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>반려 사유</span>
+              <textarea value={rejectReasonInput} onChange={setRejectReasonInput} rows={4} placeholder="반려 사유를 입력해 주세요(비워두면 기본 사유로 처리됩니다)" style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', resize: 'vertical', fontFamily: 'inherit' }} />
+            </label>
+          </div>
+          <div style={{ padding: '16px 26px 20px', borderTop: '1px solid rgba(16,32,64,.08)', display: 'flex', justifyContent: 'flex-end', gap: '9px' }}>
+            <button onClick={closeDgRejectModal} style={{ height: '44px', padding: '0 20px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '13px', background: '#fff', fontSize: '13.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>취소</button>
+            <button onClick={confirmDgReject} style={{ height: '44px', padding: '0 22px', border: '0', borderRadius: '13px', background: '#C22B2B', color: '#fff', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>반려 처리</button>
+          </div>
         </div>
       </div>
       </>) : null}

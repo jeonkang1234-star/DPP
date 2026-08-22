@@ -296,6 +296,57 @@ export function rejectOrg(orgId, reason) {
   return authedFetch(`/admin/organizations/${orgId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
 }
 
+/* ── 도메인 확장(2026-08-22) ───────────────────────────────────────────
+ * 제조사가 주력 도메인 외의 도메인으로도 DPP를 발급하려면 증빙서류를 내고 관리자
+ * 승인을 받아야 한다. 허용 도메인은 DPP 생성 탭의 도메인 선택기가 읽는다. */
+
+/** 내 조직이 쓸 수 있는 도메인 + 신청 이력. { baseDomain, allowedDomains[], grants[] } */
+export function fetchMyDomains() {
+  return authedFetch('/me/domains');
+}
+
+/** 도메인 확장 신청 - 증빙서류가 필수라 multipart로 보낸다. */
+export async function requestDomainGrant(domain, reason, evidence) {
+  const form = new FormData();
+  form.append('domain', domain);
+  if (reason) form.append('reason', reason);
+  form.append('evidence', evidence);
+  return authedFetch('/me/domains/requests', { method: 'POST', body: form });
+}
+
+/** 관리자 회원 관리 탭의 「도메인 확장 심사」 목록. */
+export function fetchDomainGrants() {
+  return authedFetch('/admin/domain-grants');
+}
+
+export function approveDomainGrant(grantId) {
+  return authedFetch(`/admin/domain-grants/${grantId}/approve`, { method: 'POST' });
+}
+
+export function rejectDomainGrant(grantId, reason) {
+  return authedFetch(`/admin/domain-grants/${grantId}/reject`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+/** 도메인 확장 증빙서류 원본 - 가입 심사 서류와 같은 방식(blob -> object URL)으로 띄운다. */
+export async function fetchDomainGrantEvidenceBlob(grantId) {
+  const session = loadSession();
+  const token = session?.accessToken;
+  const res = await fetch(`/admin/domain-grants/${grantId}/evidence`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 401 && !redirectingToLogin) {
+    redirectingToLogin = true;
+    clearSession();
+    window.location.href = '/';
+  }
+  if (!res.ok) {
+    const err = new Error(res.status === 404 ? '제출된 증빙서류가 없습니다.' : '증빙서류를 불러오지 못했습니다.');
+    err.status = res.status;
+    throw err;
+  }
+  return res.blob();
+}
+
 /** 가입 심사 「상세 정보」 - 가입 화면에서 받은 값 전부 + 소속 계정 + 자동검증 판정. */
 export function fetchOrgApprovalDetail(orgId) {
   return authedFetch(`/admin/organizations/${orgId}`);

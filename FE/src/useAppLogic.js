@@ -15,7 +15,10 @@ import {
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
 import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications,
-  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog } from './api/meApi.js';
+  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
+  // 도메인 확장(2026-08-22) - 마이페이지 신청 / 관리자 심사 / DPP 생성 도메인 선택기.
+  fetchMyDomains, requestDomainGrant, fetchDomainGrants, approveDomainGrant, rejectDomainGrant,
+  fetchDomainGrantEvidenceBlob } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -183,6 +186,10 @@ export function useAppLogic(userProps) {
   const [participationsData, setParticipationsData] = useState([]);
   const [notifCatsData, setNotifCatsData] = useState([]);
   const [notifsData, setNotifsData] = useState([]);
+  // 도메인 확장(2026-08-22) - myDomainsData는 DPP 생성 탭의 도메인 선택기와 마이페이지가,
+  // domainGrantsData는 관리자 회원 관리 탭의 심사 목록이 쓴다.
+  const [myDomainsData, setMyDomainsData] = useState(null);
+  const [domainGrantsData, setDomainGrantsData] = useState([]);
 
   const [state, setStateRaw] = useState(() => {
     // 최초 진입 URL 이 곧 첫 화면입니다 (딥링크·새로고침 대응).
@@ -296,6 +303,10 @@ export function useAppLogic(userProps) {
     fetchParticipations().then((res) => { if (alive) setParticipationsData(res || []); }).catch(() => {});
     fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
+    // 조직 없는 계정(개인)은 400 - 조용히 무시하고 도메인 선택기를 감춘다.
+    fetchMyDomains().then((res) => { if (alive) setMyDomainsData(res); }).catch(() => {});
+    // ADMIN 계정이 아니면 403 - 도메인 확장 심사 목록도 마찬가지.
+    fetchDomainGrants().then((res) => { if (alive) setDomainGrantsData(res || []); }).catch(() => {});
     // ADMIN 계정이 아니면 403 - 그 외 화면엔 영향 없이 조용히 무시(다른 fetch들과 동일한 패턴).
     fetchOrgApprovals().then((res) => { if (alive) setOrgApprovalsData(res || []); }).catch(() => {});
     // EU_AUTHORITY/CUSTOMS org_type이거나 ADMIN이 아니면 403 - 마찬가지로 조용히 무시.
@@ -332,10 +343,16 @@ export function useAppLogic(userProps) {
         : ['RAW_SUPPLIER', 'TEST_LAB', 'RECYCLER', 'LOGISTICS', 'DISTRIBUTOR'].includes(orgData.orgType) ? 'partner'
         : null;
     if (!correct || correct === state.role) return;
+    // 제조사는 승인받은 다른 도메인으로 화면을 바꿀 수 있다(도메인 확장, 2026-08-22).
+    // 그 경우 role은 steel <-> battery <-> textile 사이를 오가므로, 여기서 주력 도메인으로
+    // 되돌리면 선택 자체가 불가능해진다. 허용 목록 안에 있으면 그대로 둔다.
+    const allowedRoles = (myDomainsData?.allowedDomains || [])
+      .map((d) => (d.code === 'BATTERY' ? 'battery' : d.code === 'TEXTILE' ? 'textile' : 'steel'));
+    if (allowedRoles.includes(state.role)) return;
     saveSession({ ...(loadSession() || {}), role: correct, at: Date.now() });
     setState({ role: correct, tab: firstTab(correct), notifOpen: false, dppOpen: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgData, state.view]);
+  }, [orgData, myDomainsData, state.view]);
 
   /** 세관 큐 새로고침 - 승인/보류/반려 처리 직후 목록에서 방금 그 케이스를 빼기 위해 씀. */
   const refetchCustomsQueue = useCallback(() => {
@@ -381,6 +398,14 @@ export function useAppLogic(userProps) {
     return () => { alive = false; clearInterval(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.view]);
+
+  /** 도메인 확장 - 신청/승인/반려 직후 목록을 다시 읽는다. */
+  const refetchMyDomains = useCallback(() => {
+    fetchMyDomains().then((res) => setMyDomainsData(res)).catch(() => {});
+  }, []);
+  const refetchDomainGrants = useCallback(() => {
+    fetchDomainGrants().then((res) => setDomainGrantsData(res || [])).catch(() => {});
+  }, []);
 
   /** 가입승인 화면(approvalVals.js)의 승인/반려 버튼이 처리 후 목록을 새로 불러올 때 씀. */
   const refetchOrgApprovals = useCallback(() => {
@@ -679,6 +704,8 @@ export function useAppLogic(userProps) {
       tierRequestPending: {}, permRequestPending: {},
       rejectModal: null, rejectReasonInput: '', dppQrCache: {}, dppQrPending: {}, productStatusFilter: 'all',
       orgDetail: null, orgDetailLoading: false, orgDetailError: '', orgDetailCertUrl: '', orgDetailCertKind: '', orgDetailCertError: '',
+      apSection: 'signup', dgFormOpen: false, dgDomain: '', dgReason: '', dgFile: null, dgFileName: '',
+      grantDoc: null, grantDocUrl: '', grantDocKind: '', grantDocError: '', dgRejectModal: null,
       criteriaOpen: {}
     });
   }
@@ -703,6 +730,8 @@ export function useAppLogic(userProps) {
       // 필터를 안 준 가입 심사 알림도 '가입대기'로 열어 주는 게 맞다 - 알림을 눌러
       // 도착한 사람이 하려는 일은 대기 중인 건을 처리하는 것이다.
       next.apFilter = filter || 'pending';
+      // 도메인 확장 알림은 그쪽 갈래를 펼친 채로 연다(?tab=domain).
+      next.apSection = new URLSearchParams(query || '').get('tab') === 'domain' ? 'domain' : 'signup';
     }
     setState(next);
   }
@@ -1243,6 +1272,8 @@ export function useAppLogic(userProps) {
     customsQueueData, customsCaseDetail, refetchCustomsQueue, refetchCustomsCase, decideCustomsCase,
     requestCustomsClearance,
     auditLogData,
+    myDomainsData, refetchMyDomains, requestDomainGrant,
+    domainGrantsData, refetchDomainGrants, approveDomainGrant, rejectDomainGrant, fetchDomainGrantEvidenceBlob,
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp,
     documentFormData, setDocumentFormData, uploadDocument,

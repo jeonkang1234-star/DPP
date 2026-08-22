@@ -1091,6 +1091,12 @@ export function makerVals(ctx) {
     // ctx.orgData(GET /me/organization 실 데이터)가 있으면 그걸 우선 쓰고, 없으면(org_id
     // 없는 계정 등) 기존 역할별 목데이터로 폴백한다. state.profile은 로그아웃 전까지 남는
     // 로컬 수정 이력(orgData 없을 때만 의미 있음) - orgData가 생긴 뒤로는 안 쓴다.
+    // ── 도메인 확장(2026-08-22 강 요청) ──────────────────────────────
+    // 허용 도메인 = 가입 시 확정된 주력 도메인 + 관리자가 승인한 확장(GET /me/domains).
+    // role과 도메인이 1:1이라(steel/battery/textile), 도메인 전환은 곧 role 전환이다 -
+    // 그래서 필드 폼·문서 슬롯·대시보드가 전부 그대로 따라온다.
+    ...domainGrantVals(ctx, state, setState),
+
     profileName: ctx.orgData ? ctx.orgData.orgName : (state.profile ? state.profile.name : p.ws),
     profileBiz: ctx.orgData ? ctx.orgData.bizRegNo : (state.profile ? state.profile.biz : ({ steel: '218-81-04471', battery: '124-86-77203', textile: '312-81-55910' }[r] || '')),
     profilePhone: ctx.orgData ? (ctx.orgData.contactPhone || '미입력') : (state.profile ? state.profile.phone : '02-3480-1200'),
@@ -1144,6 +1150,111 @@ export function makerVals(ctx) {
       } catch (e) {
         ctx.say(e.message || '기업 정보를 저장하지 못했습니다.');
       }
+    }
+  };
+}
+
+/** 도메인 코드 <-> 화면 role. 제조사는 role이 곧 도메인이다. */
+const DOMAIN_TO_ROLE = { STEEL: 'steel', BATTERY: 'battery', TEXTILE: 'textile' };
+const ROLE_TO_DOMAIN = { steel: 'STEEL', battery: 'BATTERY', textile: 'TEXTILE' };
+const DOMAIN_LABEL = { STEEL: '철강', BATTERY: '배터리', TEXTILE: '섬유·패션' };
+
+/**
+ * 도메인 확장 - 마이페이지의 신청 카드와 DPP 생성 탭의 도메인 선택기.
+ *
+ * 신청은 증빙서류가 필수라 파일을 고르지 않으면 버튼이 막힌다(서버도 같은 조건으로 막지만,
+ * 눌러 본 뒤 토스트로 알려주는 것보다 애초에 못 누르게 하는 편이 낫다).
+ */
+function domainGrantVals(ctx, state, setState) {
+  const data = ctx.myDomainsData;
+  const allowed = (data && data.allowedDomains) || [];
+  const grants = (data && data.grants) || [];
+  const curDomain = ROLE_TO_DOMAIN[state.role] || (data && data.baseDomain) || 'STEEL';
+  // 아직 안 가진 도메인만 신청 대상이다.
+  const allowedCodes = allowed.map(d => d.code);
+  const candidates = ['STEEL', 'BATTERY', 'TEXTILE'].filter(c => !allowedCodes.includes(c));
+  const pick = state.dgDomain && candidates.includes(state.dgDomain) ? state.dgDomain : (candidates[0] || '');
+
+  const switchDomain = (code) => {
+    const role = DOMAIN_TO_ROLE[code];
+    if (!role || role === state.role) return;
+    // 도메인을 바꾸면 작성 중이던 DPP 초안도 그 도메인 것으로 갈아타야 한다 -
+    // fieldFormDppId는 role+계정별로 따로 저장돼 있어서(useAppLogic) 그냥 비우면
+    // 새 role의 저장분이 자동으로 복원된다.
+    setState({ role, tab: 'input', fieldFormDppId: null, parsedFieldSources: {}, unlockedFields: {} });
+    ctx.say(DOMAIN_LABEL[code] + ' 도메인으로 전환했습니다.');
+  };
+
+  return {
+    // DPP 생성 탭 - 선택지가 2개 이상일 때만 보여준다(1개면 고를 게 없다).
+    domainPickerShown: allowed.length > 1,
+    domainPickerOptions: allowed.map(d => ({
+      key: d.code, code: d.code, label: d.label,
+      active: d.code === curDomain,
+      style: {
+        height: 38, padding: '0 16px', border: 0, borderRadius: 12, cursor: 'pointer',
+        fontSize: 13, fontWeight: 600,
+        background: d.code === curDomain ? '#0045A9' : '#fff',
+        color: d.code === curDomain ? '#fff' : '#44546F',
+        boxShadow: d.code === curDomain ? '0 6px 14px rgba(0,69,169,.22)' : '0 1px 2px rgba(16,32,64,.06)'
+      },
+      go: () => switchDomain(d.code)
+    })),
+
+    // 마이페이지 - 보유 도메인 + 신청 이력
+    myDomainsShown: !!data,
+    myDomainChips: allowed.map(d => ({
+      key: d.code, label: d.label,
+      style: ctx.chip('rgba(0,69,169,.10)', '#0045A9')
+    })),
+    domainGrantRows: grants
+      .filter(g => g.status !== 'APPROVED' || g.requestReason !== '가입 시 확정된 주력 도메인')
+      .map(g => ({
+        key: g.grantId,
+        label: g.domainLabel,
+        status: g.statusLabel,
+        reason: g.rejectReason || g.requestReason || '',
+        at: ctx.fmtDateTime(g.requestedAt),
+        chip: ctx.chip(
+          g.status === 'APPROVED' ? 'rgba(18,161,80,.12)' : g.status === 'PENDING' ? 'rgba(227,160,8,.16)' : 'rgba(224,59,59,.10)',
+          g.status === 'APPROVED' ? '#0E7A3D' : g.status === 'PENDING' ? '#96660A' : '#C22B2B'
+        )
+      })),
+    domainGrantEmpty: grants.filter(g => g.requestReason !== '가입 시 확정된 주력 도메인').length === 0,
+
+    // 신청 폼
+    dgFormOpen: !!state.dgFormOpen,
+    dgCanRequest: candidates.length > 0,
+    openDomainRequest: () => setState({ dgFormOpen: true, dgDomain: candidates[0] || '', dgReason: '', dgFileName: '', dgFile: null }),
+    closeDomainRequest: () => setState({ dgFormOpen: false, dgFile: null, dgFileName: '' }),
+    dgOptions: candidates.map(c => ({
+      key: c, code: c, label: DOMAIN_LABEL[c], active: c === pick,
+      style: {
+        flex: 1, height: 44, border: c === pick ? '1.5px solid #0045A9' : '1px solid rgba(16,32,64,.14)',
+        borderRadius: 12, cursor: 'pointer', fontSize: 13.5, fontWeight: 600,
+        background: c === pick ? 'rgba(0,69,169,.06)' : '#fff',
+        color: c === pick ? '#0045A9' : '#44546F'
+      },
+      go: () => setState({ dgDomain: c })
+    })),
+    dgReason: state.dgReason || '',
+    onDgReason: (e) => setState({ dgReason: e.target.value }),
+    dgFileName: state.dgFileName || '',
+    onDgFile: (e) => {
+      const f = e.target.files && e.target.files[0];
+      setState({ dgFile: f || null, dgFileName: f ? f.name : '' });
+    },
+    dgSubmitDisabled: !pick || !state.dgFile,
+    submitDomainRequest: () => {
+      if (!pick) { ctx.say('확장할 도메인을 선택해 주세요.'); return; }
+      if (!state.dgFile) { ctx.say('증빙서류를 첨부해 주세요.'); return; }
+      ctx.requestDomainGrant(pick, state.dgReason || '', state.dgFile)
+        .then(() => {
+          setState({ dgFormOpen: false, dgFile: null, dgFileName: '', dgReason: '' });
+          ctx.refetchMyDomains();
+          ctx.say(DOMAIN_LABEL[pick] + ' 도메인 확장을 신청했습니다. 관리자 심사 후 알림으로 알려드립니다.');
+        })
+        .catch((err) => ctx.say(err.message || '신청에 실패했습니다.'));
     }
   };
 }

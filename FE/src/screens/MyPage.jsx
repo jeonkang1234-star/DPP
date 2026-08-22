@@ -23,6 +23,10 @@ export default function MyPage(props) {
 
 function CompanyMyPage({
   profileName, profileBiz, profilePhone, profileUrl, openProfileEdit,
+  // 도메인 확장(2026-08-22) - 보유 도메인 + 신청 이력 + 신청 폼.
+  myDomainsShown, myDomainChips, domainGrantRows, domainGrantEmpty,
+  dgFormOpen, dgCanRequest, openDomainRequest, closeDomainRequest,
+  dgOptions, dgReason, onDgReason, dgFileName, onDgFile, dgSubmitDisabled, submitDomainRequest,
 }) {
   // 2026-08-17 강 요청: "마이페이지는 보유권한까지 싹 다 삭제해서 왼쪽에 있던 기업
   // 기본정보랑 증빙서류만 냅둬" - 온보딩 진행상황/완료 요약 카드와 보유 권한 카드(+
@@ -47,6 +51,62 @@ function CompanyMyPage({
             </div>
             <span style={{ fontSize: '11.5px', color: '#8494AC' }}>사업자등록번호는 국세청 정보와 연동되어 있어 변경 시 재심사가 진행됩니다.</span>
           </div>
+
+          {/* 도메인 확장 - 제조사만 보인다(협력사·개인은 myDomainsShown이 false).
+              승인되면 DPP 생성 탭 상단에서 도메인을 골라 발급할 수 있다. */}
+          {myDomainsShown ? (
+          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <span style={{ fontSize: '15px', fontWeight: '600' }}>발급 가능 도메인</span>
+              {dgCanRequest && !dgFormOpen ? (
+              <button onClick={openDomainRequest} style={{ height: '36px', padding: '0 14px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '11px', background: 'rgba(0,69,169,.06)', fontSize: '12.5px', fontWeight: '600', color: '#0045A9', cursor: 'pointer' }}>도메인 확장 신청</button>
+              ) : null}
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {(myDomainChips || []).map((c, i) => (<React.Fragment key={i}><span style={c.style}>{c.label}</span></React.Fragment>))}
+            </div>
+
+            {dgFormOpen ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '18px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '16px', background: '#FBFCFE' }}>
+              <span style={{ fontSize: '13px', fontWeight: '700' }}>확장할 도메인</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {(dgOptions || []).map((o, i) => (<React.Fragment key={i}><button onClick={o.go} style={o.style}>{o.label}</button></React.Fragment>))}
+              </div>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>신청 사유 <span style={{ fontWeight: '500', color: '#9AA8BE' }}>(선택)</span></span>
+                <textarea value={dgReason} onChange={onDgReason} rows={3} placeholder="해당 도메인 제품을 생산하게 된 경위를 적어 주세요." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', resize: 'vertical', fontFamily: 'inherit', background: '#fff' }} />
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>증빙서류</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', height: '48px', padding: '0 15px', border: '1px dashed rgba(16,32,64,.22)', borderRadius: '12px', fontSize: '13.5px', color: '#44546F', cursor: 'pointer', background: '#fff' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '30px', padding: '0 12px', borderRadius: '9px', background: 'rgba(0,69,169,.08)', color: '#0045A9', fontSize: '12px', fontWeight: '600', flex: 'none' }}>파일 선택</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dgFileName || '공장등록증·품목허가증 등 PDF/이미지'}</span>
+                  <input type="file" accept=".pdf,image/*" onChange={onDgFile} style={{ display: 'none' }} />
+                </label>
+                <span style={{ fontSize: '11.5px', color: '#8494AC' }}>관리자가 제출 서류를 직접 확인한 뒤 승인합니다. 승인되면 알림으로 알려드립니다.</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '9px' }}>
+                <button onClick={closeDomainRequest} style={{ height: '42px', padding: '0 18px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>취소</button>
+                <button onClick={submitDomainRequest} disabled={dgSubmitDisabled} style={{ height: '42px', padding: '0 22px', border: '0', borderRadius: '12px', background: dgSubmitDisabled ? 'rgba(16,32,64,.16)' : '#0045A9', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: dgSubmitDisabled ? 'not-allowed' : 'pointer' }}>신청하기</button>
+              </div>
+            </div>
+            ) : null}
+
+            {domainGrantEmpty ? null : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '700', letterSpacing: '.06em', color: '#8494AC' }}>신청 이력</span>
+              {(domainGrantRows || []).map((g, i) => (<React.Fragment key={i}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '12px', alignItems: 'center', padding: '13px 15px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '13px', background: '#FBFCFE' }}>
+                <span style={{ fontSize: '13.5px', fontWeight: '600' }}>{g.label}</span>
+                <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.5' }}>{g.at}{g.reason ? ' · ' + g.reason : ''}</span>
+                <span style={g.chip}>{g.status}</span>
+              </div>
+              </React.Fragment>))}
+            </div>
+            )}
+          </div>
+          ) : null}
         </div>
       </div>
   );
