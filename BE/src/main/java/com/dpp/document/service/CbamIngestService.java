@@ -287,7 +287,10 @@ public class CbamIngestService {
         // 보여주므로(AuditLogRepository.findRecent의 target_type 필터, 2026-08-22 강 요청),
         // 여기서 남기지 않으면 "영업비밀 값을 공개하지 않고 규정 충족을 증명했다"는 사실이
         // 감독기관 화면에 전혀 나타나지 않는다.
-        auditLogService.record(userId, "VERIFY", "ZKP_PROOF", zkpProof.getProofId(),
+        // action은 "VERIFY"가 아니라 "CREATE"다 - audit_log.action에 CHECK 제약이 있어서
+        // 허용된 7개 값(CREATE/UPDATE/DELETE/APPROVE/REJECT/LOGIN/EXPORT) 밖의 값을 넣으면
+        // INSERT가 실패한다. 화면 문구는 AuditLogService.actionLabel이 "ZKP 검증"으로 바꿔 준다.
+        auditLogService.record(userId, "CREATE", "ZKP_PROOF", zkpProof.getProofId(),
                 "CBAM_REPORT ZKP (DPP-" + dpp.getDppId() + ")", "충족", zkpAnchorTxId);
 
         return new CbamUploadResponse(

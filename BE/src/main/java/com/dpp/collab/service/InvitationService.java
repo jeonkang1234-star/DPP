@@ -261,7 +261,10 @@ public class InvitationService {
         return switch (roleCode) {
             case "RAW_SUPPLIER" -> "원자재·화학 공급 자료 (스크랩 매입증빙, SDS 등)";
             case "TEST_LAB" -> "시험·인증 자료 (시험성적서, LCA/EPD, 탄소보고서)";
-            case "RECYCLER" -> "재활용 처리 결과 보고서";
+            // 받는 화면에 실제로 뜨는 것에 맞춘다 - 재활용 처리 결과 보고서는 배터리
+            // 도메인 전용 문서라 대부분의 DPP에서는 데이터 입력만 요청된다
+            // (2026-08-22 강 요청, FE inviteRoleOptions와 같은 문구).
+            case "RECYCLER" -> "재활용 처리 데이터 (회수율·해체 절차 등)";
             default -> roleCode;
         };
     }

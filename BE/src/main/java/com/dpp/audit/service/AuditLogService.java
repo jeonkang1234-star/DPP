@@ -7,20 +7,16 @@ import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -46,38 +42,35 @@ public class AuditLogService {
     private final AuditLogRepository auditLogRepository;
     private final UserAccountRepository userAccountRepository;
     private final OrganizationRepository organizationRepository;
-    private final ObjectMapper objectMapper;
+    private final AuditLogWriter auditLogWriter;
 
     public AuditLogService(AuditLogRepository auditLogRepository,
                             UserAccountRepository userAccountRepository,
                             OrganizationRepository organizationRepository,
-                            ObjectMapper objectMapper) {
+                            AuditLogWriter auditLogWriter) {
         this.auditLogRepository = auditLogRepository;
         this.userAccountRepository = userAccountRepository;
         this.organizationRepository = organizationRepository;
-        this.objectMapper = objectMapper;
+        this.auditLogWriter = auditLogWriter;
     }
 
     /**
      * 감사 로그 한 건을 남긴다 - 실패해도(DB 오류 등) 호출자의 업무 트랜잭션을 절대
      * 막지 않는다(FieldFormService.anchorDppSnapshot과 동일한 원칙: 감사 로그는 부가
-     * 기록이지 업무 처리의 필요조건이 아니다). REQUIRES_NEW로 별도 트랜잭션에서 실행해서,
-     * 여기서 예외가 나도 호출자 트랜잭션이 rollback-only로 전염되지 않는다.
+     * 기록이지 업무 처리의 필요조건이 아니다).
+     *
+     * 이 메서드에는 @Transactional을 달지 않는다. 예전엔 여기에 REQUIRES_NEW를 달고
+     * 본문을 try/catch로 감쌌는데, 커밋은 본문이 끝난 뒤 프록시가 하므로 try 밖에서
+     * 일어난다 - INSERT가 제약 위반으로 실패하면 하이버네이트가 트랜잭션을 rollback-only로
+     * 표시하고, 예외를 삼켜도 커밋 시점에 UnexpectedRollbackException이 튀어나와 호출자까지
+     * 같이 죽었다(2026-08-22: audit_log_action_check 위반으로 문서 업로드가 전부 실패).
+     * 트랜잭션 경계는 AuditLogWriter가 갖고, 여기서는 그 호출 전체를 감싸서 커밋 시점
+     * 예외까지 잡는다.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(Long actorUserId, String action, String targetType, Long targetId,
                         String targetLabel, String result, String txId) {
         try {
-            Long actorOrgId = actorUserId == null ? null
-                    : userAccountRepository.findById(actorUserId).map(UserAccount::getOrgId).orElse(null);
-            Map<String, Object> after = new LinkedHashMap<>();
-            after.put("targetLabel", targetLabel);
-            after.put("result", result);
-            if (txId != null) {
-                after.put("txId", txId);
-            }
-            String afterValueJson = objectMapper.writeValueAsString(after);
-            auditLogRepository.insert(actorUserId, actorOrgId, action, targetType, targetId, afterValueJson);
+            auditLogWriter.write(actorUserId, action, targetType, targetId, targetLabel, result, txId);
         } catch (Exception e) {
             log.warn("감사 로그 기록 실패 (업무 처리는 계속 진행): actorUserId={}, action={}, targetType={}, targetId={}, error={}",
                     actorUserId, action, targetType, targetId, e.getMessage());
@@ -107,7 +100,7 @@ public class AuditLogService {
                 targetLabel == null ? "—" : targetLabel, resultLabel == null ? "—" : resultLabel, txId);
     }
 
-    /** action(CREATE/UPDATE/DELETE/APPROVE/REJECT/VERIFY/EXPORT) + target_type 조합을 화면용 한국어 라벨로. */
+    /** action(CREATE/UPDATE/DELETE/APPROVE/REJECT/LOGIN/EXPORT) + target_type 조합을 화면용 한국어 라벨로. */
     private String actionLabel(String action, String targetType) {
         if ("DPP".equals(targetType) && "CREATE".equals(action)) return "DPP 발급";
         if ("DOCUMENT".equals(targetType) && "CREATE".equals(action)) return "문서 업로드";
@@ -116,7 +109,10 @@ public class AuditLogService {
         if ("CUSTOMS_CLEARANCE".equals(targetType) && "APPROVE".equals(action)) return "통관 승인";
         if ("CUSTOMS_CLEARANCE".equals(targetType) && "REJECT".equals(action)) return "통관 반려";
         if ("CUSTOMS_CLEARANCE".equals(targetType) && "UPDATE".equals(action)) return "통관 보류";
-        if ("ZKP_PROOF".equals(targetType) && "VERIFY".equals(action)) return "ZKP 검증";
+        // action은 audit_log_action_check가 허용하는 값만 쓸 수 있다
+        // (CREATE/UPDATE/DELETE/APPROVE/REJECT/LOGIN/EXPORT) - 증명 행이 새로 생기는
+        // 것이므로 CREATE로 기록하고, 화면 문구만 "ZKP 검증"으로 보여준다.
+        if ("ZKP_PROOF".equals(targetType) && "CREATE".equals(action)) return "ZKP 검증";
         return action + " · " + targetType;
     }
 
