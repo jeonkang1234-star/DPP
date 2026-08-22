@@ -102,8 +102,9 @@ public class PasswordAuthService {
         String access = jwtTokenProvider.createAccessToken(user.getUserId().toString(), claims);
         String refresh = jwtTokenProvider.createRefreshToken(user.getUserId().toString());
 
-        auditLogService.record(user.getUserId(), "LOGIN", "USER_ACCOUNT", user.getUserId(),
-                user.getEmail(), "성공", null);
+        // 로그인은 감사 로그에 남기지 않는다(2026-08-22 강 요청 - EU 감사 로그 화면에
+        // 로그인 기록이 뜨는 게 맞지 않다). 감사 로그는 DPP 등록과 ZKP 검증만 다룬다.
+        // 로그인 이력 자체는 login_history 테이블의 몫이다(V1__schema.sql).
 
         return LoginResponse.of(access, refresh, user.getAccountType().name(), user.getEmail(), user.getDisplayName(),
                 org == null ? null : org.getOrgType(), org == null ? null : org.getDomain());

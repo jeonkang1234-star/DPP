@@ -229,6 +229,66 @@ public class CustomsClearanceService {
         return customsClearanceRepository.save(row);
     }
 
+    /**
+     * 방금 승인된 세관 조직에게 기존 통관 케이스를 나눠 준다(AdminOrgApprovalService.approve).
+     *
+     * 통관 케이스는 DPP 발급 시점에 그때 ACTIVE인 세관에게만 배정되므로, 세관 계정이 나중에
+     * 승인되면 이미 발급된 DPP는 그 세관 큐에 영영 안 들어왔다(2026-08-22 강 리포트 "방금
+     * 발급한 DPP가 세관 계정에 보이지 않음"). 승인 시점에 한 번 따라잡게 한다.
+     *
+     * 이미 심사가 끝난 원본을 복제하더라도 새 행은 PENDING으로 만든다 - 이 세관은 아직
+     * 판정한 적이 없기 때문이다. 승인 처리 자체를 막지 않도록 예외는 삼킨다.
+     */
+    @Transactional
+    public int backfillForCustomsOrg(Long customsOrgId) {
+        try {
+            Organization customsOrg = organizationRepository.findById(customsOrgId).orElse(null);
+            if (customsOrg == null || !"CUSTOMS".equals(customsOrg.getOrgType())) {
+                return 0;
+            }
+            String cc = customsOrg.getCountryCode();
+            if (cc == null || cc.isBlank()) {
+                log.warn("세관 조직 {}에 국가 정보가 없어 통관 큐 따라잡기를 건너뜁니다.", customsOrgId);
+                return 0;
+            }
+            List<Long> templateIds = customsClearanceRepository.findTemplateIdsForNewCustomsOrg(cc, customsOrgId);
+            int created = 0;
+            for (Long templateId : templateIds) {
+                CustomsClearance src = customsClearanceRepository.findById(templateId).orElse(null);
+                if (src == null) {
+                    continue;
+                }
+                // 배정 대상이 없어 비어 있던 행이면 새로 만들지 말고 이 세관에 붙인다 -
+                // "관할 세관 없음"으로 남겨 둔 행의 원래 목적이 바로 이것이다.
+                if (src.getCustomsOrgId() == null) {
+                    src.setCustomsOrgId(customsOrgId);
+                    customsClearanceRepository.save(src);
+                    created++;
+                    continue;
+                }
+                CustomsClearance row = new CustomsClearance();
+                row.setDppId(src.getDppId());
+                row.setCustomsOrgId(customsOrgId);
+                row.setHsCode(src.getHsCode());
+                row.setClearanceSide(src.getClearanceSide());
+                row.setExportCountryCode(src.getExportCountryCode());
+                row.setImportCountryCode(src.getImportCountryCode());
+                row.setImporterName(src.getImporterName());
+                row.setImporterAddress(src.getImporterAddress());
+                row.setImporterEori(src.getImporterEori());
+                row.setRequestedByOrgId(src.getRequestedByOrgId());
+                row.setDecision("PENDING");
+                customsClearanceRepository.save(row);
+                created++;
+            }
+            log.info("세관 조직 {}({}) 승인 - 기존 통관 케이스 {}건을 큐에 배정했습니다.", customsOrgId, cc, created);
+            return created;
+        } catch (RuntimeException e) {
+            log.warn("세관 조직 {} 통관 큐 따라잡기 실패(승인은 정상 처리): {}", customsOrgId, e.getMessage());
+            return 0;
+        }
+    }
+
     @Transactional(readOnly = true)
     public List<CustomsCaseSummaryDto> listQueue(Long userId, boolean decided) {
         Organization myOrg = requireCustomsOrg(userId);

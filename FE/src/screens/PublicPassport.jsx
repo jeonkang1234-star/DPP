@@ -80,10 +80,10 @@ export default function PublicPassport() {
                 <span style={{ fontSize: '12.5px', color: '#8494AC' }}>공개된 항목이 없습니다.</span>
               ) : (state.data.fields || []).map((f, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '10px 0', borderBottom: i === state.data.fields.length - 1 ? 'none' : '1px solid rgba(16,32,64,.06)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#8494AC', flex: 'none' }}>
-                    {f.labelKo}
-                    {f.tier === 'T0' ? (<span style={{ fontSize: '9.5px', fontWeight: '600', color: '#C22B2B', border: '1px solid rgba(224,59,59,.25)', borderRadius: '5px', padding: '0 4px' }}>법정필수</span>) : null}
-                  </span>
+                  {/* 2026-08-22 강 요청: 「법정필수」 배지 삭제. T0/T1 구분은 데이터를
+                      채우는 제조사에게 필요한 정보이고, QR로 제품을 보는 소비자·세관에겐
+                      항목 이름과 값만 있으면 된다. */}
+                  <span style={{ fontSize: '12.5px', color: '#8494AC', flex: 'none' }}>{f.labelKo}</span>
                   {/* 영업비밀 항목은 값 대신 "한계값 충족" 증명 결과만 온다(proofLabel).
                       값이 비어 있는데 라벨만 뜨는 게 아니라, 무엇이 검증됐는지가 보여야 한다. */}
                   {f.value != null && f.value !== ''

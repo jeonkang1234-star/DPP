@@ -107,7 +107,7 @@ public class AuditLogService {
                 targetLabel == null ? "—" : targetLabel, resultLabel == null ? "—" : resultLabel, txId);
     }
 
-    /** action(CREATE/UPDATE/DELETE/APPROVE/REJECT/LOGIN/EXPORT) + target_type 조합을 화면용 한국어 라벨로. */
+    /** action(CREATE/UPDATE/DELETE/APPROVE/REJECT/VERIFY/EXPORT) + target_type 조합을 화면용 한국어 라벨로. */
     private String actionLabel(String action, String targetType) {
         if ("DPP".equals(targetType) && "CREATE".equals(action)) return "DPP 발급";
         if ("DOCUMENT".equals(targetType) && "CREATE".equals(action)) return "문서 업로드";
@@ -116,7 +116,7 @@ public class AuditLogService {
         if ("CUSTOMS_CLEARANCE".equals(targetType) && "APPROVE".equals(action)) return "통관 승인";
         if ("CUSTOMS_CLEARANCE".equals(targetType) && "REJECT".equals(action)) return "통관 반려";
         if ("CUSTOMS_CLEARANCE".equals(targetType) && "UPDATE".equals(action)) return "통관 보류";
-        if ("USER_ACCOUNT".equals(targetType) && "LOGIN".equals(action)) return "로그인";
+        if ("ZKP_PROOF".equals(targetType) && "VERIFY".equals(action)) return "ZKP 검증";
         return action + " · " + targetType;
     }
 
