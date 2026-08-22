@@ -630,7 +630,6 @@ export function makerVals(ctx) {
     qrModalShowLink: !!(state.qrModal && state.qrModal.showProductsLink),
     qrModalBadge: (state.qrModal && state.qrModal.badge) || 'DPP 발급 완료',
     qrModalTitle: (state.qrModal && state.qrModal.title) || 'QR 코드가 함께 발급되었습니다',
-    qrModalHint: (state.qrModal && state.qrModal.hint) || '이 QR을 스캔하면 현재까지 입력·검증된 데이터를 조회할 수 있습니다.',
     closeQrModal: () => setState({ qrModal: null }),
     goToProductsFromQr: () => setState({ tab: 'products', qrModal: null }),
     // ff가 있으면(철강 역할) requirement_field 실 라벨/필수여부 + dpp_field_value 실 저장값,

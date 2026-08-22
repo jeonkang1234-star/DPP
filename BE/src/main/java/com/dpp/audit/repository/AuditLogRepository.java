@@ -36,6 +36,12 @@ public interface AuditLogRepository extends Repository<AuditLog, Long> {
      * 아직 안 둔다(테스트 데이터 규모상 불필요, 코멘트 참고). Object[]: [created_at, action,
      * target_type, target_id, target_label, result_label, tx_id, actor_display_name,
      * actor_email, actor_org_name].
+     *
+     * target_type을 DPP/ZKP_PROOF/DOCUMENT로 제한한다(2026-08-22 강 요청 "감사 로그에
+     * 로그인 관련 로그가 왜 뜨는지 모르겠음 - 무조건 DPP 관련한 zkp나 dpp등록 정도만").
+     * 로그인은 아예 기록하지 않도록 바꿨지만(PasswordAuthService), 이미 쌓인 USER_ACCOUNT/
+     * ORGANIZATION 행이 남아 있으므로 조회 쪽에서도 같이 거른다 - 감사 로그 행을 지우는
+     * 것보다 감독기관에게 보여줄 범위를 좁히는 쪽이 옳다.
      */
     @Query(value = "SELECT a.created_at, a.action, a.target_type, a.target_id, "
             + "a.after_value->>'targetLabel' AS target_label, "
@@ -45,6 +51,7 @@ public interface AuditLogRepository extends Repository<AuditLog, Long> {
             + "FROM audit_log a "
             + "LEFT JOIN user_account ua ON ua.user_id = a.actor_user_id "
             + "LEFT JOIN organization o ON o.org_id = a.actor_org_id "
+            + "WHERE a.target_type IN ('DPP', 'ZKP_PROOF', 'DOCUMENT') "
             + "ORDER BY a.created_at DESC LIMIT 200", nativeQuery = true)
     List<Object[]> findRecent();
 }

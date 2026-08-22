@@ -1,6 +1,7 @@
 package com.dpp.mypage.service;
 
 import com.dpp.audit.service.AuditLogService;
+import com.dpp.customs.service.CustomsClearanceService;
 import com.dpp.auth.entity.AccountType;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
@@ -43,15 +44,18 @@ public class AdminOrgApprovalService {
     private final UserAccountRepository userAccountRepository;
     private final NotificationRepository notificationRepository;
     private final AuditLogService auditLogService;
+    private final CustomsClearanceService customsClearanceService;
 
     public AdminOrgApprovalService(OrganizationRepository organizationRepository,
                                     UserAccountRepository userAccountRepository,
                                     NotificationRepository notificationRepository,
-                                    AuditLogService auditLogService) {
+                                    AuditLogService auditLogService,
+                                    CustomsClearanceService customsClearanceService) {
         this.organizationRepository = organizationRepository;
         this.userAccountRepository = userAccountRepository;
         this.notificationRepository = notificationRepository;
         this.auditLogService = auditLogService;
+        this.customsClearanceService = customsClearanceService;
     }
 
     @Transactional(readOnly = true)
@@ -114,6 +118,12 @@ public class AdminOrgApprovalService {
         org.setApprovedAt(OffsetDateTime.now());
         org.setRejectReason(null);
         Organization saved = organizationRepository.save(org);
+        // 세관 계정은 승인 시점에 기존 통관 케이스를 큐로 따라잡게 한다 - 통관 케이스는 DPP
+        // 발급 시점에 그때 ACTIVE인 세관에게만 배정되므로, 나중에 승인된 세관은 이미 발급된
+        // DPP를 영영 못 봤다(2026-08-22 강 리포트).
+        if ("CUSTOMS".equals(saved.getOrgType())) {
+            customsClearanceService.backfillForCustomsOrg(orgId);
+        }
         notifyOrg(orgId, "가입 승인이 완료되었습니다", org.getOrgName() + " 조직의 가입 신청이 승인되었습니다.");
         log.info("관리자 {} 가 조직 {} 가입을 승인", adminUserId, orgId);
         auditLogService.record(adminUserId, "APPROVE", "ORGANIZATION", orgId, org.getOrgName(), "성공", null);

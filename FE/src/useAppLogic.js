@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { publicPassportUrl, publicBaseUrl, setPublicBaseUrl, qrUrlWarning } from './publicUrl.js';
+import { publicPassportUrl, qrUrlWarning } from './publicUrl.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   pill, roleCard, pillDot, domainCard, tabStyle,
@@ -194,7 +194,11 @@ export function useAppLogic(userProps) {
     if (snsLoggedIn) saveSession({ ...snsResult, role: 'personal', at: Date.now() });
     if (snsResult && snsResult.error) pendingSnsError.current = snsResult.error;
     const saved = snsLoggedIn ? { role: 'personal' } : loadSession();
-    const initialRole = fromUrl.role || saved?.role || props.startRole || 'steel';
+    // 저장된 세션의 역할이 주소창보다 우선한다 - 아래 view 결정과 같은 이유이고,
+    // 같은 탭에서 예전 역할의 URL(뒤로가기 히스토리, 북마크)로 들어와도 계정이 바뀐 것처럼
+    // 보이지 않게 한다(2026-08-22 강 리포트 "뒤로가기 하니까 관세청 계정이 제조사 계정으로
+    // 넘어갔음"). 세션이 없을 때만 URL의 역할을 쓴다(공개 링크·데모 진입 경로).
+    const initialRole = saved?.role || fromUrl.role || props.startRole || 'steel';
 
     return {
       // 저장된 세션이 있으면 주소가 /login·/signup이어도 앱으로 들어간다.
@@ -207,7 +211,9 @@ export function useAppLogic(userProps) {
       role: initialRole,
       // 'dash'로 고정하면 dash 탭이 없는 역할(협력사=assigned, 세관=clearance,
       // EU=registry, 개인=scans)이 빈 화면으로 뜬다. 역할별 첫 탭으로 폴백한다.
-      tab: fromUrl.tab || firstTab(initialRole),
+      // 주소창의 탭은 그 탭이 이 역할의 것일 때만 쓴다 - /steel/products 로 들어온
+      // 세관 계정에게 'products' 탭을 물려주면 빈 화면이 된다.
+      tab: (fromUrl.role && fromUrl.role !== initialRole ? null : fromUrl.tab) || firstTab(initialRole),
     loginTab: 'company',
       suTab: 'company',
       // 자동입력 방지 문자. 가입 화면을 처음 그릴 때 한 번 뽑고, 새로고침 버튼으로 바꾼다.
@@ -574,14 +580,30 @@ export function useAppLogic(userProps) {
     return () => { alive = false; };
   }, [state.dppOpen, state.dppId, dashboardData]);
 
-  /* URL → 상태 */
+  /* URL → 상태
+   *
+   * 주소창의 role은 "지금 이 계정이 무엇인가"를 절대 바꾸지 못한다. 예전엔 경로에서 읽은
+   * { view, role, tab }을 그대로 덮어써서, 세관 계정으로 로그인한 탭에서 뒤로가기를 누르면
+   * 히스토리에 남아 있던 /steel/... 로 돌아가며 계정이 제조사로 바뀐 것처럼 보였다
+   * (2026-08-22 강 리포트). 로그인/로그아웃이 아닌 방법으로 역할이 바뀌면 안 된다.
+   *
+   * 그래서 세션이 있는 동안에는 tab만 URL을 따르고, 역할이 다른 경로면 지금 역할의
+   * 정규 경로로 되돌린다(아래 상태 → URL 이펙트가 주소창을 다시 맞춰 준다).
+   */
   useEffect(() => {
     const next = stateFromPath(pathname);
     if (!next) return;
+    const loggedIn = !!loadSession()?.accessToken;
+    if (loggedIn && next.view === 'app' && next.role && next.role !== state.role) {
+      const back = pathFor('app', state.role, state.tab) || pathFor('app', state.role, firstTab(state.role));
+      if (back && back !== pathname) navigate(back, { replace: true });
+      return;
+    }
     setStateRaw((prev) => {
       const changed = Object.keys(next).some((k) => next[k] !== prev[k]);
       return changed ? { ...prev, ...next, notifOpen: false, dppOpen: false } : prev;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   /* SNS 콜백이 실패로 돌아왔으면 마운트 직후 한 번 토스트로 알려준다. */
@@ -659,6 +681,30 @@ export function useAppLogic(userProps) {
       orgDetail: null, orgDetailLoading: false, orgDetailError: '', orgDetailCertUrl: '', orgDetailCertKind: '', orgDetailCertError: '',
       criteriaOpen: {}
     });
+  }
+
+  /**
+   * 알림의 "바로가기". linkUrl에 ?filter=... 같은 쿼리를 붙일 수 있게 해서, 화면만 여는 게
+   * 아니라 그 알림이 가리키는 상태까지 맞춰 준다 - 가입 심사 알림은
+   * /admin/approvals?filter=pending 으로 와서 「가입대기」 탭이 눌린 채로 열린다.
+   *
+   * 이 함수는 반드시 ctx에도 실려 있어야 한다. notifVals.js가 ctx.goToLink로 부르는데,
+   * 예전엔 renderVals()가 돌려주는 객체 안에만 정의돼 있어서 ctx.goToLink가 undefined였고,
+   * 「바로가기」를 눌러도 TypeError만 나고 아무 일도 일어나지 않았다(2026-08-22 강 리포트).
+   */
+  function goToLink(linkUrl) {
+    if (!linkUrl) { say('이동할 화면이 지정되지 않은 알림입니다.'); return; }
+    const [path, query] = String(linkUrl).split('?');
+    const target = stateFromPath(path);
+    if (!target || target.view !== 'app') { say('이동할 수 없는 주소입니다: ' + linkUrl); return; }
+    const next = { notifOpen: false, view: 'app', role: target.role, tab: target.tab };
+    const filter = new URLSearchParams(query || '').get('filter');
+    if (target.role === 'admin' && target.tab === 'approve') {
+      // 필터를 안 준 가입 심사 알림도 '가입대기'로 열어 주는 게 맞다 - 알림을 눌러
+      // 도착한 사람이 하려는 일은 대기 중인 건을 처리하는 것이다.
+      next.apFilter = filter || 'pending';
+    }
+    setState(next);
   }
 
   /** extra: 로그인/가입 응답으로 받은 토큰 등을 세션에 같이 저장하고 싶을 때. */
@@ -770,12 +816,7 @@ export function useAppLogic(userProps) {
        * 실제 화면 상태로 바꾼다. 모르는 경로면 그 사실을 알린다 - 조용히 아무 일도
        * 안 일어나는 게 제일 나쁘다(2026-08-21 강 리포트).
        */
-      goToLink: (linkUrl) => {
-        if (!linkUrl) { say('이동할 화면이 지정되지 않은 알림입니다.'); return; }
-        const target = stateFromPath(linkUrl);
-        if (!target || target.view !== 'app') { say('이동할 수 없는 주소입니다: ' + linkUrl); return; }
-        setState({ notifOpen: false, view: 'app', role: target.role, tab: target.tab });
-      },
+      goToLink,
       // 알림센터를 열면 안 읽은 알림을 서버에서 읽음 처리하고 목록을 다시 받는다 -
       // 헤더의 "새 알림" 빨간 점이 실제로 꺼지게 하기 위함(2026-08-22 강 요청).
       // 읽음 처리가 실패해도(네트워크 등) 목록은 그대로 보여준다 - 점만 남을 뿐이다.
@@ -1168,28 +1209,6 @@ export function useAppLogic(userProps) {
       // 경고 문구(없으면 빈 문자열) - loopback이라 안 열리는 경우와, 열리긴 하는데
       // 지금 보고 있는 서버가 아닌 곳을 가리키는 경우를 구분해서 알려준다.
       qrModalUrlWarning: (s.qrModal && qrUrlWarning(s.qrModal.url)) || '',
-      qrBaseEditing: !!s.qrBaseEditing,
-      qrBaseInput: s.qrBaseInput != null ? s.qrBaseInput : publicBaseUrl(),
-      qrBaseOnChange: (e) => setState({ qrBaseInput: e.target.value }),
-      openQrBaseEditor: () => setState({ qrBaseEditing: true, qrBaseInput: publicBaseUrl() }),
-      cancelQrBaseEditor: () => setState({ qrBaseEditing: false }),
-      saveQrBase: async () => {
-        const next = String(s.qrBaseInput || '').trim();
-        setPublicBaseUrl(next);
-        setState({ qrBaseEditing: false });
-        // 저장한 주소로 QR을 즉시 다시 만든다 - 저장만 하고 이미지가 그대로면
-        // 바뀐 건지 알 수 없다.
-        const cur = s.qrModal;
-        if (!cur || !cur.url) { say('공개 주소를 저장했습니다. 다음 QR부터 적용됩니다.'); return; }
-        const uuid = cur.url.split('/p/')[1];
-        const url = publicPassportUrl(uuid);
-        try {
-          const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 220, color: { dark: '#0B1B33', light: '#FFFFFF' } });
-          setState({ qrModal: { ...cur, dataUrl, url } });
-        } catch {
-          say('QR 이미지를 다시 만들지 못했습니다.');
-        }
-      },
       confirmOpen: !!s.confirm,
       confirmTitle: s.confirm && s.confirm.title,
       confirmBody: s.confirm && s.confirm.body,
@@ -1229,7 +1248,7 @@ export function useAppLogic(userProps) {
     recyclingResult, setRecyclingResult, uploadRecyclingReport,
     invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate, fmtDateTime,
     participationsData,
-    accounts, domainHint, roleFromEmail, firstTab, say, go, profile, tabList, compData, resetSession,
+    accounts, domainHint, roleFromEmail, firstTab, say, go, goToLink, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,
     badgeText3d, segStyle3D, groove3d,

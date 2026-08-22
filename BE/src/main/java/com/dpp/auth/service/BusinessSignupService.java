@@ -207,7 +207,9 @@ public class BusinessSignupService {
             notification.setTitle("[" + typeLabel + "] 가입 심사 요청이 접수되었습니다");
             notification.setBody(org.getOrgName() + " 이(가) " + typeLabel
                     + " 계정으로 가입을 신청했습니다. 회원 관리에서 제출 서류를 확인하고 심사해 주세요.");
-            notification.setLinkUrl("/admin/approvals");
+            // ?filter=pending - 바로가기를 누르면 「가입대기」 탭이 눌린 채로 열린다
+            // (FE useAppLogic.goToLink, 2026-08-22 강 요청).
+            notification.setLinkUrl("/admin/approvals?filter=pending");
             notificationRepository.save(notification);
         }
         log.info("가입 심사 요청 알림 발송: org_id={}, orgType={}, 관리자 {}명",

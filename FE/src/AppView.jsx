@@ -390,13 +390,11 @@ export default function AppView(v) {
     qrModalShowLink,
     qrModalBadge,
     qrModalTitle,
-    qrModalHint,
     qrModalUrl, qrModalUrlWarning,
     memberModalOpen, memberModalName, memberModalRows, closeMemberModal,
     passportModalOpen, passportModalLoading, passportModalTitle, passportModalSub,
     passportModalError, passportModalViewer, passportModalHiddenNote,
     passportModalFields, closePassportModal,
-    qrBaseEditing, qrBaseInput, qrBaseOnChange, openQrBaseEditor, cancelQrBaseEditor, saveQrBase,
     closeQrModal,
     goToProductsFromQr,
     tierRequestPending,
@@ -1177,7 +1175,8 @@ export default function AppView(v) {
         {scPartners ? (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-            <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>Tier 3 권한 · 하위 협력사 연동</span>
+            {/* 2026-08-22 강 요청: 제목 위 "Tier 3 권한 · 하위 협력사 연동" 삭제 -
+                Tier 표시는 이 화면 전반에서 이미 걷어냈다. */}
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>협력사 관리</h1>
           </div>
 
@@ -1676,7 +1675,8 @@ export default function AppView(v) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '20px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>시장감독기관 · 제품안전조사과</span>
+              {/* 2026-08-22 강 요청: 제목 위 고정 기관명 문구 삭제 - 헤더에 이미 실제
+                  소속 기관명이 뜨는데, 여기엔 자리표시자가 박혀 있어 서로 어긋났다. */}
               <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>DPP 레지스트리 조회</h1>
             </div>
           </div>
@@ -1903,7 +1903,6 @@ export default function AppView(v) {
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>{obGovIdLabel}</span><input placeholder={obGovIdPlaceholder} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px' }} /></label>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>공식 기관 식별 코드</span><input placeholder={obGovCodeSample} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
               </div>
-              <div style={{ padding: '14px 16px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)', fontSize: '12.5px', lineHeight: '1.65', color: '#44546F' }}>입력한 식별 코드는 국가 기관 등록부와 자동 대조되며, 일치하지 않으면 다음 단계로 진행할 수 없습니다.</div>
             </div>
             </>) : null}
 
@@ -1968,18 +1967,8 @@ export default function AppView(v) {
           {qrModalUrlWarning ? (
           <span style={{ fontSize: '11.5px', color: '#C22B2B', textAlign: 'center', lineHeight: '1.6' }}>{qrModalUrlWarning}</span>
           ) : null}
-          {qrBaseEditing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
-            <input value={qrBaseInput} onChange={qrBaseOnChange} placeholder="http://192.168.0.10" style={{ height: '40px', padding: '0 12px', border: '1px solid rgba(16,32,64,.16)', borderRadius: '10px', fontSize: '13px', fontFamily: '\'JetBrains Mono\',monospace' }} />
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={cancelQrBaseEditor} style={{ flex: 1, height: '38px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', fontSize: '12.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>취소</button>
-              <button onClick={saveQrBase} style={{ flex: 1, height: '38px', border: '0', borderRadius: '10px', background: '#0045A9', color: '#fff', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>저장하고 QR 다시 만들기</button>
-            </div>
-          </div>
-          ) : (
-          <button onClick={openQrBaseEditor} style={{ border: '0', background: 'transparent', color: '#0045A9', fontSize: '11.5px', fontWeight: '600', cursor: 'pointer', textDecoration: 'underline' }}>공개 주소 변경</button>
-          )}
-          <span style={{ fontSize: '11.5px', color: '#8494AC', textAlign: 'center', lineHeight: '1.6' }}>{qrModalHint}</span>
+          {/* 2026-08-22 강 요청: 「공개 주소 변경」과 "이 QR을 스캔하면 ~" 안내문 삭제.
+              공개 주소는 지금 접속한 origin에서 자동으로 정해진다(publicUrl.js). */}
           <div style={{ display: 'flex', gap: '9px', width: '100%' }}>
             <button onClick={closeQrModal} style={{ flex: 1, height: '44px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
             {qrModalShowLink ? (<>

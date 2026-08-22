@@ -290,6 +290,13 @@ public class RecyclingIngestService {
         auditLogService.record(userId, "CREATE", "DOCUMENT", document.getDocumentId(),
                 "RECYCLING_REPORT (DOC-" + document.getDocumentId() + ")", specPassed ? "성공" : "검증 실패", documentAnchorTxId);
 
+        // ZKP 검증도 감사 로그에 남긴다 - EU 시장감시 감사 로그는 DPP 등록과 ZKP 검증만
+        // 보여주므로(AuditLogRepository.findRecent의 target_type 필터, 2026-08-22 강 요청),
+        // 여기서 남기지 않으면 "영업비밀 값을 공개하지 않고 규정 충족을 증명했다"는 사실이
+        // 감독기관 화면에 전혀 나타나지 않는다.
+        auditLogService.record(userId, "VERIFY", "ZKP_PROOF", zkpProof.getProofId(),
+                "RECYCLING_REPORT ZKP (DPP-" + dpp.getDppId() + ")", specPassed ? "충족" : "미충족", zkpAnchorTxId);
+
         return new RecyclingUploadResponse(
                 document.getDocumentId(),
                 zkpProof.getProofId(),
