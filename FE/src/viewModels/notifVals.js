@@ -32,7 +32,9 @@ export function notifVals(ctx) {
       dot: ctx.dot(n.colorHex),
       chip: ctx.chip(n.key === 'zkp' ? 'rgba(0,69,169,.10)' : n.key === 'cert' ? 'rgba(227,160,8,.16)' : n.key === 'tier' ? 'rgba(18,161,80,.12)' : 'rgba(16,32,64,.07)', n.key === 'zkp' ? '#0045A9' : n.key === 'cert' ? '#96660A' : n.key === 'tier' ? '#0E7A3D' : '#44546F'),
       hasAction: !!n.actionLabel, actionLabel: n.actionLabel,
-      act: () => ctx.say((n.actionLabel || '') + ' · 처리 화면으로 이동했습니다.')
+      // 서버가 준 linkUrl로 실제 이동한다. 예전엔 토스트만 띄우고 끝이라
+      // "바로가기를 눌러도 안 간다"는 리포트가 나왔다(2026-08-21).
+      act: () => ctx.goToLink(n.linkUrl)
     })),
     notifEmpty: all.length === 0,
     notifUnreadCount: all.filter(n => !n.read).length

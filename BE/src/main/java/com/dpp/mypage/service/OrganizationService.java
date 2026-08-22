@@ -99,53 +99,66 @@ public class OrganizationService {
     public Organization findOrCreateForSignup(String companyName, String bizRegNo, String countryInput,
                                                String domainInput, String orgTypeHint, MultipartFile bizRegCertFile) {
         String countryCode = normalizeCountryCode(countryInput);
-        boolean isPublicAuthority = orgTypeHint != null
-                && PUBLIC_AUTHORITY_ORG_TYPES.contains(orgTypeHint.trim().toUpperCase());
+        String orgType = (orgTypeHint == null || orgTypeHint.isBlank())
+                ? null : orgTypeHint.trim().toUpperCase();
+        boolean isPublicAuthority = orgType != null && PUBLIC_AUTHORITY_ORG_TYPES.contains(orgType);
+        // 세관/시장감독기관은 사업자등록번호 입력란이 아예 없다(2026-08-21 강 요청 6번).
+        // biz_reg_no는 nullable이고 ux_org_biz_reg_no는 NULL을 제외하므로, 같은 국가에
+        // 세관 계정이 여럿 있어도(항구별 세관 등) 충돌하지 않는다.
+        String bizRegNoOrNull = (bizRegNo == null || bizRegNo.isBlank()) ? null : bizRegNo.trim();
         // 세관/시장감독기관은 산업 도메인(STEEL/TEXTILE/BATTERY) 개념이 없다 - domain 컬럼은
         // nullable이라 그냥 비워둔다(V1__schema.sql: CHECK (domain IN (...))는 NULL을 막지
         // 않음). 제조사/협력사만 기존처럼 필수로 검증한다.
         String domain = isPublicAuthority ? null : normalizeDomain(domainInput);
 
-        Optional<Organization> existing = organizationRepository
-                .findByCountryCodeAndBizRegNoAndDeletedAtIsNull(countryCode, bizRegNo);
+        // 사업자등록번호가 없으면(공적 기관) 기관명+국가로 기존 조직을 찾는다 - 같은 세관에
+        // 두 번째 담당자가 가입하면 새 조직을 만들지 않고 합류시키기 위함.
+        Optional<Organization> existing = bizRegNoOrNull == null
+                ? organizationRepository.findByCountryCodeAndOrgNameAndDeletedAtIsNull(countryCode, companyName)
+                : organizationRepository.findByCountryCodeAndBizRegNoAndDeletedAtIsNull(countryCode, bizRegNoOrNull);
         if (existing.isPresent()) {
             log.info("기존 조직에 합류: org_id={}, countryCode={}, bizRegNo={}",
-                    existing.get().getOrgId(), countryCode, bizRegNo);
+                    existing.get().getOrgId(), countryCode, bizRegNoOrNull);
             return existing.get();
         }
 
         Organization org = new Organization();
         org.setOrgName(companyName);
         org.setCountryCode(countryCode);
-        org.setBizRegNo(bizRegNo);
+        org.setBizRegNo(bizRegNoOrNull);
         org.setDomain(domain);
+        // org_type은 네 유형 모두 가입 시점에 확정한다. 예전엔 제조사/협력사를 NULL로 남기고
+        // 마이페이지에서 채우게 했는데, 그 사이 NotificationCategory.visibleTo가 default 분기로
+        // 빠져 갓 가입한 제조사에게 8개 카테고리가 전부 보였다(2026-08-21 강 요청 5번).
+        if (orgType != null && ALLOWED_ORG_TYPES.contains(orgType)) {
+            org.setOrgType(orgType);
+        }
 
         if (isPublicAuthority) {
-            // org_type은 이미 알고 있으므로(가입 화면에서 세관/시장감독기관을 직접 선택)
-            // 마이페이지까지 기다리지 않고 여기서 바로 확정한다. approval_status는 기본값
-            // PENDING을 그대로 둬서 항상 관리자 수동 심사로 보낸다 - 사업자등록증 검증을
-            // 아예 시도하지 않는다(공적 기관은 사업자등록증 개념 자체가 안 맞는 경우가 많음).
-            org.setOrgType(orgTypeHint.trim().toUpperCase());
-            log.info("공적 계정 가입: orgType={}, countryCode={}, bizRegNo={} - 자동승인 대상 제외, "
-                    + "관리자 수동 심사로 전환", org.getOrgType(), countryCode, bizRegNo);
+            // approval_status는 기본값 PENDING을 그대로 둬서 항상 관리자 수동 심사로 보낸다 -
+            // 사업자등록증 검증을 아예 시도하지 않는다(공적 기관은 사업자등록증 개념 자체가
+            // 안 맞는다). 승인 전까지는 로그인도 막힌다(PasswordAuthService, 2026-08-21 강
+            // 요청 9번) - 온보딩까지는 마치게 두되 그 뒤 로그아웃된다.
+            log.info("공적 계정 가입: orgType={}, countryCode={} - 자동승인 대상 제외, "
+                    + "관리자 수동 심사로 전환", org.getOrgType(), countryCode);
         } else {
-            BizCertVerdict verdict = verifyBizCert(bizRegCertFile, bizRegNo, companyName);
+            BizCertVerdict verdict = verifyBizCert(bizRegCertFile, bizRegNoOrNull, companyName);
             if (verdict.autoApprovable()) {
                 org.setApprovalStatus(OrgApprovalStatus.ACTIVE);
                 org.setApprovedAt(OffsetDateTime.now());
                 // approvedBy는 비워둔다 - NULL이 "관리자가 아니라 자동 심사로 승인됨"의 표식
                 // (AdminOrgApprovalService가 목록 응답에서 이 값으로 자동/수동을 구분한다).
                 log.info("자동 승인: countryCode={}, bizRegNo={} 사업자등록증 형식·데이터 확인 통과",
-                        countryCode, bizRegNo);
+                        countryCode, bizRegNoOrNull);
             } else {
                 log.info("수동 심사 대기: countryCode={}, bizRegNo={} 사업자등록증 검증 미통과 - {}",
-                        countryCode, bizRegNo, verdict.reasons());
+                        countryCode, bizRegNoOrNull, verdict.reasons());
             }
         }
 
         Organization saved = organizationRepository.save(org);
-        log.info("신규 조직 생성: org_id={}, countryCode={}, bizRegNo={}, approvalStatus={}",
-                saved.getOrgId(), countryCode, bizRegNo, saved.getApprovalStatus());
+        log.info("신규 조직 생성: org_id={}, countryCode={}, bizRegNo={}, orgType={}, approvalStatus={}",
+                saved.getOrgId(), countryCode, bizRegNoOrNull, saved.getOrgType(), saved.getApprovalStatus());
         return saved;
     }
 

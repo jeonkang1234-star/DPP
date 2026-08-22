@@ -1,0 +1,112 @@
+# -*- coding: utf-8 -*-
+"""회원가입 데모용 사업자등록증 mock PDF 생성기.
+
+가입 화면에서 첨부하는 사업자등록증은 parser/biz_reg.py 가 읽어 자동승인 여부를
+판정한다. 통과하려면 문서에 다음이 **텍스트 레이어로** 들어 있어야 한다.
+
+  1) "사업자등록증" 문구            (_TITLE_PAT)
+  2) "등록번호 : 123-45-67890"      (_BIZ_NO_PAT)
+  3) "상호 : 회사명"                (_COMPANY_NAME_PAT)
+
+특히 3번은 정규식이 값 끝을 `\\s{2,}` 또는 줄 끝(MULTILINE $)으로 잡는다. PyMuPDF는
+같은 y에 벌려 그린 문자열을 각각 다른 줄로 추출하므로, 라벨과 값을 표처럼 나눠 그리면
+"상호"와 "대성제강"이 서로 다른 줄이 되어 매칭이 실패한다. 그래서 여기서는 반드시
+`line("라벨 : 값")` 한 번으로 그린다 - render.py 의 line()/row() 주석과 같은 이유다.
+
+자동승인 판정은 (문서 인식 + 번호 정확히 일치 + 상호 부분 일치) 셋 다일 때만 통과한다.
+그래서 실패 시연용으로 번호가 어긋난 문서도 같이 만든다.
+
+실행:
+    python3 docker/mock-documents/generator/biz_reg_certs.py
+결과:
+    docker/mock-documents/signup/*.pdf
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from render import Doc, register_fonts  # noqa: E402
+
+OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "signup")
+
+# (파일명, 상호, 사업자등록번호, 대표자, 업태, 종목, 주소, 개업연월일)
+#
+# ■ 왜 시드 회사(대성제강 등)를 안 쓰는가
+# organization 테이블에 (country_code, biz_reg_no) 유니크 인덱스가 걸려 있다. 시드로 이미
+# 들어간 번호로 가입하면 조직 생성에서 막힌다. 그래서 데모 가입 전용으로 시드에 없는
+# 회사·번호를 따로 만든다 - 계정을 지우고 다시 가입할 때도 이 번호를 그대로 재사용하면 된다.
+#
+# ■ 번호는 국세청 체크섬을 통과하도록 계산해서 넣었다
+# KoreanBizRegNoValidator(가중치 1,3,7,1,3,7,1,3,5 + 9번째 자리 보정)를 통과하는 값이다.
+# 아무 숫자나 넣으면 조직 생성 단계에서 형식 오류로 걸린다.
+DEMO_COMPANIES = [
+    ("사업자등록증_한빛제강.pdf", "한빛제강 주식회사", "205-86-11222", "강민석",
+     "제조업", "1차 철강 제조", "경기도 평택시 포승공단로 45", "2013년 04월 08일"),
+    ("사업자등록증_세라셀.pdf", "세라셀 주식회사", "314-81-22334", "윤도현",
+     "제조업", "2차전지 셀 제조", "충청남도 아산시 둔포면 산단로 19", "2017년 06월 12일"),
+    ("사업자등록증_다온텍스타일.pdf", "다온텍스타일 주식회사", "614-81-33444", "임세라",
+     "제조업", "직물 제조·염색가공", "부산광역시 사상구 감전로 88", "2012년 10월 30일"),
+    ("사업자등록증_명진메탈.pdf", "명진메탈 주식회사", "130-86-44550", "허준영",
+     "도소매업", "고철·스크랩 매입", "인천광역시 남동구 남동대로 240", "2015년 08월 17일"),
+    ("사업자등록증_대한시험인증.pdf", "대한시험인증 주식회사", "217-81-55664", "송하윤",
+     "서비스업", "시험·분석·인증", "서울특별시 구로구 디지털로 300", "2010년 01월 22일"),
+    ("사업자등록증_리사이클원.pdf", "리사이클원 주식회사", "405-86-66778", "백승호",
+     "서비스업", "폐기물 재활용 처리", "광주광역시 광산구 하남산단로 62", "2019년 03월 05일"),
+]
+
+# 자동승인 실패 시연용 - 문서의 번호가 가입 입력값과 어긋나 관리자 수동 심사로 빠진다.
+# 가입 화면에는 205-86-11222(한빛제강)을 입력하고 이 파일을 첨부하면 재현된다.
+MISMATCH = ("사업자등록증_실패-번호불일치.pdf", "한빛제강 주식회사", "999-99-99999", "강민석",
+            "제조업", "1차 철강 제조", "경기도 평택시 포승공단로 45", "2013년 04월 08일")
+
+
+def build(path, name, biz_no, rep, biz_type, biz_item, address, open_date):
+    d = Doc(path)
+    d.line("국세청", size=10)
+    # 제목은 글자 사이를 띄우지 않는다. 실물 증명서처럼 "사 업 자 등 록 증"으로 벌려
+    # 쓰면 _TITLE_PAT(r"사업자\s*등록증")이 "사업자"를 통째로 못 찾아 문서 인식에
+    # 실패한다 - 실제로 한 번 겪고 고친 자리다.
+    d.line("사업자등록증", size=20, bold=True, gap=26)
+    d.line("( 법인사업자용 )", size=10, gap=20)
+    d.rule()
+
+    # ── 아래 6줄은 반드시 line() 한 번씩. row()로 나누면 파서가 라벨과 값을
+    #    서로 다른 줄로 읽어 상호/번호 매칭이 통째로 실패한다.
+    d.line("등록번호 : " + biz_no, size=12, bold=True, gap=22)
+    d.line("상호 : " + name, size=11, gap=18)
+    d.line("대표자 : " + rep, size=11, gap=18)
+    d.line("개업연월일 : " + open_date, size=11, gap=18)
+    d.line("사업장 소재지 : " + address, size=11, gap=18)
+    d.line("업태 : " + biz_type, size=11, gap=18)
+    d.line("종목 : " + biz_item, size=11, gap=22)
+    d.rule()
+
+    d.line("위와 같이 사업자등록을 하였음을 증명합니다.", size=10.5, gap=26)
+    d.line("2026 년 01 월 05 일", size=11, gap=24)
+    d.line("화 성 세 무 서 장", size=14, bold=True, gap=30)
+    d.rule()
+    d.line("※ 본 문서는 IEUM DPP 플랫폼 데모용으로 생성된 가상의 문서입니다.", size=8.5, gap=12,
+           color=(0.45, 0.48, 0.55))
+    d.line("   실제 국세청이 발급한 증명서가 아니며 어떠한 효력도 없습니다.", size=8.5, gap=12,
+           color=(0.45, 0.48, 0.55))
+    d.save()
+
+
+def main():
+    register_fonts()
+    out = os.path.abspath(OUT_DIR)
+    os.makedirs(out, exist_ok=True)
+    made = []
+    for row in DEMO_COMPANIES + [MISMATCH]:
+        fname, rest = row[0], row[1:]
+        path = os.path.join(out, fname)
+        build(path, *rest)
+        made.append(path)
+    for p in made:
+        print("생성:", os.path.relpath(p, os.getcwd()))
+    print("\n총 %d개" % len(made))
+
+
+if __name__ == "__main__":
+    main()

@@ -15,6 +15,15 @@ import java.util.List;
  * 여권에 항목이 3개뿐인가?"라는 오해가 생긴다. 값은 안 주되 몇 개가 왜 빠졌는지는
  * 밝히는 게 맞다 - 배터리규정 Annex XIII도 접근 권한을 계층으로 나누지, 항목의 존재
  * 자체를 숨기지는 않는다.
+ *
+ * viewerRole / viewerLabel - 2026-08-21 강 요청("QR을 통해 볼 때도 개인 계정, 세관, EU가
+ * 보는 결과가 다 달라야 함"). 같은 URL이라도 요청에 실린 토큰의 소속에 따라 보이는 항목이
+ * 달라진다. 화면이 "지금 무슨 자격으로 보고 있는지"를 밝혀야 오해가 없어서 같이 내려준다.
+ *   PUBLIC       : 토큰 없음 또는 일반/개인 계정 - 공개 항목만
+ *   CUSTOMS      : 세관 - 공개 + 제한(정당한 이익) 항목
+ *   EU_AUTHORITY : 시장감시당국 - 공개 + 제한 항목
+ *   ADMIN        : 운영자 - EU와 동일
+ * 어느 자격이든 영업비밀(TRADE_SECRET) 실측값은 저장 자체를 안 하므로 볼 수 없다.
  */
 public record PublicPassportResponse(
         boolean issued,
@@ -24,6 +33,10 @@ public record PublicPassportResponse(
         String issuedAtDate,
         List<PublicPassportFieldDto> fields,
         int restrictedCount,
-        int tradeSecretCount
+        int tradeSecretCount,
+        /** PUBLIC / CUSTOMS / EU_AUTHORITY / ADMIN */
+        String viewerRole,
+        /** 화면에 그대로 쓸 한글 라벨("일반 공개" 등). */
+        String viewerLabel
 ) {
 }

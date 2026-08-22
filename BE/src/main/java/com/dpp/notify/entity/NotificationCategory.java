@@ -44,8 +44,9 @@ public enum NotificationCategory {
      * 빈 집합이면 getCategories가 빈 배열을 내려주고, FE는 '전체' 탭 하나만 남긴다.
      */
     private static final Set<NotificationCategory> ADMIN_VISIBLE = Set.of();
+    /** 2026-08-21 강 요청으로 CUSTOMS(통관)까지 뺐다 - 계정·문의만 남는다. */
     private static final Set<NotificationCategory> CUSTOMS_VISIBLE =
-            Set.of(CUSTOMS, ACCOUNT, INQUIRY);
+            Set.of(ACCOUNT, INQUIRY);
     private static final Set<NotificationCategory> EU_AUTHORITY_VISIBLE =
             Set.of(ZKP, ACCOUNT, INQUIRY);
     /**
@@ -55,6 +56,13 @@ public enum NotificationCategory {
      * 아니라 마이페이지/문의 화면에서 다루는 내용이라 빈 탭만 남아 있었다.
      */
     private static final Set<NotificationCategory> MANUFACTURER_VISIBLE =
+            Set.of(CERT, SYSTEM);
+    /**
+     * 협력사(원자재공급·시험소·재활용 - org_type이 RAW_SUPPLIER/TEST_LAB/RECYCLER)도
+     * 인증서·시스템 두 가지만 본다(2026-08-21 강 요청). 협력사가 받는 알림은 사실상
+     * "참여 요청이 도착했다"(SYSTEM) 하나뿐이라, 나머지 탭은 계속 비어 있었다.
+     */
+    private static final Set<NotificationCategory> PARTNER_VISIBLE =
             Set.of(CERT, SYSTEM);
 
     /** viewerRole이 null이거나 규칙이 없는 역할이면 전부 보여준다. */
@@ -67,6 +75,10 @@ public enum NotificationCategory {
             case "CUSTOMS" -> CUSTOMS_VISIBLE.contains(this);
             case "EU_AUTHORITY" -> EU_AUTHORITY_VISIBLE.contains(this);
             case "MANUFACTURER" -> MANUFACTURER_VISIBLE.contains(this);
+            case "RAW_SUPPLIER", "TEST_LAB", "RECYCLER" -> PARTNER_VISIBLE.contains(this);
+            // org_type이 비어 있는 기업 계정 - 제조사/협력사 둘 중 하나이고 두 역할의 노출
+            // 집합이 같으므로 그 최소 집합을 쓴다(NotificationService.BUSINESS_UNKNOWN_ROLE).
+            case "BUSINESS_UNKNOWN" -> PARTNER_VISIBLE.contains(this);
             default -> true;
         };
     }

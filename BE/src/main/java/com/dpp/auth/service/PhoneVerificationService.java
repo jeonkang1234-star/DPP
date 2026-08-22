@@ -3,6 +3,7 @@ package com.dpp.auth.service;
 import com.dpp.auth.entity.PhoneVerification;
 import com.dpp.auth.entity.PhoneVerificationPurpose;
 import com.dpp.auth.repository.PhoneVerificationRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,15 +35,28 @@ public class PhoneVerificationService {
     private final PhoneVerificationRepository verificationRepository;
     private final SignupSmsSender smsSender;
     private final SecureRandom random = new SecureRandom();
+    /** app.sms.enabled=false면 실제 문자가 안 나가므로 화면에서 코드를 확인할 수 있게 한다. */
+    private final boolean smsEnabled;
 
     public PhoneVerificationService(PhoneVerificationRepository verificationRepository,
-                                     SignupSmsSender smsSender) {
+                                     SignupSmsSender smsSender,
+                                     @Value("${app.sms.enabled:false}") boolean smsEnabled) {
         this.verificationRepository = verificationRepository;
         this.smsSender = smsSender;
+        this.smsEnabled = smsEnabled;
     }
 
+    /**
+     * 인증코드를 발급한다.
+     *
+     * @return SMS가 꺼져 있을 때(app.sms.enabled=false)만 발급된 코드, 켜져 있으면 null.
+     *     실제 문자가 나가지 않는 환경에서 서버 로그를 뒤지지 않고 화면에서 바로 인증을
+     *     끝낼 수 있게 하기 위한 것이다(2026-08-21 강 리포트 "전화번호 인증이 안 된다" -
+     *     실제로는 동작하고 있었지만 코드를 볼 방법이 컨테이너 로그뿐이었다).
+     *     app.sms.enabled=true인 순간 이 값은 null이 되므로 운영에서 코드가 노출될 일은 없다.
+     */
     @Transactional
-    public void requestCode(String phoneRaw) {
+    public String requestCode(String phoneRaw) {
         String phone = normalize(phoneRaw);
 
         Optional<PhoneVerification> last = verificationRepository
@@ -65,6 +79,7 @@ public class PhoneVerificationService {
         verificationRepository.save(verification);
 
         smsSender.sendVerificationCode(phone, code);
+        return smsEnabled ? null : code;
     }
 
     @Transactional

@@ -159,11 +159,31 @@ function optionsFor(f, codeOptions) {
 }
 
 /**
+ * legal_basis 한 줄을 [규정명] + 기준 두 조각으로 쪼갠다.
+ *   "CBAM Impl.Reg.(EU)2025/2547 Annex IV pt.2 추가 파라미터(Mn 질량%)"
+ *   -> { name: "CBAM Impl.Reg.(EU)2025/2547", detail: "Annex IV pt.2 추가 파라미터(Mn 질량%)" }
+ * 조문 표기가 없으면 전체를 규정명으로 본다.
+ */
+function splitLegalBasis(basis) {
+  const text = (basis || '').trim();
+  if (!text) return null;
+  const m = text.match(/\s(Annex|Art\.|Article|Sec\.|Section|§|부속서|제\s?\d)/);
+  if (!m || m.index <= 0) return { name: text, detail: '' };
+  return { name: text.slice(0, m.index).trim(), detail: text.slice(m.index + 1).trim() };
+}
+
+/**
  * 영업비밀(TRADE_SECRET) 필드의 O/X 표시값. 그 외 필드는 zkpOnly:false만 돌려준다.
  *
  * 저장된 값은 실측치가 아니라 판정 토큰이다("충족"/"미충족", SpecFieldAutoFillService).
  * 혹시 예전 데이터에 숫자가 남아 있어도 화면에는 절대 숫자를 그리지 않는다 - 값이
  * 비어 있지 않으면 "충족"으로만 본다(미충족은 정확히 그 토큰일 때만).
+ *
+ * 2026-08-21 강 요청:
+ *   - "한계값 충족" -> "규정 충족". 이 판정이 답하는 질문은 "어떤 수치인가"가 아니라
+ *     "규정을 지켰는가"라서, 라벨도 그 말로 맞춘다.
+ *   - 보조 문구를 "영지식증명으로 검증됨 · 실측값은 저장하지 않습니다" 대신 실제로
+ *     어떤 규정을 만족한 건지 보여준다([규정명] 기준). 근거는 requirement_field.legal_basis.
  */
 function zkpVerdictOf(f) {
   if (f.disclosureScope !== 'TRADE_SECRET') {
@@ -172,15 +192,18 @@ function zkpVerdictOf(f) {
   const v = (f.value || '').trim();
   const failed = v === '미충족';
   const passed = !!v && !failed;
+  const basis = splitLegalBasis(f.legalBasis);
+  const basisText = basis ? ('[' + basis.name + ']' + (basis.detail ? ' ' + basis.detail : '')) : '';
   return {
     zkpOnly: true,
     zkpMark: passed ? 'O' : failed ? 'X' : '–',
-    zkpLabel: passed ? '한계값 충족' : failed ? '한계값 미충족' : '미제출',
+    zkpLabel: passed ? '규정 충족' : failed ? '규정 미충족' : '미제출',
     zkpFg: passed ? '#0E7A3D' : failed ? '#C22B2B' : '#6B7A93',
     zkpBg: passed ? 'rgba(18,161,80,.14)' : failed ? 'rgba(194,43,43,.12)' : 'rgba(132,148,172,.14)',
-    zkpHint: passed ? '영지식증명으로 검증됨 · 실측값은 저장하지 않습니다'
+    // 근거 규정이 시딩돼 있으면 그걸 보여주고, 없으면 예전 안내 문구로 되돌아간다.
+    zkpHint: basisText || (passed ? '영지식증명으로 검증됨 · 실측값은 저장하지 않습니다'
       : failed ? '성적서 규격 미달 · 문서를 다시 제출해 주세요'
-      : '성적서를 업로드하면 영지식증명으로 판정됩니다'
+      : '성적서를 업로드하면 영지식증명으로 판정됩니다')
   };
 }
 
@@ -475,13 +498,11 @@ export function makerVals(ctx) {
     completeness: completenessRows.map(([openId, displayId, name, done, prog, none]) => ({
       key: openId, id: displayId, name, pct: done,
       pctStyle: ctx.pctStyle(done),
-      // 색 구성(2026-08-20 강 요청 "파란색 - 흰색으로 구성"): 채운 만큼이 파랑, 남은
-      // 만큼이 흰색이다. 예전엔 초록/주황/빨강 3색 신호등이었는데, 입력률은 좋고 나쁨을
-      // 판정하는 값이 아니라 "얼마나 찼는가"라서 한 가지 색의 농담으로 읽는 게 맞다.
-      // 부분 입력(prog)은 정보를 버리지 않도록 옅은 파랑으로 남긴다.
-      // 입체감(segStyle3D + groove3d)은 2026-08-19 요청대로 유지.
-      segs: [{ key: 'a', style: ctx.segStyle3D(done, '#0045A9') }, { key: 'b', style: ctx.segStyle3D(prog, '#7FA8E0') }, { key: 'c', style: ctx.segStyle3D(none, '#FFFFFF') }],
-      trackStyle: ctx.groove3d('#FFFFFF'),
+      // 2026-08-21 강 요청: 입체(segStyle3D/groove3d)를 걷어내고 다시 평면으로,
+      // 색은 흰색 - #007fff. 채운 만큼이 #007fff, 남은 만큼이 흰색이다.
+      // 부분 입력(prog)은 정보를 버리지 않도록 같은 계열의 옅은 파랑으로 둔다.
+      segs: [{ key: 'a', style: ctx.segStyle(done, '#007fff') }, { key: 'b', style: ctx.segStyle(prog, '#8CC8FF') }, { key: 'c', style: ctx.segStyle(none, '#FFFFFF') }],
+      trackStyle: { background: '#FFFFFF' },
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
     // KPI 카드 줄의 "평균 완성도" 자리에 들어갈 정적 규정 업데이트 안내 - 카드 폭이 좁아서
@@ -906,7 +927,9 @@ export function makerVals(ctx) {
           try {
             const updated = await ctx.resendInvitation(i.invitationId);
             ctx.setInvitesData(prev => prev.map(x => x.invitationId === updated.invitationId ? updated : x));
-            ctx.say(i.orgName + '에 초대를 재발송했습니다.');
+            ctx.say(updated && updated.mailSent === false
+              ? (i.orgName + ' 재발송 실패: ' + (updated.mailError || '원인 미상'))
+              : (i.orgName + '에 초대 메일을 재발송했습니다.'));
           } catch (e) {
             ctx.say(e.message || '재발송에 실패했습니다.');
           }
@@ -961,7 +984,16 @@ export function makerVals(ctx) {
         setState({ inviteRows: [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }] });
       }
       if (successCount > 0) {
-        ctx.say(successCount + '건의 초대 메일을 발송했습니다. (유효기간 7일)');
+        // 서버가 메일 발송 결과를 같이 내려준다(mailSent/mailError). 예전엔 결과와
+        // 상관없이 "발송했습니다"만 띄워서, SMTP가 거절해도 알 방법이 없었다
+        // (2026-08-21 강 리포트 "메일이 발송되는지 확인이 안 된다").
+        const failed = created.filter(c => c && c.mailSent === false);
+        if (failed.length === 0) {
+          ctx.say(successCount + '건의 초대 메일을 발송했습니다. (유효기간 7일)');
+        } else {
+          ctx.say('초대 ' + successCount + '건 등록 · 메일 ' + failed.length + '건 발송 실패: '
+            + (failed[0].mailError || '원인 미상'));
+        }
       }
     },
     // dash(GET /me/dashboard)가 있으면 실 DPP 목록(dash.dpps)에서, 없으면 기존 목데이터에서

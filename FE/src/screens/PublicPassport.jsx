@@ -65,9 +65,12 @@ export default function PublicPassport() {
               </span>
               <span style={{ fontSize: '22px', fontWeight: '700', color: '#0B1B33' }}>{state.data.modelName || '(제품명 미입력)'}</span>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '13px', color: '#8494AC' }}>{state.data.internalSku}</span>
-              <div style={{ display: 'flex', gap: '16px', fontSize: '12.5px', color: '#6B7A93', paddingTop: '4px', borderTop: '1px solid rgba(16,32,64,.06)', marginTop: '6px' }}>
+              <div style={{ display: 'flex', gap: '16px', fontSize: '12.5px', color: '#6B7A93', paddingTop: '4px', borderTop: '1px solid rgba(16,32,64,.06)', marginTop: '6px', flexWrap: 'wrap' }}>
                 <span>도메인 {state.data.domain}</span>
                 <span>발급일 {state.data.issuedAtDate}</span>
+                {/* 같은 QR이라도 로그인한 자격에 따라 보이는 항목이 다르다(2026-08-21).
+                    지금 무슨 자격으로 보고 있는지 밝혀야 "왜 항목 수가 다르지?"가 안 생긴다. */}
+                {state.data.viewerLabel ? (<span>열람 자격 {state.data.viewerLabel}</span>) : null}
               </div>
             </div>
 

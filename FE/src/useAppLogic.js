@@ -91,6 +91,32 @@ function fmtRelative(iso) {
  *   화면(제품/대시보드 등) 데이터는 여전히 mockApi.js(mock) - 인증만 먼저 실연동했습니다.
  * - 라우팅: URL(useLocation) ↔ 상태({ view, role, tab }) 양방향 동기화
  */
+/**
+ * 자동입력 방지 문자 생성. 서버 캡차가 없어서 클라이언트에서 만든다 - 사람이 아닌
+ * 자동 가입을 막는 정식 수단은 아니고(브라우저 안에 답이 있다), "화면이 실제로 동작한다"를
+ * 만족시키는 수준이다. 진짜로 막아야 할 때가 오면 서버 발급 캡차나 hCaptcha로 교체해야
+ * 한다 - 그때 바꿀 자리를 한 곳에 모아 두려고 함수로 뺐다(2026-08-21).
+ *
+ * 혼동되는 글자(0/O, 1/l/I 등)는 뺀다.
+ */
+const CAPTCHA_CHARS = 'abdefghjkmnpqrstuvwxyzACDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function makeCaptcha() {
+  const n = 6;
+  const glyphs = [];
+  let text = '';
+  for (let i = 0; i < n; i++) {
+    const ch = CAPTCHA_CHARS[Math.floor(Math.random() * CAPTCHA_CHARS.length)];
+    text += ch;
+    const x = 16 + i * 28 + Math.round(Math.random() * 6 - 3);
+    const y = 38 + Math.round(Math.random() * 6);
+    const rot = Math.round(Math.random() * 34 - 17);
+    const skew = Math.round(Math.random() * 24 - 12);
+    glyphs.push({ ch, x, y, transform: `rotate(${rot} ${x} ${y}) skewX(${skew})` });
+  }
+  return { text, glyphs };
+}
+
 export function useAppLogic(userProps) {
   const props = { ...DEFAULT_PROPS, ...userProps };
   const timer = useRef(null);
@@ -170,14 +196,25 @@ export function useAppLogic(userProps) {
     const initialRole = fromUrl.role || saved?.role || props.startRole || 'steel';
 
     return {
-      view: fromUrl.view || (saved ? 'app' : props.startView || 'login'),
+      // 저장된 세션이 있으면 주소가 /login·/signup이어도 앱으로 들어간다.
+      // 예전엔 fromUrl.view가 먼저라, 주소창이 /login에 머무는 역할(협력사 - 전용
+      // 라우트가 없었다)은 F5마다 로그아웃된 것처럼 보였다(2026-08-21 강 리포트).
+      // 로그인/가입 화면을 일부러 다시 열려면 로그아웃(세션 삭제)을 거치게 된다.
+      view: (saved && (!fromUrl.view || fromUrl.view === 'login' || fromUrl.view === 'signup'))
+        ? 'app'
+        : (fromUrl.view || (saved ? 'app' : props.startView || 'login')),
       role: initialRole,
-      tab: fromUrl.tab || 'dash',
+      // 'dash'로 고정하면 dash 탭이 없는 역할(협력사=assigned, 세관=clearance,
+      // EU=registry, 개인=scans)이 빈 화면으로 뜬다. 역할별 첫 탭으로 폴백한다.
+      tab: fromUrl.tab || firstTab(initialRole),
     loginTab: 'company',
       suTab: 'company',
+      // 자동입력 방지 문자. 가입 화면을 처음 그릴 때 한 번 뽑고, 새로고침 버튼으로 바꾼다.
+      captcha: makeCaptcha(),
+      suCaptcha: '',
       suRole: 'maker',
       suCountry: '대한민국',
-      obOpen: false, obStep: 1, obDomain: 'steel', obTier: 3,
+      obOpen: false, obStep: 1, obDomain: 'steel',
       notifOpen: false, notifCat: 'all',
       dppOpen: false, dppId: null, pubId: null,
       issueMode: 'single',
@@ -697,7 +734,25 @@ export function useAppLogic(userProps) {
           setState({ tab: k });
         }
       })),
-      openNotif: () => setState({ notifOpen: true }),
+      // 알림센터를 열 때 바로 한 번 더 받아온다(2026-08-21 강 요청 "초대 보내면 바로
+      // 알림센터에 뜨게"). 20초 폴링이 이미 돌지만, 방금 초대를 받은 사람이 알림함을
+      // 열었을 때 최대 20초를 기다리는 건 "동기화가 안 된다"로 보인다.
+      /**
+       * 알림의 "바로가기". 서버가 준 경로(notification.link_url)를 routes.js로 해석해
+       * 실제 화면 상태로 바꾼다. 모르는 경로면 그 사실을 알린다 - 조용히 아무 일도
+       * 안 일어나는 게 제일 나쁘다(2026-08-21 강 리포트).
+       */
+      goToLink: (linkUrl) => {
+        if (!linkUrl) { say('이동할 화면이 지정되지 않은 알림입니다.'); return; }
+        const target = stateFromPath(linkUrl);
+        if (!target || target.view !== 'app') { say('이동할 수 없는 주소입니다: ' + linkUrl); return; }
+        setState({ notifOpen: false, view: 'app', role: target.role, tab: target.tab });
+      },
+      openNotif: () => {
+        setState({ notifOpen: true });
+        fetchNotifications().then((res) => setNotifsData(res || [])).catch(() => {});
+        fetchNotificationCategories().then((res) => setNotifCatsData(res || [])).catch(() => {});
+      },
       isMaker,
       scAdminDash: s.role === 'admin' && s.tab === 'dash',
       scApprove: s.role === 'admin' && s.tab === 'approve',
@@ -889,7 +944,9 @@ export function useAppLogic(userProps) {
         try {
           await requestBusinessSignupCode(email);
           setState({ suCodeSent: true, suVerified: false, suVerifyCode: '' });
-          say('인증코드를 발송했습니다. (SMTP 미설정 상태라 서버 콘솔 로그에서 확인)');
+          // 2026-08-21 강 요청: SMTP를 켠 뒤에도 "미설정 상태" 안내가 그대로 떠서
+          // 실제로 메일이 나갔는지 헷갈렸다. 문구를 결과 그대로로 바꾼다.
+          say('인증 메일을 발송했습니다. 메일함을 확인해 주세요.');
         } catch (err) {
           say(err.message || '인증코드 발송에 실패했습니다.');
         }
@@ -918,9 +975,15 @@ export function useAppLogic(userProps) {
         const phone = (s.suPhone || '').trim();
         if (!phone) { say('휴대전화번호를 입력해 주세요.'); return; }
         try {
-          await requestBusinessSignupPhoneCode(phone);
-          setState({ suPhoneCodeSent: true, suPhoneVerified: false, suPhoneVerifyCode: '' });
-          say('인증번호를 발송했습니다. (SMS 미설정 상태라 서버 콘솔 로그에서 확인)');
+          const res = await requestBusinessSignupPhoneCode(phone);
+          // SMS가 꺼진 환경(app.sms.enabled=false)에서는 서버가 발급된 코드를 같이
+          // 내려준다 - 컨테이너 로그를 뒤지지 않고 화면에서 바로 인증을 끝낼 수 있게
+          // 입력칸에 채워 준다(2026-08-21). SMS를 켜면 devCode가 없어 빈칸으로 남는다.
+          const devCode = res && res.devCode;
+          setState({ suPhoneCodeSent: true, suPhoneVerified: false, suPhoneVerifyCode: devCode || '' });
+          say(devCode
+            ? '인증번호를 발송했습니다. SMS 미설정 환경이라 코드(' + devCode + ')를 자동으로 채웠습니다.'
+            : '인증번호를 발송했습니다. 문자를 확인해 주세요.');
         } catch (err) {
           say(err.message || '인증번호 발송에 실패했습니다.');
         }
@@ -967,16 +1030,39 @@ export function useAppLogic(userProps) {
       },
       /** 카카오/네이버/구글 공통 - provider 인자를 받아 실제 SNS 인증 페이지로 이동시킵니다. */
       snsLogin: (provider) => goToSnsLogin(provider || 'kakao'),
-      refreshCaptcha: () => say('새로운 이미지를 불러왔습니다.'),
+      captchaGlyphs: (s.captcha || { glyphs: [] }).glyphs,
+      suCaptcha: s.suCaptcha || '',
+      onSuCaptcha: (e) => setState({ suCaptcha: e.target.value }),
+      // 입력이 있는데 아직 안 맞으면 빨간 테두리로 즉시 알려준다.
+      captchaBorderColor: (s.suCaptcha || '').trim() === ''
+        ? 'rgba(16,32,64,.14)'
+        : ((s.suCaptcha || '').trim().toLowerCase() === ((s.captcha && s.captcha.text) || '').toLowerCase()
+            ? '#12A150' : '#E03B3B'),
+      refreshCaptcha: () => { setState({ captcha: makeCaptcha(), suCaptcha: '' }); },
       submitSignup: async () => {
         const email = (s.suEmail || '').toLowerCase().trim();
         if (domainHint(email) === 'personal') { say('개인 메일 도메인으로는 기업 회원가입을 할 수 없습니다.'); return; }
         if (!s.suVerified) { say('이메일 인증을 먼저 완료해 주세요.'); return; }
         if (!s.suPhoneVerified) { say('전화번호 인증을 먼저 완료해 주세요.'); return; }
-        if (!s.suCompanyName || !s.suBizRegNo) { say('회사명과 사업자등록번호를 입력해 주세요.'); return; }
+        const isPublicAuthorityRole = s.suRole === 'customs' || s.suRole === 'eu';
+        // 세관·시장감독기관은 사업자등록번호 입력란 자체가 없다(2026-08-21 강 요청 6번) -
+        // 그 자리에서 국가를 받으므로 여기서도 국가만 필수로 본다.
+        if (!s.suCompanyName) { say(isPublicAuthorityRole ? '기관명을 입력해 주세요.' : '회사명을 입력해 주세요.'); return; }
+        if (isPublicAuthorityRole) {
+          if (!s.suCountry) { say('국가를 입력해 주세요.'); return; }
+        } else if (!s.suBizRegNo) { say('사업자등록번호를 입력해 주세요.'); return; }
         if (!s.suPassword || s.suPassword.length < 8) { say('비밀번호는 8자 이상이어야 합니다.'); return; }
         if (s.suPassword !== s.suPasswordConfirm) { say('비밀번호가 일치하지 않습니다.'); return; }
-        const isPublicAuthority = s.suRole === 'customs' || s.suRole === 'eu';
+        // 자동입력 방지 문자 확인(2026-08-21). 예전엔 화면에만 있고 검사를 아예 안 했다.
+        const captchaAnswer = (s.suCaptcha || '').trim().toLowerCase();
+        const captchaText = ((s.captcha && s.captcha.text) || '').toLowerCase();
+        if (!captchaAnswer) { say('자동입력 방지 문자를 입력해 주세요.'); return; }
+        if (captchaAnswer !== captchaText) {
+          setState({ captcha: makeCaptcha(), suCaptcha: '' });
+          say('자동입력 방지 문자가 일치하지 않습니다. 새 문자를 입력해 주세요.');
+          return;
+        }
+        const isPublicAuthority = isPublicAuthorityRole;
         // 제조사/협력사는 사업자등록증 첨부가 필수다(2026-08-19 강 요청 4번 - 가입 시
         // 업로드 필수화). 세관/시장감독기관은 자동승인을 아예 시도하지 않고 항상 관리자
         // 수동심사로 가므로(강 요청 3번) 파일이 없어도 통과시킨다.
@@ -989,11 +1075,21 @@ export function useAppLogic(userProps) {
         // 보낸다 - 예전엔 여기서 'customs'/'eu' 문자열을 그대로 domain에 넣어 보내던 버그가
         // 있었다(BE normalizeDomain이 STEEL/TEXTILE/BATTERY만 받아 400이 났을 것).
         const domain = (s.suRole === 'maker' || s.suRole === 'partner') ? 'steel' : null;
-        const orgTypeHint = s.suRole === 'customs' ? 'CUSTOMS' : s.suRole === 'eu' ? 'EU_AUTHORITY' : null;
+        // org_type은 네 유형 모두 가입 시점에 확정한다. 예전엔 제조사/협력사가 null을 보내서
+        // organization.org_type이 비어 있었고, 그 탓에 NotificationCategory.visibleTo가
+        // default(전부 보여주기) 분기로 빠져 갓 가입한 제조사 알림센터에 통관·Tier까지 8개
+        // 탭이 전부 떴다(2026-08-21 강 요청 5번). 협력사는 RAW_SUPPLIER로 보낸다 - 가입
+        // 화면에서 협력사 세부 역할(원자재공급/시험소/재활용)을 아직 고르지 않기 때문이고,
+        // 알림 가시성(PARTNER_VISIBLE)은 세 역할이 동일하다. 세부 역할은 마이페이지에서
+        // 바꿀 수 있다(OrganizationService.updateMyOrganization).
+        const orgTypeHint = s.suRole === 'customs' ? 'CUSTOMS'
+          : s.suRole === 'eu' ? 'EU_AUTHORITY'
+          : s.suRole === 'partner' ? 'RAW_SUPPLIER' : 'MANUFACTURER';
         try {
           const res = await completeBusinessSignup({
             email, password: s.suPassword, companyName: s.suCompanyName,
-            businessRegNo: s.suBizRegNo, country: s.suCountry || '대한민국', domain, orgTypeHint,
+            businessRegNo: isPublicAuthority ? null : s.suBizRegNo,
+            country: s.suCountry || '대한민국', domain, orgTypeHint,
             phone: (s.suPhone || '').trim(), bizRegCert: s.suBizRegCert
           });
           const sessionExtra = { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType };
