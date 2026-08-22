@@ -3,6 +3,9 @@ package com.dpp.blockchain.client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hyperledger.fabric.client.Contract;
+import org.hyperledger.fabric.client.Proposal;
+import org.hyperledger.fabric.client.Status;
+import org.hyperledger.fabric.client.SubmittedTransaction;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -20,8 +23,17 @@ import java.nio.charset.StandardCharsets;
 @ConditionalOnProperty(prefix = "blockchain", name = "enabled", havingValue = "true")
 public class BlockchainClient {
 
-    /** 체인코드 함수가 리턴한 원문 JSON과, 그 안에서 뽑아낸 txId를 함께 담는다. */
-    public record ChainResult(String txId, String rawJson) {
+    /**
+     * 체인코드 함수가 리턴한 원문 JSON과, 그 안에서 뽑아낸 txId, 그리고 이 트랜잭션이
+     * 커밋된 블록 번호를 함께 담는다.
+     *
+     * blockNumber는 2026-08-22에 추가했다(강 리포트 "블록 높이가 안 뜸"). 그전까지
+     * blockchain_anchor.block_no를 채우는 코드가 어디에도 없어서 관리자 대시보드의
+     * '블록 높이'는 구조상 영원히 '—'였다. Gateway의 submitTransaction()은 결과 바이트만
+     * 돌려주고 커밋 정보를 버리기 때문에, 아래에서 proposal→endorse→submitAsync→getStatus
+     * 로 풀어서 Status.getBlockNumber()를 받아온다(동기 대기 시점은 예전과 동일하다).
+     */
+    public record ChainResult(String txId, String rawJson, Long blockNumber) {
     }
 
     private final Contract contract;
@@ -39,8 +51,7 @@ public class BlockchainClient {
     // 깨지는 위험을 피하는 게 더 중요하다.
     public ChainResult recordDocumentHash(String docId, String docType, String docHash,
                                            String submitter, String timestamp) throws Exception {
-        byte[] result = contract.submitTransaction("recordDocumentHash", docId, docType, docHash, submitter, timestamp);
-        return toChainResult(result);
+        return submit("recordDocumentHash", docId, docType, docHash, submitter, timestamp);
     }
 
     /**
@@ -53,12 +64,29 @@ public class BlockchainClient {
     public ChainResult recordZkpVerification(String docId, String proofId, String publicInputsJson,
                                               boolean verified, String verifier, String timestamp,
                                               String proofHash) throws Exception {
-        byte[] result = contract.submitTransaction("recordZkpVerification",
+        return submit("recordZkpVerification",
                 docId, proofId, publicInputsJson, String.valueOf(verified), verifier, timestamp, proofHash);
-        return toChainResult(result);
     }
 
-    private ChainResult toChainResult(byte[] result) {
+    /**
+     * submitTransaction()과 동작·대기 시점은 같지만, 커밋 상태(Status)를 버리지 않고
+     * 블록 번호까지 꺼낸다. 커밋이 실패(INVALID)하면 예외를 던져서 호출부가 지금처럼
+     * blockchain_anchor에 FAILED로 남기게 한다 - 예전 submitTransaction()도 같은 경우
+     * 예외를 던졌으므로 호출부 입장에서 달라지는 건 없다.
+     */
+    private ChainResult submit(String function, String... args) throws Exception {
+        Proposal proposal = contract.newProposal(function).addArguments(args).build();
+        SubmittedTransaction submitted = proposal.endorse().submitAsync();
+        byte[] result = submitted.getResult();
+        Status status = submitted.getStatus();
+        if (!status.isSuccessful()) {
+            throw new IllegalStateException(
+                    "체인코드 " + function + " 커밋 실패: " + status.getCode());
+        }
+        return toChainResult(result, submitted.getTransactionId(), status.getBlockNumber());
+    }
+
+    private ChainResult toChainResult(byte[] result, String fallbackTxId, Long blockNumber) {
         String json = new String(result, StandardCharsets.UTF_8);
         String txId = null;
         try {
@@ -67,6 +95,9 @@ public class BlockchainClient {
         } catch (Exception ignored) {
             // txId 파싱 실패해도 원문 json은 그대로 리턴 - 호출부에서 로그로 남기면 됨.
         }
-        return new ChainResult(txId, json);
+        if (txId == null || txId.isBlank()) {
+            txId = fallbackTxId;
+        }
+        return new ChainResult(txId, json, blockNumber);
     }
 }

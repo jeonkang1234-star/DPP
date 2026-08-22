@@ -346,6 +346,9 @@ public class CareLabelIngestService {
                     orgId.toString(),
                     OffsetDateTime.now().format(TIMESTAMP_FORMAT));
             anchor.setTxId(result.txId());
+            // block_no는 2026-08-22에 처음 채우기 시작했다 - 그전엔 이 컬럼을 쓰는 코드가
+            // 아예 없어서 관리자 대시보드 '블록 높이'가 구조상 항상 비어 있었다(강 리포트).
+            anchor.setBlockNo(result.blockNumber());
             anchor.setStatus("CONFIRMED");
             anchor.setAnchoredAt(OffsetDateTime.now());
             blockchainAnchorRepository.save(anchor);
@@ -395,6 +398,9 @@ public class CareLabelIngestService {
                     // 확인할 수 없어서 함께 기록한다(2026-08-20 강 지적).
                     anchor.getContentHash());
             anchor.setTxId(result.txId());
+            // block_no는 2026-08-22에 처음 채우기 시작했다 - 그전엔 이 컬럼을 쓰는 코드가
+            // 아예 없어서 관리자 대시보드 '블록 높이'가 구조상 항상 비어 있었다(강 리포트).
+            anchor.setBlockNo(result.blockNumber());
             anchor.setStatus("CONFIRMED");
             anchor.setAnchoredAt(OffsetDateTime.now());
             blockchainAnchorRepository.save(anchor);

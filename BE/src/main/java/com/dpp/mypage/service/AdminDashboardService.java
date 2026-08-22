@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -69,16 +68,18 @@ public class AdminDashboardService {
 
         long pending = adminStatsRepository.countPendingApprovals();
 
+        // "몇 분 전"은 SQL이 이미 계산해서 숫자로 내려준다(AdminStatsRepository.findLatestAnchor
+        // 주석 참고) - 여기서 timestamptz를 다시 자바 타입으로 변환하지 않는다.
         Long lastAnchoredMinutesAgo = null;
         Long lastAnchorBlockNo = null;
         Object[] latest = firstRow(adminStatsRepository.findLatestAnchor(), 2);
         if (latest != null) {
-            OffsetDateTime at = toOffsetDateTime(latest[0]);
-            if (at != null) {
-                lastAnchoredMinutesAgo = Duration.between(at, OffsetDateTime.now()).toMinutes();
+            if (latest[0] instanceof Number minutes) {
+                lastAnchoredMinutesAgo = Math.max(0L, minutes.longValue());
             }
-            Object blockRaw = latest[1];
-            lastAnchorBlockNo = blockRaw == null ? null : ((Number) blockRaw).longValue();
+            if (latest[1] instanceof Number block) {
+                lastAnchorBlockNo = block.longValue();
+            }
         }
 
         Object[] successRow = firstRow(adminStatsRepository.countAnchorSuccessRate30d(), 2);
@@ -202,24 +203,52 @@ public class AdminDashboardService {
         return new ArrayList<>(byDate.values());
     }
 
+    /**
+     * 네이티브 쿼리가 돌려준 시각 값을 OffsetDateTime으로. Hibernate가 timestamptz를
+     * java.sql.Timestamp / java.time.Instant / OffsetDateTime / LocalDateTime 중
+     * 무엇으로 줄지는 드라이버·방언 조합에 따라 달라진다. 예전엔 앞의 둘만 처리하고
+     * 나머지는 조용히 null이 됐고, 그 결과 값이 멀쩡히 있는데도 화면엔 '—'/'기록 없음'만
+     * 보였다(2026-08-22 강 리포트). 이제 전부 받고, 그래도 모르는 타입이면 로그를 남긴다.
+     */
     private OffsetDateTime toOffsetDateTime(Object raw) {
+        if (raw == null) {
+            return null;
+        }
         if (raw instanceof OffsetDateTime odt) {
             return odt;
         }
         if (raw instanceof java.sql.Timestamp ts) {
             return ts.toInstant().atOffset(ZoneOffset.UTC);
         }
+        if (raw instanceof java.time.Instant inst) {
+            return inst.atOffset(ZoneOffset.UTC);
+        }
+        if (raw instanceof java.time.ZonedDateTime zdt) {
+            return zdt.toOffsetDateTime();
+        }
+        if (raw instanceof java.time.LocalDateTime ldt) {
+            return ldt.atOffset(ZoneOffset.UTC);
+        }
+        if (raw instanceof java.util.Date d) {
+            return d.toInstant().atOffset(ZoneOffset.UTC);
+        }
+        log.warn("시각 컬럼을 해석하지 못했다(타입 {}) - 해당 값은 비워둔다", raw.getClass().getName());
         return null;
     }
 
+    /** toOffsetDateTime과 같은 이유로 넓게 받는다 - 못 받으면 그 날짜의 스파크라인 막대가 조용히 0이 된다. */
     private LocalDate toLocalDate(Object raw) {
+        if (raw == null) {
+            return null;
+        }
         if (raw instanceof LocalDate ld) {
             return ld;
         }
         if (raw instanceof java.sql.Date sd) {
             return sd.toLocalDate();
         }
-        return null;
+        OffsetDateTime odt = toOffsetDateTime(raw);
+        return odt == null ? null : odt.toLocalDate();
     }
 
     private void requireAdmin(Long userId) {

@@ -1,0 +1,14 @@
+fix(admin): 대시보드 최근 앵커링/블록 높이 KPI 복구
+
+- findLatestAnchor: timestamptz를 그대로 내리는 대신 SQL에서 minutes_ago를
+  bigint로 계산. Hibernate가 Instant로 돌려줄 때 toOffsetDateTime이 조용히
+  null이 되어 '기록 없음'으로 보이던 문제 제거(성공률은 COUNT라 영향 없었음).
+- 블록 높이는 해당 행의 block_no가 아니라 MAX(block_no)= 체인 높이로 변경.
+  최신 앵커가 MOCK이면 CONFIRMED 앵커가 있어도 '-'로 보였다.
+- BlockchainClient: submitTransaction 대신 proposal/endorse/submitAsync로
+  Status.getBlockNumber()를 받아 ChainResult에 담는다. 그전까지 block_no를
+  기록하는 코드가 없어 '블록 높이'는 구조상 항상 비어 있었다.
+- 앵커 저장 13곳(문서 6종 x 2 + DPP 스냅샷)에서 setBlockNo 반영.
+- toOffsetDateTime/toLocalDate가 Instant/LocalDateTime/Date까지 받고,
+  모르는 타입은 warn 로그를 남기도록 확장(회원관리 가입일 동일 경로).
+- docker/diagnose-anchor-kpi.sql 추가.
