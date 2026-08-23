@@ -83,6 +83,7 @@ export default function AppView(v) {
     dppName,
     dppOpen,
     dppPct,
+    dppIssued,
     dppSpec,
     dppStatusChip,
     ecoCarbon,
@@ -1928,11 +1929,11 @@ export default function AppView(v) {
               {dppDetailQrImg ? (
                 <img src={dppDetailQrImg} alt="DPP QR" style={{ width: '96px', height: '96px', borderRadius: '10px', border: '1px solid rgba(16,32,64,.08)', flex: 'none' }} />
               ) : (
-                <div style={{ width: '96px', height: '96px', borderRadius: '10px', background: '#EEF2F8', flex: 'none', display: 'grid', placeItems: 'center', fontSize: '11px', color: '#8494AC', textAlign: 'center', padding: '6px' }}>{dppDetailQrPending ? '생성 중…' : (dppPct === 100 ? 'QR 없음' : '발급 전')}</div>
+                <div style={{ width: '96px', height: '96px', borderRadius: '10px', background: '#EEF2F8', flex: 'none', display: 'grid', placeItems: 'center', fontSize: '11px', color: '#8494AC', textAlign: 'center', padding: '6px' }}>{dppDetailQrPending ? '생성 중…' : (dppIssued ? 'QR 없음' : '발급 전')}</div>
               )}
               <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span style={{ fontSize: '13px', fontWeight: '700' }}>이 DPP의 QR 코드</span>
-                <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>{dppPct === 100 ? 'QR을 스캔하면 이 DPP의 조회 화면으로 바로 연결됩니다.' : '발급 완료(완성도 100%) 후 QR이 자동으로 생성됩니다.'}</span>
+                <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>{dppIssued ? 'QR을 스캔하면 이 DPP의 조회 화면으로 바로 연결됩니다.' : '발급 버튼을 누르면 QR이 자동으로 생성됩니다.'}</span>
               </span>
             </div>
 

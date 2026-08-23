@@ -284,14 +284,28 @@ export function makerVals(ctx) {
   // 나고 앱 전체가 흰 화면이 됐다 - makerVals는 역할과 무관하게 항상 실행되므로 관리자
   // 화면까지 같이 죽는다. 모양이 아니면 목데이터 폴백으로 내려간다.
   const dash = ctx.dashboardData && Array.isArray(ctx.dashboardData.dpps) ? ctx.dashboardData : null;
+  /**
+   * "이 DPP가 발급됐는가". 서버가 내려주는 발급일시/상태를 그대로 본다.
+   *
+   * 2026-08-23 강 리포트: 발급을 취소(status를 DRAFT로 되돌림)했는데도 목록이 계속
+   * "발급 완료"로 떴다. 화면이 완성도 100%를 발급 여부의 대용으로 쓰고 있었기 때문이다.
+   * 그 둘은 원래 다른 값이다 - 필수 항목을 다 채우면 완성도는 100이 되지만, 발급은
+   * 그때부터 "누를 수 있는" 것이지 "이미 눌린" 것이 아니다. 그래서 발급 직전 상태가
+   * 화면상 발급 완료와 구분되지 않았고, QR·삭제 가능 여부까지 같이 어긋났다.
+   *
+   * issuedAtDate가 진짜 근거다(FieldFormService.issue가 status와 함께 채운다).
+   * status는 옛 데이터 보정용 - 발급 후 SUSPENDED/EOL로 넘어간 DPP도 발급된 것이다.
+   */
+  const isIssuedDpp = (d) => !!(d && (d.issuedAtDate || d.status === 'ACTIVE'));
+
   const completenessRows = dash
     ? dash.dpps.map(d => {
         const done = Math.round(d.completeness);
         // 사용자가 붙인 이름이 있으면 그걸 먼저 보여준다(2026-08-20 강 요청) - 같은
         // 모델로 여러 DPP를 만들면 모델명만으로는 목록에서 서로 구분이 안 됐다.
-        return [d.dppId, d.internalSku || ('DPP-' + d.dppId), d.displayName || d.modelName || '(이름 없음)', done, 0, 100 - done];
+        return [d.dppId, d.internalSku || ('DPP-' + d.dppId), d.displayName || d.modelName || '(이름 없음)', done, 0, 100 - done, isIssuedDpp(d)];
       })
-    : ctx.compData().map(([id, name, done, prog, none]) => [id, id, name, done, prog, none]);
+    : ctx.compData().map(([id, name, done, prog, none]) => [id, id, name, done, prog, none, done === 100]);
   const inputMeta = data.makerInputMeta[r] || {};
   const fieldSets = data.makerFieldSets[r] || [];
   // 배치 대량 발급은 철강 전용(강 지시, 2026-08-16: "이거는 철강 말고는 필요없는 것 같으니까
@@ -513,15 +527,16 @@ export function makerVals(ctx) {
     // 가짜 워크플로 문구)를 걷어내고, 실제 있는 DPP 중 최근 것 몇 건만 핵심 데이터
     // 3항목(일련번호/상품명/상태)으로 간단히 보여주는 목록으로 교체. 클릭하면 바로 그
     // DPP의 입력 화면으로 이동한다(대기작업 큐의 "처리" 버튼과 동일한 이동 동작 유지).
-    recentDpps: completenessRows.slice(0, 5).map(([openId, displayId, name, done]) => ({
+    recentDpps: completenessRows.slice(0, 5).map(([openId, displayId, name, done, , , issued]) => ({
       key: openId,
       serial: displayId,
       productName: name || '(이름 없음)',
-      statusLabel: done === 100 ? '발급 완료' : done === 0 ? '입력 대기' : (done + '% 작성 중'),
+      // 완성도 100%인데 아직 발급을 안 눌렀으면 "발급 대기"다 - 예전엔 이것도 "발급 완료"로 떴다.
+      statusLabel: issued ? '발급 완료' : done === 100 ? '발급 대기' : done === 0 ? '입력 대기' : (done + '% 작성 중'),
       // 2026-08-19 강 요청: "제품명 오른쪽에 있는 ~% 작성 중의 UI가 너무 AI스럽다" - 배경
       // pill을 없애고 badgeText3d(입체감 있는 텍스트만)로 교체, 색은 기존 그대로.
       statusChip: {
-        ...(done === 100 ? ctx.badgeText3d('#0E7A3D') : done === 0 ? ctx.badgeText3d('#6B7A93') : ctx.badgeText3d('#96660A')),
+        ...(issued ? ctx.badgeText3d('#0E7A3D') : done === 0 ? ctx.badgeText3d('#6B7A93') : ctx.badgeText3d('#96660A')),
         fontSize: '11.5px'
       },
       open: () => setState({ tab: 'input', fieldFormDppId: openId, dppNameInput: null, parsedFieldSources: {}, unlockedFields: {}, qrModal: null })
@@ -1068,16 +1083,18 @@ export function makerVals(ctx) {
       const name = d.displayName || d.modelName || ('DPP #' + id);
       const done = Math.round(d.completeness);
       const spec = d.domain || '';
-      const status = done === 100 ? '발급 완료' : done === 0 ? '입력 대기' : '작성 중';
+      const issued = isIssuedDpp(d);
+      const status = issued ? '발급 완료' : done === 100 ? '발급 대기' : done === 0 ? '입력 대기' : '작성 중';
       return {
         key: id, id: d.internalSku || ('DPP-' + id), name, spec, pct: done,
         lot: d.serialNumber || '—',
         at: d.issuedAtDate || '—',
         pctStyle: ctx.pctStyle(done),
-        statusDot: ctx.pillDot(done === 100 ? '#12A150' : done === 0 ? '#E03B3B' : '#E3A008'),
+        statusDot: ctx.pillDot(issued ? '#12A150' : done === 0 ? '#E03B3B' : '#E3A008'),
         status,
-        canDelete: done < 100,
-        isIssued: done === 100,
+        // 발급된 DPP만 삭제를 막는다. 완성도 100%여도 아직 발급 전이면 지울 수 있어야 한다.
+        canDelete: !issued,
+        isIssued: issued,
         open: () => setState({ dppOpen: true, dppId: id }),
         // DPP 식별자를 누르면 "상세"(생애주기/미충족 필드 읽기전용 패널)가 아니라 작성하던
         // 입력 화면으로 되돌아간다 - 예전엔 둘 다 같은 open()이라 이어서 작성할 방법이

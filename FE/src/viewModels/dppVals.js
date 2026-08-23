@@ -17,6 +17,9 @@ export function dppVals(ctx) {
   const dash = ctx.dashboardData;
   const dashRow = dash ? dash.dpps.find(d => d.dppId === state.dppId) : null;
   let id, name, done, spec, displayId;
+  // 발급 여부는 완성도가 아니라 서버가 준 발급일시/상태로 판정한다(2026-08-23 강 리포트 -
+  // 발급을 취소해도 화면이 계속 "발급 완료"로 보이던 문제). makerVals.isIssuedDpp와 같은 규칙.
+  const issued = !!(dashRow && (dashRow.issuedAtDate || dashRow.status === 'ACTIVE'));
   if (dashRow) {
     id = dashRow.dppId;
     displayId = dashRow.internalSku || ('DPP-' + dashRow.dppId);
@@ -58,8 +61,10 @@ export function dppVals(ctx) {
     : data.dppMissingData;
   // QR - 발급완료(100%)인 DPP만 표시. useAppLogic의 전용 useEffect가 모달이 열릴 때
   // 비동기로 생성해서 state.dppQrCache에 채워 넣는다(여기는 순수 렌더 함수라 직접 생성 불가).
-  const qrImg = done === 100 ? (state.dppQrCache && state.dppQrCache[displayId]) : null;
-  const qrPending = done === 100 && !qrImg && !!(state.dppQrPending && state.dppQrPending[displayId]);
+  // QR은 발급된 DPP만. 공개 여권(GET /public/dpp)이 issued_at NULL이면 "아직 발급되지
+  // 않은 DPP"를 돌려주므로, 발급 전에 QR을 그리면 스캔했을 때 빈 화면으로 간다.
+  const qrImg = issued ? (state.dppQrCache && state.dppQrCache[displayId]) : null;
+  const qrPending = issued && !qrImg && !!(state.dppQrPending && state.dppQrPending[displayId]);
 
   // 통관 신청 UI는 삭제했다(2026-08-23 강 요청 "어차피 안 쓰니까"). 세관 심사 큐는
   // 이 화면에서 손으로 신청하지 않아도 채워진다 - 발급 시점에 서버가 자동으로 접수한다
@@ -72,8 +77,9 @@ export function dppVals(ctx) {
     dppOpen: state.dppOpen,
     closeDpp: () => setState({ dppOpen: false }),
     dppId: id, dppName: name, dppPct: done, dppSpec: spec,
-    dppStatusChip: done === 100 ? ctx.chip('rgba(18,161,80,.12)', '#0E7A3D') : done === 0 ? ctx.chip('rgba(224,59,59,.10)', '#C22B2B') : ctx.chip('rgba(227,160,8,.16)', '#96660A'),
+    dppStatusChip: issued ? ctx.chip('rgba(18,161,80,.12)', '#0E7A3D') : done === 0 ? ctx.chip('rgba(224,59,59,.10)', '#C22B2B') : ctx.chip('rgba(227,160,8,.16)', '#96660A'),
     dppMissingCount: done === 100 ? 0 : missing.length,
+    dppIssued: issued,
     dppDetailQrImg: qrImg || '',
     dppDetailQrPending: qrPending,
     dppDetailQrLabel: displayId,
