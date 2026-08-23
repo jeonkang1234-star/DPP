@@ -42,6 +42,11 @@ public class SecurityConfig {
                         // 컨트롤러/서비스에서 어떤 예외가 나든 실제 원인 대신 "인증이
                         // 필요합니다"(401)로 뒤집어써서 클라이언트가 진짜 에러를 못 본다.
                         .requestMatchers("/error").permitAll()
+                        // 헬스체크(2026-08-23). 지금까지 여기에 없어서 /actuator/health가
+                        // 항상 401이었고, CD의 마지막 헬스체크 단계(curl -f .../actuator/health)가
+                        // 구조적으로 통과할 수 없었다. 노출되는 정보는 {"status":"UP"} 뿐이다
+                        // (application.yml의 management.endpoint.health.show-details: never).
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
                     // setContentType만으로는 charset이 안 붙어서(서블릿 기본 인코딩은 ISO-8859-1)
