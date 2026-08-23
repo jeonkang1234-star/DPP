@@ -1,5 +1,7 @@
 import { fetchPublicPassport } from '../api/publicApi.js';
 import React from 'react';
+import QRCode from 'qrcode';
+import { publicPassportUrl } from '../publicUrl.js';
 import { searchDppRegistry } from '../api/meApi.js';
 
 /**
@@ -18,6 +20,33 @@ import { searchDppRegistry } from '../api/meApi.js';
  * 배열 8건을 그대로 보여줬다. ADMIN이거나 org_type=EU_AUTHORITY가 아니면 403이라 그 경우
  * ctx.auditLogData는 null로 남고 화면엔 빈 목록으로 보인다.
  */
+/**
+ * 클립보드 복사. navigator.clipboard는 보안 컨텍스트(HTTPS/localhost)에서만 존재하는데
+ * 데모는 퍼블릭 IP 평문 HTTP라 그대로 쓰면 조용히 실패한다 - textarea + execCommand로
+ * 대체하고, 그것도 막히면 값을 토스트로 띄워 최소한 눈으로 읽고 옮길 수 있게 한다.
+ */
+function copyText(value, say, okMessage) {
+  const v = String(value || '');
+  if (!v) { say('복사할 값이 없습니다.'); return; }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(v).then(() => say(okMessage)).catch(() => say(v));
+    return;
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = v; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); say(okMessage);
+  } catch { say(v); }
+}
+
+/** ISO 문자열을 'YYYY-MM-DD HH:MM:SS'로. 값이 없으면 '—'. */
+function fmtAt(atIso) {
+  if (!atIso) return '—';
+  const t = String(atIso).replace('T', ' ');
+  return t.length >= 19 ? t.slice(0, 19) : t;
+}
+
 export function euVals(ctx) {
   const { state, setState } = ctx;
   const rows = ctx.euRegistryData || [];
@@ -55,12 +84,20 @@ export function euVals(ctx) {
        * 영업비밀 항목은 실측값을 저장하지 않으므로 "규정 충족" 판정만 온다.
        */
       open: async () => {
-        setState({ passportModal: { loading: true, title: r.modelName, sub: r.orgName, data: null, error: null } });
+        setState({ passportModal: { loading: true, title: r.modelName, sub: r.orgName, data: null, error: null, qr: '', url: '' } });
+        // 열람 모달에도 그 제품의 공개 여권 QR을 같이 띄운다(2026-08-23 강 요청).
+        // 조사관이 화면에서 본 제품을 현장에서 바로 대조하거나 공유할 수 있어야 한다.
+        // QR 생성 실패가 열람 자체를 막으면 안 되므로 따로 잡는다.
+        const url = publicPassportUrl(r.publicUuid) || '';
+        let qr = '';
+        try {
+          if (url) qr = await QRCode.toDataURL(url, { width: 320, margin: 1, errorCorrectionLevel: 'M' });
+        } catch { /* QR 없이도 본문은 보여준다 */ }
         try {
           const data = await fetchPublicPassport(r.publicUuid);
-          setState({ passportModal: { loading: false, title: r.modelName, sub: r.orgName, data, error: null } });
+          setState({ passportModal: { loading: false, title: r.modelName, sub: r.orgName, data, error: null, qr, url } });
         } catch (e) {
-          setState({ passportModal: { loading: false, title: r.modelName, sub: r.orgName, data: null, error: e.message || '조회에 실패했습니다.' } });
+          setState({ passportModal: { loading: false, title: r.modelName, sub: r.orgName, data: null, error: e.message || '조회에 실패했습니다.', qr, url } });
         }
       }
     })),
@@ -71,6 +108,9 @@ export function euVals(ctx) {
     passportModalSub: (state.passportModal && state.passportModal.sub) || '',
     passportModalError: (state.passportModal && state.passportModal.error) || '',
     passportModalViewer: (state.passportModal && state.passportModal.data && state.passportModal.data.viewerLabel) || '',
+    passportModalQr: (state.passportModal && state.passportModal.qr) || '',
+    passportModalUrl: (state.passportModal && state.passportModal.url) || '',
+    copyPassportUrl: () => copyText((state.passportModal && state.passportModal.url) || '', ctx.say, '공개 주소를 복사했습니다.'),
     passportModalHiddenNote: (() => {
       const d = state.passportModal && state.passportModal.data;
       if (!d) return '';
@@ -88,12 +128,34 @@ export function euVals(ctx) {
       isProof: !f.value && !!f.proofLabel
     })),
     closePassportModal: () => setState({ passportModal: null }),
-    auditLog: (ctx.auditLogData || []).map((l, i) => ({
-      key: (l.txId || '') + l.atIso + i,
-      at: l.atIso ? l.atIso.replace('T', ' ').slice(0, 19) : '—',
-      actor: l.actor, action: l.action, target: l.target, result: l.result,
-      hash: l.txId || '—',
-      chip: l.result === '성공' ? ctx.chip('rgba(18,161,80,.12)', '#0E7A3D') : ctx.chip('rgba(224,59,59,.10)', '#C22B2B')
-    }))
+    /*
+     * 트랜잭션 해시는 64자라 표 칸에 그대로 넣으면 줄바꿈이 생겨 해시가 있는 행과
+     * 없는 행('—')의 높이가 어긋난다(2026-08-23 강 지적). 목록에서는 앞뒤만 잘라
+     * 한 줄로 고정하고, 전체 값은 클릭해서 모달로 본다.
+     */
+    auditLog: (ctx.auditLogData || []).map((l, i) => {
+      const hash = l.txId || '';
+      const at = fmtAt(l.atIso);
+      return {
+        key: hash + (l.atIso || '') + i,
+        at,
+        actor: l.actor, action: l.action, target: l.target, result: l.result,
+        hasHash: !!hash,
+        hashShort: hash ? hash.slice(0, 10) + '…' + hash.slice(-6) : '—',
+        openHash: hash
+          ? () => setState({ txModal: { hash, at, action: l.action, target: l.target, actor: l.actor } })
+          : undefined,
+        chip: l.result === '성공' ? ctx.chip('rgba(18,161,80,.12)', '#0E7A3D') : ctx.chip('rgba(224,59,59,.10)', '#C22B2B')
+      };
+    }),
+    // --- 트랜잭션 해시 전체 보기 모달 ---
+    txModalOpen: !!state.txModal,
+    txModalHash: (state.txModal && state.txModal.hash) || '',
+    txModalAt: (state.txModal && state.txModal.at) || '—',
+    txModalAction: (state.txModal && state.txModal.action) || '—',
+    txModalTarget: (state.txModal && state.txModal.target) || '—',
+    txModalActor: (state.txModal && state.txModal.actor) || '—',
+    closeTxModal: () => setState({ txModal: null }),
+    copyTxHash: () => copyText((state.txModal && state.txModal.hash) || '', ctx.say, '트랜잭션 해시를 복사했습니다.')
   };
 }

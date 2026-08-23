@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import QRCode from 'qrcode';
 import { fetchPublicPassport } from '../api/publicApi.js';
 
 /**
@@ -11,6 +12,22 @@ import { fetchPublicPassport } from '../api/publicApi.js';
 export default function PublicPassport() {
   const { publicUuid } = useParams();
   const [state, setState] = useState({ loading: true, error: null, data: null });
+  /*
+   * 이 페이지의 QR(2026-08-23 강 요청 "열람을 눌러도 QR이 안 뜬다").
+   * 개인 회원은 검색 결과에서 이 화면으로 넘어오는데, 그때 QR이 없으면 제품을 현장에서
+   * 다시 스캔하거나 남에게 넘길 방법이 없다. 주소는 지금 보고 있는 페이지 그대로다 -
+   * publicUrl.js의 폴백 로직을 태우면 "지금 접속한 서버"가 아닌 곳을 가리킬 수 있는데,
+   * 이 화면은 이미 그 서버에서 열린 것이므로 window.location.href가 언제나 정답이다.
+   */
+  const [qr, setQr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    QRCode.toDataURL(window.location.href, { width: 320, margin: 1, errorCorrectionLevel: 'M' })
+      .then((url) => { if (alive) setQr(url); })
+      .catch(() => { /* QR 없이도 본문은 보여준다 */ });
+    return () => { alive = false; };
+  }, [publicUuid]);
 
   useEffect(() => {
     let alive = true;
@@ -95,6 +112,17 @@ export default function PublicPassport() {
                 </div>
               ))}
             </div>
+
+            {qr ? (
+            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', alignItems: 'center', gap: '18px' }}>
+              <img src={qr} alt="이 제품 여권의 QR" width="128" height="128" style={{ flex: 'none', borderRadius: '12px', border: '1px solid rgba(16,32,64,.08)' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', minWidth: '0' }}>
+                <span style={{ fontSize: '13px', fontWeight: '600', color: '#44546F' }}>제품 여권 QR</span>
+                <span style={{ fontSize: '12px', color: '#8494AC', lineHeight: '1.6' }}>휴대폰으로 스캔하면 이 화면이 그대로 열립니다.</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', color: '#B7C0D1', wordBreak: 'break-all', lineHeight: '1.5' }}>{window.location.href}</span>
+              </div>
+            </div>
+            ) : null}
 
             {/* 공개범위 안내 - 항목이 몇 개 안 보이는 이유를 밝힌다. 값을 안 주는 것과
                 항목의 존재를 숨기는 것은 다르고, 후자는 규정이 요구하는 바가 아니다. */}
