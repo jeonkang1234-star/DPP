@@ -70,6 +70,13 @@ public class PublicPassportService {
     private static final String TRADE_SECRET = "TRADE_SECRET";
     /** 제한 항목까지 볼 수 있는 자격. Annex XIII의 "정당한 이익 보유자·시장감시당국" 계층. */
     private static final Set<String> RESTRICTED_VIEWERS = Set.of("CUSTOMS", "EU_AUTHORITY", "ADMIN");
+    /**
+     * 이 DPP를 발급한 조직 본인. org_type이 아니라 owner_org_id 일치로만 정해진다
+     * (2026-08-23 강 요청 - "개인/제조사/EU·세관이 보는 데이터가 다 다르게").
+     * 제조사라는 사실만으로는 아무것도 더 못 본다 - 남의 DPP를 QR로 찍은 제조사는
+     * 개인과 똑같이 공개 항목만 본다. 자기가 발급한 DPP일 때만 제한 항목까지 열린다.
+     */
+    private static final String OWNER = "OWNER";
 
     private final DppQueryRepository dppRepository;
     private final ProductModelRepository productModelRepository;
@@ -116,8 +123,18 @@ public class PublicPassportService {
             return NOT_ISSUED;
         }
 
+        // 자격 3단계(2026-08-23):
+        //   개인/비로그인/타사      - PUBLIC 항목만
+        //   제조사(이 DPP 소유 조직) - PUBLIC + RESTRICTED (자기가 넣은 데이터다)
+        //   세관/시장감시당국/운영자 - PUBLIC + RESTRICTED (Annex XIII 정당한 이익 계층)
+        // 영업비밀 실측값은 어느 자격이든 못 본다 - 애초에 저장하지 않는다.
         String viewerRole = resolveViewerRole(viewerUserId);
-        boolean canSeeRestricted = RESTRICTED_VIEWERS.contains(viewerRole);
+        Long viewerOrgId = resolveViewerOrgId(viewerUserId);
+        boolean isOwner = viewerOrgId != null && viewerOrgId.equals(dpp.getOwnerOrgId());
+        if (isOwner) {
+            viewerRole = OWNER;
+        }
+        boolean canSeeRestricted = isOwner || RESTRICTED_VIEWERS.contains(viewerRole);
 
         ProductModel model = productModelRepository.findById(dpp.getModelId()).orElse(null);
 
@@ -227,13 +244,27 @@ public class PublicPassportService {
         return orgType == null ? PUBLIC : orgType;
     }
 
+    /** 요청자의 소속 조직 id. 토큰이 없거나 개인 계정(조직 없음)이면 null. */
+    private Long resolveViewerOrgId(Long viewerUserId) {
+        if (viewerUserId == null) {
+            return null;
+        }
+        return userAccountRepository.findById(viewerUserId).map(UserAccount::getOrgId).orElse(null);
+    }
+
+    /**
+     * 화면에 그대로 쓰는 자격 라벨. 남의 DPP를 보는 제조사·협력사는 실제로 개인과 똑같은
+     * 항목만 보므로 "제조사"라고만 적으면 "왜 우리 건데 안 보이지?"라는 오해가 생긴다.
+     * 그래서 소유 여부를 라벨에 드러낸다.
+     */
     private static String viewerLabel(String role) {
         return switch (role) {
+            case OWNER -> "제조사(이 DPP 발급사)";
             case "ADMIN" -> "운영자";
             case "CUSTOMS" -> "세관";
             case "EU_AUTHORITY" -> "시장감시당국";
-            case "MANUFACTURER" -> "제조사";
-            case "RAW_SUPPLIER", "TEST_LAB", "RECYCLER" -> "협력사";
+            case "MANUFACTURER" -> "제조사(타사 DPP · 공개 항목만)";
+            case "RAW_SUPPLIER", "TEST_LAB", "RECYCLER" -> "협력사(공개 항목만)";
             default -> "일반 공개";
         };
     }

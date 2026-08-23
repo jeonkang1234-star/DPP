@@ -112,6 +112,7 @@ public class DocumentSlotService {
     private final ParticipantSubmitStatusService participantSubmitStatusService;
     private final SpecFieldAutoFillService specFieldAutoFillService;
     private final DocumentIntegrationProperties properties;
+    private final PartnerAssignmentService partnerAssignmentService;
 
     public DocumentSlotService(UserAccountRepository userAccountRepository,
                                 DppQueryRepository dppRepository,
@@ -124,7 +125,8 @@ public class DocumentSlotService {
                                 ParserClient parserClient,
                                 ParticipantSubmitStatusService participantSubmitStatusService,
                                 SpecFieldAutoFillService specFieldAutoFillService,
-                                DocumentIntegrationProperties properties) {
+                                DocumentIntegrationProperties properties,
+                                PartnerAssignmentService partnerAssignmentService) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.participantRepository = participantRepository;
@@ -137,6 +139,7 @@ public class DocumentSlotService {
         this.participantSubmitStatusService = participantSubmitStatusService;
         this.specFieldAutoFillService = specFieldAutoFillService;
         this.properties = properties;
+        this.partnerAssignmentService = partnerAssignmentService;
     }
 
     @Transactional(readOnly = true)
@@ -164,7 +167,8 @@ public class DocumentSlotService {
                     .map(f -> new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.getLabelEn(),
                             f.isRequired(), "NOT_UPLOADED", null, null,
                             Boolean.TRUE.equals(draftZkpTargetByDocType.get(f.getLinkedDocType())),
-                            f.getResponsibleRole()))
+                            // 아직 dpp 행이 없으니 붙은 협력사도 없다 - 잠글 것도 없다.
+                            f.getResponsibleRole(), null))
                     .toList();
             return new DocumentFormResponse(null, draftSlots);
         }
@@ -187,6 +191,11 @@ public class DocumentSlotService {
 
         List<RequirementField> fields = fieldsFor(domains, access.participantRoleCode());
         Map<String, Boolean> zkpTargetByDocType = zkpTargetByDocType(fields);
+        // 수락한 협력사가 있는 역할만 잠근다(2026-08-23). 협력사 본인 화면에는 자기 담당
+        // 문서만 내려가므로 잠글 대상이 없다 - 소유 조직 화면에서만 계산한다.
+        Map<String, String> lockedRoles = access.owner()
+                ? partnerAssignmentService.lockedRoleLabels(dppId)
+                : Map.of();
 
         List<DocumentSlotDto> slots = fields.stream()
                 .map(f -> {
@@ -196,7 +205,8 @@ public class DocumentSlotService {
                     return new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.getLabelEn(),
                             f.isRequired(), status, doc == null ? null : doc.getDocumentId(),
                             doc == null ? null : doc.getFileName(), zkpTarget,
-                            f.getResponsibleRole());
+                            f.getResponsibleRole(),
+                            partnerAssignmentService.lockLabelFor(lockedRoles, f.getResponsibleRole()));
                 })
                 .toList();
 
@@ -218,6 +228,23 @@ public class DocumentSlotService {
                 .collect(Collectors.toSet());
         if (!allowedDocTypes.contains(docTypeCode)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "이 문서 유형을 업로드할 권한이 없습니다: " + docTypeCode);
+        }
+        // 협력사가 참여를 수락한 역할의 문서는 그 협력사만 올린다(2026-08-23 강 요청).
+        // 수락 전에는 이 검사에 걸리는 게 없어서 제조사가 혼자 다 올릴 수 있다.
+        if (access.owner()) {
+            Map<String, String> lockedRoles = partnerAssignmentService.lockedRoleLabels(dppId);
+            if (!lockedRoles.isEmpty()) {
+                String lockLabel = fieldsFor(fieldDomains(dpp.getDomain()), null).stream()
+                        .filter(f -> docTypeCode.equals(f.getLinkedDocType()))
+                        .map(f -> partnerAssignmentService.lockLabelFor(lockedRoles, f.getResponsibleRole()))
+                        .filter(java.util.Objects::nonNull)
+                        .findFirst()
+                        .orElse(null);
+                if (lockLabel != null) {
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                            "이 문서는 참여를 수락한 협력사가 직접 제출해야 합니다. (" + lockLabel + ")");
+                }
+            }
         }
         // document_type.is_zkp_target=TRUE인 유형(MILL_SHEET, CBAM_REPORT)은 여기 목록에도
         // 나오긴 하지만(그래야 "필수 문서" 체크리스트에 뜬다), 실제 업로드는 반드시 전용

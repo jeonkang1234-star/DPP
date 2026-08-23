@@ -117,6 +117,8 @@ export default function AppView(v) {
     fieldCount,
     fieldFilledCount,
     fieldTotalCount,
+    fieldOptionalFilledCount,
+    fieldOptionalTotalCount,
     fields,
     fieldSections,
     documentSlots,
@@ -1133,7 +1135,7 @@ export default function AppView(v) {
                     <span style={{ fontSize: '15px', fontWeight: '600' }}>{formTitle}</span>
                     <span style={{ display: 'inline-block', fontSize: '11px', color: '#8494AC', transform: fieldFormOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
                   </button>
-                  <button onClick={openFieldCheck} style={{ height: '28px', padding: '0 10px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '9px', background: '#FBFCFE', fontSize: '12px', color: '#44546F', fontWeight: '600', cursor: 'pointer', flex: 'none' }}>{fieldFilledCount}/{fieldTotalCount} 입력됨</button>
+                  <button onClick={openFieldCheck} style={{ height: '28px', padding: '0 10px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '9px', background: '#FBFCFE', fontSize: '12px', color: '#44546F', fontWeight: '600', cursor: 'pointer', flex: 'none' }}>필수 {fieldFilledCount}/{fieldTotalCount}{fieldOptionalTotalCount ? ` · 선택 ${fieldOptionalFilledCount}/${fieldOptionalTotalCount}` : ''} 입력됨</button>
                 </div>
                 {fieldFormOpen ? (<>
                 {(() => {
@@ -1198,7 +1200,11 @@ export default function AppView(v) {
                           {f.tierLabel ? (<span title={f.basisTip} style={{ ...f.tierStyle, fontSize: '10px', cursor: f.basisTip ? 'help' : 'default' }}>{f.tierLabel}</span>) : null}
                           {f.disclosureLabel ? (<span style={{ fontSize: '10px', color: '#8494AC' }}>· {f.disclosureLabel}</span>) : null}
                         </span>
-                        {f.locked ? (<button type="button" onClick={f.unlock} style={{ height: '22px', padding: '0 9px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '7px', background: '#fff', fontSize: '10.5px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', flex: 'none' }}>수정</button>) : null}
+                        {/* 협력사가 수락해서 잠긴 칸은 '수정'으로 풀 수 없다 - 대신 누구를
+                            기다리는 중인지 보여준다(2026-08-23). */}
+                        {f.partnerLockLabel
+                          ? (<span style={{ height: '22px', padding: '0 9px', display: 'inline-flex', alignItems: 'center', border: '1px dashed rgba(16,32,64,.20)', borderRadius: '7px', background: '#F2F4F8', fontSize: '10.5px', fontWeight: '600', color: '#6B7A93', whiteSpace: 'nowrap', flex: 'none' }}>{f.partnerLockLabel}</span>)
+                          : f.locked && f.unlock ? (<button type="button" onClick={f.unlock} style={{ height: '22px', padding: '0 9px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '7px', background: '#fff', fontSize: '10.5px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', flex: 'none' }}>수정</button>) : null}
                       </span>
                       {renderInput(f)}
                       <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.sourceLabel}</span>
@@ -1437,13 +1443,24 @@ export default function AppView(v) {
             <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px' }}>아직 참여 요청받은 DPP가 없습니다. 초대 메일을 받은 이메일로 가입했는지 확인해 주세요.</div>
             </>) : null}
             {(participations || []).map((p, $index) => (<React.Fragment key={$index}>
-            <button onClick={p.open} style={p.cardStyle}>
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '15px', fontWeight: '600' }}>{p.label}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={p.statusDot}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>{p.statusLabel}</span></span>
-              </span>
-              <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{p.owner} · {p.roleLabel} 담당 · {p.filled}/{p.total}개 입력 · {p.pct}%</span>
-            </button>
+            {/* 카드 본문은 button이라 그 안에 버튼을 또 넣을 수 없다 - 수락 버튼은 형제로 둔다. */}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <button onClick={p.open} style={p.cardStyle}>
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '15px', fontWeight: '600' }}>{p.label}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={p.statusDot}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>{p.statusLabel}</span></span>
+                </span>
+                <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{p.owner} · {p.roleLabel} 담당 · {p.filled}/{p.total}개 입력 · {p.pct}%</span>
+              </button>
+              {/* 참여 수락(2026-08-23 강 요청) - 수락한 뒤부터 이 담당 항목·문서는 우리
+                  조직만 제출할 수 있고, 제조사 화면에서는 잠긴다. */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '10px 18px 0' }}>
+                <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.5' }}>{p.acceptHint}</span>
+                {p.accepted
+                  ? (<span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: '600', color: '#0E7A3D' }}><span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#12A150' }} />수락 완료</span>)
+                  : (<button type="button" onClick={p.accept} style={{ flex: 'none', height: '32px', padding: '0 14px', border: '0', borderRadius: '10px', background: '#0045A9', color: '#fff', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>참여 수락</button>)}
+              </div>
+            </div>
             </React.Fragment>))}
           </div>
           </>)}
@@ -2066,7 +2083,7 @@ export default function AppView(v) {
           <div style={{ padding: '24px 28px 18px', borderBottom: '1px solid rgba(16,32,64,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               <span style={{ fontSize: '18px', fontWeight: '700' }}>필수 필드 충족 현황</span>
-              <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{fieldFilledCount} / {fieldTotalCount}개 입력 완료 · 체크된 항목은 업로드 문서에서 자동 매핑되었습니다</span>
+              <span style={{ fontSize: '12.5px', color: '#8494AC' }}>필수 {fieldFilledCount} / {fieldTotalCount}개 입력 완료{fieldOptionalTotalCount ? ` · 선택 ${fieldOptionalFilledCount} / ${fieldOptionalTotalCount}개` : ''} · 발급은 필수 항목만 채우면 됩니다</span>
             </div>
             <button onClick={closeFieldCheck} style={{ width: '34px', height: '34px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '11px', background: '#fff', fontSize: '13px', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
           </div>
@@ -2074,7 +2091,10 @@ export default function AppView(v) {
             {(fieldCheck || []).map((f, $index) => (<React.Fragment key={$index}>
             <div style={{ background: '#fff', padding: '14px 16px', display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: '12px', alignItems: 'center' }}>
               <span style={f.dot}>{f.mark}</span>
-              <span style={{ fontSize: '13.5px', fontWeight: '600' }}>{f.label}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '0' }}>
+                <span style={{ fontSize: '13.5px', fontWeight: '600', overflowWrap: 'anywhere' }}>{f.label}</span>
+                {f.req ? (<span style={f.reqStyle}>{f.req}</span>) : null}
+              </span>
               <span style={f.valueStyle}>{f.valueText}</span>
             </div>
             </React.Fragment>))}

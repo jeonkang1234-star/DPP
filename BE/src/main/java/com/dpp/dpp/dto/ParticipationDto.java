@@ -15,6 +15,12 @@ public record ParticipationDto(
         int myFieldsFilled,
         int myFieldsTotal,
         int myDocsFilled,
-        int myDocsTotal
+        int myDocsTotal,
+        /**
+         * 참여를 수락했는지(dpp_participant.accepted_at != null). 2026-08-23 추가.
+         * 수락하기 전에는 이 협력사 담당 항목을 제조사가 그대로 입력할 수 있고, 수락한
+         * 순간부터 그 항목들은 이 협력사 전용이 된다(PartnerAssignmentService).
+         */
+        boolean accepted
 ) {
 }

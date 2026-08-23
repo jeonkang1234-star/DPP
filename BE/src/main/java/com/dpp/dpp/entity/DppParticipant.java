@@ -50,6 +50,15 @@ public class DppParticipant {
     @Column(name = "invited_at", nullable = false)
     private OffsetDateTime invitedAt = OffsetDateTime.now();
 
+    /**
+     * 협력사가 참여를 수락한 시각(V32). null이면 아직 미수락 - 이 역할이 담당인 데이터
+     * 항목·문서는 소유 조직(제조사)이 그대로 입력·업로드한다. 값이 차는 순간부터 그
+     * 항목들은 이 협력사 전용이 되고 제조사 화면에서는 읽기 전용이 된다
+     * (PartnerAssignmentService 참고).
+     */
+    @Column(name = "accepted_at")
+    private OffsetDateTime acceptedAt;
+
     @Column(name = "completed_at")
     private OffsetDateTime completedAt;
 }

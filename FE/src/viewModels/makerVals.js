@@ -310,6 +310,13 @@ export function makerVals(ctx) {
   // inputKindOf가 select 대신 text로 떨어진다.
   const codeOptions = ff && ff.codeOptions ? ff.codeOptions : [];
   const ffFilledCount = ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0;
+  // 2026-08-23 강 지적: "99개를 안 채워도 발급이 된다". 화면 숫자(n/m 입력됨)는 전체 항목
+  // 기준이었는데 발급 게이트는 필수(T0) 항목만 본다 - 같은 화면에서 두 기준이 섞여 있었다.
+  // 숫자를 발급 조건과 같은 기준(필수)으로 통일하고, 선택 항목은 따로 세어 별도로 보여준다.
+  const ffRequired = ff ? ff.fields.filter(f => f.required) : [];
+  const ffOptional = ff ? ff.fields.filter(f => !f.required) : [];
+  const ffRequiredFilled = ffRequired.filter(f => !!ffInputs[f.fieldCode]).length;
+  const ffOptionalFilled = ffOptional.filter(f => !!ffInputs[f.fieldCode]).length;
   // 이번 세션에 문서 업로드로 "방금 채워진" 필드 - { [fieldCode]: 문서라벨 }. 파싱된
   // 데이터인지 수기 입력해야 하는 데이터인지 구별해서 보여주기 위함(2026-08-17 강 요청).
   // 이미 값이 있었지만 이번 세션에 파싱으로 채워진 게 아닌 경우(예: 이전 세션에 수기로
@@ -346,7 +353,11 @@ export function makerVals(ctx) {
   const requiredDocsOk = df ? df.documents.filter(d => d.required).every(d => d.status === 'APPROVED') : true;
   const issueReady = ff ? (requiredFieldsOk && requiredDocsOk) : true;
   const issueDisabledHint = issueReady ? '' : !requiredFieldsOk
-    ? `필수 필드를 모두 입력해야 발급할 수 있습니다. (${ffFilledCount}/${ff ? ff.fields.length : 0})`
+    // 협력사가 수락해서 잠긴 칸이 비어 있는 것은 제조사가 손쓸 수 없는 일이다 - "입력하세요"가
+    // 아니라 누구를 기다리는 중인지 말해준다(2026-08-23).
+    ? (ffRequired.filter(f => !ffInputs[f.fieldCode]).every(f => f.partnerLockLabel)
+        ? `협력사가 담당 항목을 제출하면 발급할 수 있습니다. (${ffRequiredFilled}/${ffRequired.length})`
+        : `필수 필드를 모두 입력해야 발급할 수 있습니다. (${ffRequiredFilled}/${ffRequired.length})`)
     : '필수 문서를 모두 제출·검증 완료해야 발급할 수 있습니다.';
   // 입력 폼 필드 목록. 예전엔 return 객체 안에 인라인으로 있었는데, 섹션 묶음
   // (fieldSections)이 같은 목록을 다시 봐야 해서 밖으로 뺐다.
@@ -394,7 +405,11 @@ export function makerVals(ctx) {
         // 잠글 대상이 아니라 항상 편집 가능.
         const isParsed = !!parsedFrom || (isAutoFillable && !!value);
         const unlocked = !!(state.unlockedFields && state.unlockedFields[f.fieldCode]);
-        const locked = isParsed && !unlocked;
+        // 협력사 잠금(2026-08-23): 그 역할의 협력사가 참여를 '수락'한 항목은 제조사가
+        // 쓸 수 없다. 파싱 잠금과 달리 화면에서 풀 수 없다 - 서버도 이 필드의 저장을
+        // 무시하므로(FieldFormService.upsertValues) '수정' 버튼을 주면 거짓말이 된다.
+        const partnerLockLabel = f.partnerLockLabel || '';
+        const locked = (isParsed && !unlocked) || !!partnerLockLabel;
         return {
           key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
           labelEn: f.labelEn || '',
@@ -402,9 +417,13 @@ export function makerVals(ctx) {
           // help_text가 길면 placeholder로 쓰지 않는다(2026-08-23). HS 코드처럼 설명이
           // 한 문장 이상인 항목은 입력칸 안에 들어가면 잘려서 오히려 안 읽힌다 -
           // 짧은 것만 placeholder로 쓰고, 전체 문장은 아래 hint로 보여준다.
+          // 2026-08-23(2차) 강 요청: "HS코드 밑에 불필요한 설명 텍스트 삭제". 짧은 안내는
+          // placeholder로만 쓰고 입력칸 아래에는 다시 그리지 않는다 - 같은 문장을 두 번
+          // 보여주면서 칸 높이만 두 배가 되고 있었다. 긴 문장은 placeholder에 넣으면
+          // 잘리니 반대로 아래 hint로만 보여준다. 둘 중 한 곳에만 나온다.
           ph: (f.helpText && f.helpText.length <= 40) ? f.helpText : '',
           value,
-          hint: f.helpText || '', sourceLabel, sourceChip,
+          hint: (f.helpText && f.helpText.length > 40) ? f.helpText : '', sourceLabel, sourceChip,
           autoFillable: isAutoFillable,
           section: f.section || 'SYSTEM',
           // 입력 위젯 종류. 지금까지 361개 필드를 전부 <input type=text>로 받았다 -
@@ -431,9 +450,14 @@ export function makerVals(ctx) {
           // 그래서 화면도 입력칸 대신 O/X 배지로 그린다.
           ...zkpVerdictOf(f),
           // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
-          inputBorderColor: value ? '#12A150' : '#E03B3B',
+          // 협력사가 채울 칸은 비어 있어도 제조사 잘못이 아니다 - 빨간 테두리로 재촉하지 않는다.
+          inputBorderColor: value ? '#12A150' : (partnerLockLabel ? 'rgba(16,32,64,.14)' : '#E03B3B'),
           locked,
-          unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [f.fieldCode]: true } })),
+          partnerLockLabel,
+          // 협력사 잠금은 못 푼다 - '수정' 버튼 자체를 주지 않는다(AppView는 unlock이
+          // 없으면 버튼을 그리지 않는다).
+          unlock: partnerLockLabel ? null
+            : () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [f.fieldCode]: true } })),
           onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
         };
       })
@@ -650,26 +674,38 @@ export function makerVals(ctx) {
     // 따르고, 안 주면 필드 등장 순서로 만든다. 21개 섹션이 전부 펼쳐지면 스크롤이
     // 수백 줄이라 첫 섹션만 열어둔다.
     fieldSections: ff ? groupBySection(formFields, ff.sections, state.openFieldSections, setState) : [],
+    // 모달 제목이 "필수 필드 충족 현황"인데 목록은 선택 항목까지 전부 보여주고 있었다.
+    // 필수를 먼저, 선택을 뒤에 두고 각 줄에 필수/선택 배지를 붙여서 어느 쪽이 발급을
+    // 막는 항목인지 한눈에 보이게 한다(2026-08-23).
     fieldCheck: ff
-      ? ff.fields.map(f => {
+      ? [...ffRequired, ...ffOptional].map(f => {
           const value = ffInputs[f.fieldCode] || '';
           return {
             key: f.fieldCode, label: f.labelKo, filled: !!value,
+            req: f.required ? '필수' : '선택',
+            reqStyle: { flex: 'none', padding: '2px 7px', borderRadius: 7, fontSize: 11, fontWeight: 700, background: f.required ? 'rgba(194,43,43,.10)' : 'rgba(132,148,172,.14)', color: f.required ? '#C22B2B' : '#6B7A93' },
             dot: { display: 'grid', placeItems: 'center', width: 22, height: 22, flex: 'none', borderRadius: 999, background: value ? '#12A150' : '#EEF2F8', color: value ? '#fff' : '#9AA8BE', fontSize: 12, fontWeight: 700 },
             mark: value ? '✓' : '',
             valueText: value || '미입력',
-            valueStyle: { fontSize: 12.5, color: value ? '#44546F' : '#C22B2B', fontWeight: value ? 500 : 600 }
+            // 선택 항목의 미입력은 발급을 막지 않는다 - 빨간색으로 겁줄 이유가 없다.
+            valueStyle: { fontSize: 12.5, color: value ? '#44546F' : (f.required ? '#C22B2B' : '#9AA8BE'), fontWeight: value ? 500 : 600 }
           };
         })
-      : fieldSets.map(([label, req, ph, value]) => ({
+      : [...fieldSets].sort((a, b) => (b[1] === '필수' ? 1 : 0) - (a[1] === '필수' ? 1 : 0)).map(([label, req, ph, value]) => ({
           key: label, label, filled: !!value,
+          req: req || '선택',
+          reqStyle: { flex: 'none', padding: '2px 7px', borderRadius: 7, fontSize: 11, fontWeight: 700, background: req === '필수' ? 'rgba(194,43,43,.10)' : 'rgba(132,148,172,.14)', color: req === '필수' ? '#C22B2B' : '#6B7A93' },
           dot: { display: 'grid', placeItems: 'center', width: 22, height: 22, flex: 'none', borderRadius: 999, background: value ? '#12A150' : '#EEF2F8', color: value ? '#fff' : '#9AA8BE', fontSize: 12, fontWeight: 700 },
           mark: value ? '✓' : '',
           valueText: value || '미입력',
-          valueStyle: { fontSize: 12.5, color: value ? '#44546F' : '#C22B2B', fontWeight: value ? 500 : 600 }
+          valueStyle: { fontSize: 12.5, color: value ? '#44546F' : (req === '필수' ? '#C22B2B' : '#9AA8BE'), fontWeight: value ? 500 : 600 }
         })),
-    fieldFilledCount: ff ? ffFilledCount : fieldSets.filter(f => !!f[3]).length,
-    fieldTotalCount: ff ? ff.fields.length : fieldSets.length,
+    // 발급 게이트와 같은 기준(필수 항목)으로 센다.
+    fieldFilledCount: ff ? ffRequiredFilled : fieldSets.filter(f => f[1] === '필수' && !!f[3]).length,
+    fieldTotalCount: ff ? ffRequired.length : fieldSets.filter(f => f[1] === '필수').length,
+    // 선택 항목은 발급 조건이 아니라 별도 숫자로만 보여준다.
+    fieldOptionalFilledCount: ff ? ffOptionalFilled : fieldSets.filter(f => f[1] !== '필수' && !!f[3]).length,
+    fieldOptionalTotalCount: ff ? ffOptional.length : fieldSets.filter(f => f[1] !== '필수').length,
     fieldCheckOpen: !!state.fieldCheckOpen,
     // 필수 문서 10종(제강 성적서 포함, 다만 그건 업로드 시 별도 파서/ZKP 엔드포인트를 씀)
     // 실데이터 - df가 없으면(초안 저장 전이거나 철강 역할이 아니면) 빈 목록. 예전엔 이
@@ -761,21 +797,17 @@ export function makerVals(ctx) {
           const tileBorderColor = stageIdx === 2 ? (success ? '#12A150' : '#E3A008')
             : stageIdx === 0 ? '#E03B3B'
             : 'rgba(16,32,64,.07)';
-          // 2026-08-23 강 리포트("재활용 처리업체로 지정했는데 온갖 문서를 다 업로드하라고
-          // 한다"). 제조사 문서함에는 도메인의 DOCUMENT 항목이 전부 내려온다 - 그 안에
-          // 원자재 공급사·시험기관·재활용업체 담당 문서까지 섞여 있어서, 협력사를 초대해
-          // 놓고도 제조사 화면에는 여전히 "내가 올려야 할 것"으로 보였다. 이제 담당 역할을
-          // 표시하고 업로드 버튼을 숨긴다 - 항목 자체는 남긴다(제조사는 협력사 제출
-          // 진행 상황을 봐야 한다).
-          const PARTNER_ROLE_LABEL = {
-            RAW_SUPPLIER: '원자재·화학 공급사', TEST_LAB: '시험·인증기관',
-            RECYCLER: '재활용 처리업체', LOGISTICS: '물류사', DISTRIBUTOR: '유통사'
-          };
-          const partnerRoleLabel = PARTNER_ROLE_LABEL[d.responsibleRole] || '';
+          // 2026-08-23(2차) 강 요청: "원래는 혼자서도 다 입력할 수 있는데, 협력사를 초대한
+          // 이후로는 협력사만 업로드 가능한 구조로". 예전엔 responsible_role 값만 보고
+          // 무조건 잠갔다 - 그래서 협력사를 부른 적도 없는 DPP에서 제조사가 스크랩
+          // 매입증빙·시험성적서를 영영 올릴 수 없었다. 이제 잠금 판정은 서버가 한다
+          // (partnerLockLabel: 그 역할의 협력사가 참여를 '수락'한 경우에만 채워짐).
+          // 잠겼을 때도 항목 자체는 남긴다 - 제조사는 협력사 제출 진행 상황을 봐야 한다.
+          const partnerLockLabel = d.partnerLockLabel || '';
           return {
             key: d.fieldCode, label: d.labelKo, labelEn: d.labelEn || '', req: d.required ? '필수' : '선택',
-            partnerOwned: !!partnerRoleLabel,
-            partnerOwnerLabel: partnerRoleLabel ? partnerRoleLabel + ' 담당' : '',
+            partnerOwned: !!partnerLockLabel,
+            partnerOwnerLabel: partnerLockLabel,
             fileName: d.fileName || '',
             statusLabel: uploading ? '검증 중' : (DOC_STATUS_LABEL[d.status] || d.status),
             dot: ctx.pillDot(uploading ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
