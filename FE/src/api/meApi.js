@@ -282,6 +282,15 @@ export function fetchParticipations() {
   return authedFetch('/me/participations');
 }
 
+/**
+ * 참여 요청 수락(2026-08-23 강 요청). 수락한 순간부터 이 협력사 담당 데이터 항목·문서는
+ * 제조사가 아니라 이 협력사만 제출할 수 있다. 응답은 갱신된 참여 목록 그대로 - 다시
+ * 조회하지 않아도 화면이 바로 맞는다.
+ */
+export function acceptParticipation(dppId) {
+  return authedFetch(`/me/participations/${dppId}/accept`, { method: 'POST' });
+}
+
 /** 알림 카테고리 목록: [{key, label}] */
 export function fetchNotificationCategories() {
   return authedFetch('/notifications/categories');

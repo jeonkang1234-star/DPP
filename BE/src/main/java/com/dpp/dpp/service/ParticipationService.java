@@ -17,6 +17,10 @@ import com.dpp.dpp.repository.DppParticipantRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
 import com.dpp.dpp.repository.ProductModelRepository;
 import com.dpp.dpp.repository.RequirementFieldRepository;
+import com.dpp.collab.service.InvitationService;
+import com.dpp.notify.entity.Notification;
+import com.dpp.notify.entity.NotificationCategory;
+import com.dpp.notify.repository.NotificationRepository;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
 import org.springframework.http.HttpStatus;
@@ -24,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -57,6 +62,8 @@ public class ParticipationService {
     private final DppFieldValueRepository fieldValueRepository;
     private final DocumentLinkRepository documentLinkRepository;
     private final DocumentRepository documentRepository;
+    private final InvitationService invitationService;
+    private final NotificationRepository notificationRepository;
 
     public ParticipationService(UserAccountRepository userAccountRepository,
                                  DppParticipantRepository participantRepository,
@@ -66,7 +73,9 @@ public class ParticipationService {
                                  RequirementFieldRepository requirementFieldRepository,
                                  DppFieldValueRepository fieldValueRepository,
                                  DocumentLinkRepository documentLinkRepository,
-                                 DocumentRepository documentRepository) {
+                                 DocumentRepository documentRepository,
+                                 InvitationService invitationService,
+                                 NotificationRepository notificationRepository) {
         this.userAccountRepository = userAccountRepository;
         this.participantRepository = participantRepository;
         this.dppRepository = dppRepository;
@@ -76,6 +85,8 @@ public class ParticipationService {
         this.fieldValueRepository = fieldValueRepository;
         this.documentLinkRepository = documentLinkRepository;
         this.documentRepository = documentRepository;
+        this.invitationService = invitationService;
+        this.notificationRepository = notificationRepository;
     }
 
     @Transactional(readOnly = true)
@@ -90,12 +101,71 @@ public class ParticipationService {
         return participations.stream().map(this::toDto).toList();
     }
 
+    /**
+     * 협력사가 참여 요청을 수락한다(2026-08-23 강 요청 - "협력사가 초대를 수락하면 그때부터
+     * 걔가 입력하는 데이터만 걔만 입력할 수 있게").
+     *
+     * 이 순간부터 이 협력사 role_code가 담당인 데이터 항목·문서는 제조사 화면에서 읽기
+     * 전용이 되고, 값을 채우는 것도 문서를 올리는 것도 이 협력사만 할 수 있다
+     * (PartnerAssignmentService). 그 전까지는 제조사가 혼자 다 채울 수 있다 - 협력사를
+     * 부르지 않고 DPP를 완성하는 흐름을 막지 않기 위해서다.
+     *
+     * 이미 수락한 참여 행을 다시 수락해도 아무 일도 일어나지 않는다(멱등) - 수락 시각을
+     * 뒤로 미루면 그 사이 판정이 흔들린다.
+     */
+    @Transactional
+    public List<ParticipationDto> accept(Long userId, Long dppId) {
+        UserAccount user = userAccountRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 사용자입니다."));
+        if (user.getOrgId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "소속된 조직이 없어 참여를 수락할 수 없습니다.");
+        }
+        DppParticipant participant = participantRepository.findByDppIdAndOrgId(dppId, user.getOrgId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "참여 요청을 찾을 수 없습니다."));
+
+        if (participant.getAcceptedAt() == null) {
+            participant.setAcceptedAt(OffsetDateTime.now());
+            participantRepository.save(participant);
+            // 초대 행 상태도 같이 넘긴다 - 제조사 "협력사 초대" 화면이 읽는 건 그쪽이다.
+            invitationService.markAcceptedOnSubmit(dppId, user.getOrgId());
+            notifyOwner(dppId, user.getOrgId(), participant.getRoleCode());
+        }
+        return list(userId);
+    }
+
+    /**
+     * 제조사(소유 조직)에게 "협력사가 수락했다"를 알린다. 수락과 동시에 제조사 화면에서
+     * 그 항목들이 잠기므로, 알리지 않으면 제조사는 칸이 왜 갑자기 회색이 됐는지 알 수 없다.
+     */
+    private void notifyOwner(Long dppId, Long partnerOrgId, String roleCode) {
+        Dpp dpp = dppRepository.findById(dppId).orElse(null);
+        if (dpp == null) {
+            return;
+        }
+        String partnerName = organizationRepository.findById(partnerOrgId)
+                .map(Organization::getOrgName).orElse("협력사");
+        String dppLabel = productModelRepository.findById(dpp.getModelId())
+                .map(ProductModel::getModelName).orElse("DPP #" + dppId);
+        for (UserAccount member : userAccountRepository.findByOrgId(dpp.getOwnerOrgId())) {
+            Notification notification = new Notification();
+            notification.setRecipientUserId(member.getUserId());
+            notification.setCategory(NotificationCategory.SYSTEM);
+            notification.setSubType("PARTNER_ACCEPTED");
+            notification.setTitle("협력사가 참여를 수락했습니다");
+            notification.setBody(partnerName + "이(가) '" + dppLabel + "'의 "
+                    + PartnerAssignmentService.roleLabel(roleCode)
+                    + " 담당 제출을 맡았습니다. 해당 항목·문서는 이제 협력사가 직접 제출합니다.");
+            notification.setLinkUrl("/maker/partners");
+            notificationRepository.save(notification);
+        }
+    }
+
     private ParticipationDto toDto(DppParticipant participant) {
         Dpp dpp = dppRepository.findById(participant.getDppId()).orElse(null);
         if (dpp == null) {
             // dpp가 소프트/하드 삭제된 경우 등 - 참여 행은 남아있어도 조용히 건너뛴다.
             return new ParticipationDto(participant.getDppId(), "(삭제된 DPP)", "", participant.getRoleCode(),
-                    participant.getSubmitStatus(), 0, 0, 0, 0);
+                    participant.getSubmitStatus(), 0, 0, 0, 0, participant.getAcceptedAt() != null);
         }
         String dppLabel = productModelRepository.findById(dpp.getModelId())
                 .map(ProductModel::getModelName)
@@ -134,6 +204,7 @@ public class ParticipationService {
                 .count();
 
         return new ParticipationDto(dpp.getDppId(), dppLabel, ownerOrgName, participant.getRoleCode(),
-                participant.getSubmitStatus(), (int) filled, myFields.size(), (int) docsFilled, myDocFields.size());
+                participant.getSubmitStatus(), (int) filled, myFields.size(), (int) docsFilled, myDocFields.size(),
+                participant.getAcceptedAt() != null);
     }
 }

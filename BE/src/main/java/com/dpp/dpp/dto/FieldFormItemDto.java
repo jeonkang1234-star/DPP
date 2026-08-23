@@ -38,6 +38,18 @@ public record FieldFormItemDto(
         /** 근거 법령·조항. 화면에서는 접힌 툴팁으로만 보여준다. */
         String legalBasis,
         /** T1일 때 의무가 발동하는 조건. */
-        String t1Condition
+        String t1Condition,
+        /**
+         * 이 항목을 담당하는 협력사 역할(requirement_field.responsible_role).
+         * null이면 소유 조직(제조사) 담당. 2026-08-23 추가.
+         */
+        String responsibleRole,
+        /**
+         * 협력사가 참여를 수락해서 이 칸이 그 협력사 전용이 된 경우의 사유 라벨
+         * ("○○강재(원자재·화학 공급사) 제출 대기"). null이면 지금 보는 사람이 입력할 수
+         * 있다. 소유 조직 화면에서만 채워진다 - 협력사 본인에게는 항상 null이다
+         * (자기 칸이 자기 때문에 잠겼다고 나오면 안 된다). PartnerAssignmentService 참고.
+         */
+        String partnerLockLabel
 ) {
 }

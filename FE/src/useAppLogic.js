@@ -15,7 +15,7 @@ import {
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
 import { fetchMe, fetchScans, deleteScan, searchProducts, recordScan, fetchNotificationCategories, fetchNotifications,
-  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
+  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, acceptParticipation, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
   // 도메인 확장(2026-08-22) - 마이페이지 신청 / 관리자 심사 / DPP 생성 도메인 선택기.
   fetchMyDomains, requestDomainGrant, fetchDomainGrants, approveDomainGrant, rejectDomainGrant,
   fetchDomainGrantEvidenceBlob } from './api/meApi.js';
@@ -1477,7 +1477,7 @@ export function useAppLogic(userProps) {
     batteryCarbonResult, setBatteryCarbonResult, uploadBatteryCarbonReport,
     recyclingResult, setRecyclingResult, uploadRecyclingReport,
     invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate, fmtDateTime,
-    participationsData,
+    participationsData, setParticipationsData, acceptParticipation,
     accounts, domainHint, roleFromEmail, firstTab, say, go, goToLink, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,
     chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,

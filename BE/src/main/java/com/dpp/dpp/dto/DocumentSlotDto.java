@@ -27,6 +27,17 @@ public record DocumentSlotDto(
         String fileName,
         boolean zkpTarget,
         /** requirement_field.responsible_role. null이면 제조사(소유 조직) 담당. */
-        String responsibleRole
+        String responsibleRole,
+        /**
+         * 2026-08-23 강 요청 - 협력사가 참여를 "수락"한 뒤에만 그 역할 담당 문서가 협력사
+         * 전용이 된다. 그 전에는 제조사가 혼자 다 올릴 수 있어야 한다("원래는 혼자서도 다
+         * 입력할 수 있는데 협력사를 초대한 이후로는 협력사만 업로드 가능한 구조로").
+         *
+         * responsibleRole만 보고 화면을 잠그던 이전 방식은, 협력사를 초대한 적도 없는
+         * DPP에서 제조사가 스크랩 매입증빙·시험성적서를 영영 못 올리게 만들었다.
+         * 여기 값이 있으면(예: "○○리사이클(재활용 처리업체) 제출 대기") 그때만 잠근다.
+         * null이면 지금 보는 사람이 올릴 수 있다.
+         */
+        String partnerLockLabel
 ) {
 }

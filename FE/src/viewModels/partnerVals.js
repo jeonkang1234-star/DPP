@@ -27,7 +27,10 @@ export function partnerVals(ctx) {
     // 전체 완성도는 여기 전혀 안 섞인다(2026-08-15).
     participations: (ctx.participationsData || []).map(p => {
       const roleLabel = { RAW_SUPPLIER: '원자재·화학 공급사', LOGISTICS: '물류사', DISTRIBUTOR: '유통사', RECYCLER: '재활용업체', TEST_LAB: '시험·인증기관' }[p.roleCode] || p.roleCode;
-      const statusLabel = { INVITED: '입력 대기', IN_PROGRESS: '작성 중', SUBMITTED: '제출 완료', COMPLETED: '완료' }[p.submitStatus] || p.submitStatus;
+      // 수락 전에는 "입력 대기"가 아니라 "수락 대기"다 - 아직 아무것도 맡지 않은 상태이고,
+      // 그 사이 담당 항목은 제조사가 그대로 채울 수 있다(2026-08-23 강 요청).
+      const statusLabel = !p.accepted ? '수락 대기'
+        : ({ INVITED: '입력 대기', IN_PROGRESS: '작성 중', SUBMITTED: '제출 완료', COMPLETED: '완료' }[p.submitStatus] || p.submitStatus);
       const selected = state.partnerAssignedDppId === p.dppId;
       const filled = (p.myFieldsFilled || 0) + (p.myDocsFilled || 0);
       const total = (p.myFieldsTotal || 0) + (p.myDocsTotal || 0);
@@ -43,7 +46,23 @@ export function partnerVals(ctx) {
           border: selected ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.08)', borderRadius: 14,
           background: selected ? 'rgba(0,69,169,.04)' : '#fff', cursor: 'pointer', textAlign: 'left'
         },
-        statusDot: ctx.pillDot(p.submitStatus === 'SUBMITTED' || p.submitStatus === 'COMPLETED' ? '#12A150' : p.submitStatus === 'IN_PROGRESS' ? '#E3A008' : '#9AA8BE'),
+        statusDot: ctx.pillDot(!p.accepted ? '#9AA8BE' : p.submitStatus === 'SUBMITTED' || p.submitStatus === 'COMPLETED' ? '#12A150' : p.submitStatus === 'IN_PROGRESS' ? '#E3A008' : '#9AA8BE'),
+        // 수락 버튼(2026-08-23). 수락해야 이 역할 담당 항목·문서가 우리 것이 되고, 그때부터
+        // 제조사 화면에서는 그 칸이 잠긴다. 수락 전에도 값을 열어볼 수는 있지만, 제조사가
+        // 같은 칸을 쓰고 있을 수 있다는 점을 안내 문구로 밝힌다.
+        accepted: !!p.accepted,
+        acceptHint: p.accepted
+          ? '이 DPP의 ' + roleLabel + ' 담당 항목은 우리 조직만 제출할 수 있습니다.'
+          : '수락하면 ' + roleLabel + ' 담당 항목·문서를 우리 조직만 제출하게 됩니다. 그전까지는 제조사가 직접 채울 수 있습니다.',
+        accept: async () => {
+          try {
+            const result = await ctx.acceptParticipation(p.dppId);
+            ctx.setParticipationsData(result || []);
+            ctx.say('참여를 수락했습니다.');
+          } catch (e) {
+            ctx.say(e.message || '수락에 실패했습니다.');
+          }
+        },
         open: () => setState({ partnerAssignedDppId: p.dppId })
       };
     }),

@@ -75,12 +75,18 @@ export default function PublicPassport() {
           </div>
         ) : (
           <>
+            {/* 2026-08-23 강 요청: "QR로 조회할 때 맨 위에 제품명이 나오게". 예전엔 카드
+                첫 줄이 "발급 완료" 배지였고 제품명은 그 아래였다 - QR을 찍은 사람이 가장
+                먼저 확인해야 하는 건 "이게 무슨 제품인가"지 발급 상태가 아니다. 제품명을
+                카드 맨 윗줄로 올리고, 배지는 같은 줄 오른쪽으로 붙인다. */}
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '600', color: '#0E7A3D', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#12A150' }} />
-                발급 완료
-              </span>
-              <span style={{ fontSize: '22px', fontWeight: '700', color: '#0B1B33', overflowWrap: 'anywhere' }}>{state.data.modelName || '(제품명 미입력)'}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                <h1 style={{ margin: '0', fontSize: '24px', lineHeight: '1.3', fontWeight: '700', color: '#0B1B33', overflowWrap: 'anywhere', minWidth: '0' }}>{state.data.modelName || '(제품명 미입력)'}</h1>
+                <span style={{ flex: 'none', marginTop: '4px', fontSize: '11px', fontWeight: '600', color: '#0E7A3D', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#12A150' }} />
+                  발급 완료
+                </span>
+              </div>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '13px', color: '#8494AC', overflowWrap: 'anywhere' }}>{state.data.internalSku}</span>
               <div style={{ display: 'flex', gap: '16px', fontSize: '12.5px', color: '#6B7A93', paddingTop: '4px', borderTop: '1px solid rgba(16,32,64,.06)', marginTop: '6px', flexWrap: 'wrap' }}>
                 <span>도메인 {state.data.domain}</span>

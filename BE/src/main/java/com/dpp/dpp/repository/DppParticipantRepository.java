@@ -18,4 +18,10 @@ public interface DppParticipantRepository extends JpaRepository<DppParticipant, 
 
     /** 파트너(협력사) 로그인 계정이 "내가 참여 요청받은 DPP 목록"을 볼 때 쓴다. */
     List<DppParticipant> findByOrgId(Long orgId);
+
+    /**
+     * 이 DPP에 붙은 참여 행 전부 - PartnerAssignmentService가 "수락한 협력사가 있는 역할"을
+     * 가려낼 때 쓴다(수락 후에는 그 역할 담당 항목을 제조사가 못 건드린다).
+     */
+    List<DppParticipant> findByDppId(Long dppId);
 }

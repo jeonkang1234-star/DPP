@@ -103,6 +103,7 @@ public class FieldFormService {
     private final CustomsClearanceService customsClearanceService;
     private final AuditLogService auditLogService;
     private final DomainGrantService domainGrantService;
+    private final PartnerAssignmentService partnerAssignmentService;
 
     public FieldFormService(UserAccountRepository userAccountRepository,
                              ProductModelRepository productModelRepository,
@@ -116,7 +117,8 @@ public class FieldFormService {
                              Optional<BlockchainClient> blockchainClient,
                              CustomsClearanceService customsClearanceService,
                              AuditLogService auditLogService,
-                             DomainGrantService domainGrantService) {
+                             DomainGrantService domainGrantService,
+                             PartnerAssignmentService partnerAssignmentService) {
         this.userAccountRepository = userAccountRepository;
         this.productModelRepository = productModelRepository;
         this.dppRepository = dppRepository;
@@ -130,6 +132,7 @@ public class FieldFormService {
         this.customsClearanceService = customsClearanceService;
         this.auditLogService = auditLogService;
         this.domainGrantService = domainGrantService;
+        this.partnerAssignmentService = partnerAssignmentService;
     }
 
     @Transactional(readOnly = true)
@@ -164,8 +167,15 @@ public class FieldFormService {
         Map<String, String> existingValues = fieldValueRepository.findByDppId(dpp.getDppId()).stream()
                 .collect(Collectors.toMap(DppFieldValue::getFieldCode, DppFieldValue::getValueText, (a, b) -> b));
 
+        // 수락한 협력사가 있는 역할은 그 협력사 전용이 된다(2026-08-23). 소유 조직 화면에서만
+        // 잠금 라벨을 붙인다 - 협력사 본인은 애초에 자기 담당 필드만 받으므로 잠글 게 없다.
+        Map<String, String> lockedRoles = access.owner()
+                ? partnerAssignmentService.lockedRoleLabels(dpp.getDppId())
+                : Map.of();
+
         List<FieldFormItemDto> fields = fieldsFor(fieldDomains(domain), access.participantRoleCode()).stream()
-                .map(f -> toItem(f, existingValues.get(f.getFieldCode())))
+                .map(f -> toItem(f, existingValues.get(f.getFieldCode()),
+                        partnerAssignmentService.lockLabelFor(lockedRoles, f.getResponsibleRole())))
                 .toList();
 
         // dpp 엔티티가 아니라 별도 스칼라 프로젝션으로 다시 읽는다 - saveDraft/issue가 같은
@@ -226,7 +236,8 @@ public class FieldFormService {
             dppRepository.save(dpp);
         }
 
-        upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode());
+        upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode(),
+                access.owner() ? partnerAssignmentService.lockedRoleLabels(dpp.getDppId()).keySet() : Set.of());
         syncModelName(dpp);
         recalc(dpp.getDppId());
         if (!access.owner()) {
@@ -369,11 +380,16 @@ public class FieldFormService {
     // Enum 선택지가 같이 가야 한다.
 
     private FieldFormItemDto toItem(RequirementField f, String value) {
+        return toItem(f, value, null);
+    }
+
+    private FieldFormItemDto toItem(RequirementField f, String value, String partnerLockLabel) {
         return new FieldFormItemDto(
                 f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getLabelEn(), f.getUnit(),
                 f.getHelpText(), f.isRequired(), value,
                 f.getDataType(), f.getCodeGroup(), f.getDataSource(), f.getTier(),
-                f.getDisclosureScope(), f.getLegalBasis(), f.getT1Condition());
+                f.getDisclosureScope(), f.getLegalBasis(), f.getT1Condition(),
+                f.getResponsibleRole(), partnerLockLabel);
     }
 
     /**
@@ -531,11 +547,23 @@ public class FieldFormService {
         return dppRepository.save(dpp);
     }
 
+    /**
+     * @param lockedRoleCodes 수락한 협력사가 이미 붙어 있는 역할들. 소유 조직 저장에서만
+     *     채워진다 - 그 역할이 담당인 필드는 협력사 전용이라 제조사가 덮어쓸 수 없다
+     *     (2026-08-23 강 요청). FE도 그 칸을 읽기 전용으로 그리지만, 요청을 직접 만들어
+     *     보내는 경우까지 여기서 막는다.
+     */
     private void upsertValues(Long dppId, String domain, Long orgId, Long userId, Map<String, String> values,
-                               String participantRoleCode) {
+                               String participantRoleCode, Set<String> lockedRoleCodes) {
         if (values == null) {
             return;
         }
+        Set<String> partnerLockedFieldCodes = lockedRoleCodes.isEmpty()
+                ? Set.of()
+                : fieldsFor(fieldDomains(domain), null).stream()
+                        .filter(f -> f.getResponsibleRole() != null && lockedRoleCodes.contains(f.getResponsibleRole()))
+                        .map(RequirementField::getFieldCode)
+                        .collect(Collectors.toSet());
         // 참여 협력사는 자기 role_code가 담당인 필드만 저장할 수 있다 - FE는 애초에 그
         // 필드만 보여주지만, 서버에서도 한 번 더 막는다(요청을 조작해서 남의 필드를
         // 끼워 보내는 경우 방지).
@@ -560,6 +588,10 @@ public class FieldFormService {
                 continue;
             }
             if (allowedFieldCodes != null && !allowedFieldCodes.contains(entry.getKey())) {
+                continue;
+            }
+            if (partnerLockedFieldCodes.contains(entry.getKey())) {
+                log.debug("dppId={} field={} 협력사 수락 완료 항목 - 소유 조직 저장 무시", dppId, entry.getKey());
                 continue;
             }
             if (tradeSecretCodes.contains(entry.getKey())) {

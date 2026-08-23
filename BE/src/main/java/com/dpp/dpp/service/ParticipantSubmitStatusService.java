@@ -94,6 +94,13 @@ public class ParticipantSubmitStatusService {
         // (2026-08-23 강 리포트 "초대를 보내자마자 수락 상태로 바뀐다"). 초대 -> 대기 ->
         // (협력사가 자료 제출) -> 수락 순서가 실제로 일어난 일과 일치한다.
         invitationService.markAcceptedOnSubmit(dpp.getDppId(), orgId);
+        // 수락 버튼을 누르지 않고 바로 자료를 올린 경우에도 참여 행의 수락 시각을 채운다
+        // (2026-08-23). 이 값이 비어 있으면 제조사 쪽 잠금이 안 걸려서, 협력사가 방금 채운
+        // 값을 제조사가 그대로 덮어쓸 수 있다 - 초대 상태만 ACCEPTED로 넘기고 참여 행은
+        // 미수락으로 두면 두 곳이 서로 다른 말을 하게 된다.
+        if (participant.getAcceptedAt() == null) {
+            participant.setAcceptedAt(OffsetDateTime.now());
+        }
         boolean wasSubmitted = "SUBMITTED".equals(participant.getSubmitStatus())
                 || "COMPLETED".equals(participant.getSubmitStatus());
 
