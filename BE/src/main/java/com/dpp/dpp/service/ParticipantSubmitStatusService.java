@@ -56,6 +56,7 @@ public class ParticipantSubmitStatusService {
     private final UserAccountRepository userAccountRepository;
     private final OrganizationRepository organizationRepository;
     private final NotificationRepository notificationRepository;
+    private final com.dpp.collab.service.InvitationService invitationService;
 
     public ParticipantSubmitStatusService(DppParticipantRepository participantRepository,
                                            RequirementFieldRepository requirementFieldRepository,
@@ -64,7 +65,8 @@ public class ParticipantSubmitStatusService {
                                            DocumentRepository documentRepository,
                                            UserAccountRepository userAccountRepository,
                                            OrganizationRepository organizationRepository,
-                                           NotificationRepository notificationRepository) {
+                                           NotificationRepository notificationRepository,
+                                           com.dpp.collab.service.InvitationService invitationService) {
         this.participantRepository = participantRepository;
         this.requirementFieldRepository = requirementFieldRepository;
         this.fieldValueRepository = fieldValueRepository;
@@ -73,6 +75,7 @@ public class ParticipantSubmitStatusService {
         this.userAccountRepository = userAccountRepository;
         this.organizationRepository = organizationRepository;
         this.notificationRepository = notificationRepository;
+        this.invitationService = invitationService;
     }
 
     /**
@@ -87,6 +90,10 @@ public class ParticipantSubmitStatusService {
         if (participant == null) {
             return;
         }
+        // 협력사가 이 DPP에 실제로 뭔가를 올렸다는 뜻이므로, 이 시점에 초대를 수락으로 넘긴다
+        // (2026-08-23 강 리포트 "초대를 보내자마자 수락 상태로 바뀐다"). 초대 -> 대기 ->
+        // (협력사가 자료 제출) -> 수락 순서가 실제로 일어난 일과 일치한다.
+        invitationService.markAcceptedOnSubmit(dpp.getDppId(), orgId);
         boolean wasSubmitted = "SUBMITTED".equals(participant.getSubmitStatus())
                 || "COMPLETED".equals(participant.getSubmitStatus());
 

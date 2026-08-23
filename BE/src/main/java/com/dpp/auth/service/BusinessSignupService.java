@@ -86,7 +86,7 @@ public class BusinessSignupService {
 
     @Transactional
     public LoginResponse signup(BusinessSignupRequest request, MultipartFile bizRegCert) {
-        if (userAccountRepository.existsByEmail(request.email())) {
+        if (userAccountRepository.existsByEmailAndDeletedAtIsNull(request.email())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 가입된 이메일입니다.");
         }
         if (!emailVerificationService.isVerified(request.email())) {

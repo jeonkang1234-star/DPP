@@ -24,4 +24,12 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
      * 한 나라에 세관 계정이 여럿 등록돼 있으면(예: 항구별) 전부 대상이 된다. */
     List<Organization> findByOrgTypeAndCountryCodeAndApprovalStatusAndDeletedAtIsNull(
             String orgType, String countryCode, OrgApprovalStatus approvalStatus);
+
+    /**
+     * 국가 조건 없이 org_type + 승인상태로만 조회. 데모용 통관 브로드캐스트
+     * (CustomsClearanceService.broadcastToRemainingCustoms)가 "모든 ACTIVE 세관"을
+     * 찾을 때 쓴다.
+     */
+    List<Organization> findByOrgTypeAndApprovalStatusAndDeletedAtIsNull(
+            String orgType, OrgApprovalStatus approvalStatus);
 }

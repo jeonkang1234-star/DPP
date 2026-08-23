@@ -398,7 +398,12 @@ export function makerVals(ctx) {
         return {
           key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
           labelEn: f.labelEn || '',
-          req: f.required ? '필수' : '선택', ph: f.helpText || '', value,
+          req: f.required ? '필수' : '선택',
+          // help_text가 길면 placeholder로 쓰지 않는다(2026-08-23). HS 코드처럼 설명이
+          // 한 문장 이상인 항목은 입력칸 안에 들어가면 잘려서 오히려 안 읽힌다 -
+          // 짧은 것만 placeholder로 쓰고, 전체 문장은 아래 hint로 보여준다.
+          ph: (f.helpText && f.helpText.length <= 40) ? f.helpText : '',
+          value,
           hint: f.helpText || '', sourceLabel, sourceChip,
           autoFillable: isAutoFillable,
           section: f.section || 'SYSTEM',
@@ -756,8 +761,21 @@ export function makerVals(ctx) {
           const tileBorderColor = stageIdx === 2 ? (success ? '#12A150' : '#E3A008')
             : stageIdx === 0 ? '#E03B3B'
             : 'rgba(16,32,64,.07)';
+          // 2026-08-23 강 리포트("재활용 처리업체로 지정했는데 온갖 문서를 다 업로드하라고
+          // 한다"). 제조사 문서함에는 도메인의 DOCUMENT 항목이 전부 내려온다 - 그 안에
+          // 원자재 공급사·시험기관·재활용업체 담당 문서까지 섞여 있어서, 협력사를 초대해
+          // 놓고도 제조사 화면에는 여전히 "내가 올려야 할 것"으로 보였다. 이제 담당 역할을
+          // 표시하고 업로드 버튼을 숨긴다 - 항목 자체는 남긴다(제조사는 협력사 제출
+          // 진행 상황을 봐야 한다).
+          const PARTNER_ROLE_LABEL = {
+            RAW_SUPPLIER: '원자재·화학 공급사', TEST_LAB: '시험·인증기관',
+            RECYCLER: '재활용 처리업체', LOGISTICS: '물류사', DISTRIBUTOR: '유통사'
+          };
+          const partnerRoleLabel = PARTNER_ROLE_LABEL[d.responsibleRole] || '';
           return {
             key: d.fieldCode, label: d.labelKo, labelEn: d.labelEn || '', req: d.required ? '필수' : '선택',
+            partnerOwned: !!partnerRoleLabel,
+            partnerOwnerLabel: partnerRoleLabel ? partnerRoleLabel + ' 담당' : '',
             fileName: d.fileName || '',
             statusLabel: uploading ? '검증 중' : (DOC_STATUS_LABEL[d.status] || d.status),
             dot: ctx.pillDot(uploading ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),

@@ -22,11 +22,18 @@ public class DppRegistryController {
         this.dppRegistryService = dppRegistryService;
     }
 
+    /**
+     * q는 여러 컬럼에 OR로 걸리는 자유 검색어, orgName/hsCode는 각각 그 컬럼만 좁히는
+     * 개별 필터다(2026-08-23 강 요청 - 화면의 등록회사·HS 코드 칸이 실제로 동작해야 함).
+     * 셋 다 비면 최신 발급 목록이 나온다.
+     */
     @GetMapping("/verify/dpp/search")
     public ResponseEntity<List<DppSearchResultDto>> search(@RequestParam(required = false) String q,
+                                                             @RequestParam(required = false) String orgName,
+                                                             @RequestParam(required = false) String hsCode,
                                                              Authentication authentication) {
         Long userId = parseUserId(authentication);
-        return ResponseEntity.ok(dppRegistryService.search(userId, q));
+        return ResponseEntity.ok(dppRegistryService.search(userId, q, orgName, hsCode));
     }
 
     private Long parseUserId(Authentication authentication) {

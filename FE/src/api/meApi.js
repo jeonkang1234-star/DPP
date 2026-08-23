@@ -400,9 +400,13 @@ export async function fetchOrgBizCertBlob(orgId) {
  * DppRegistryController) - ADMIN이거나 org_type이 EU_AUTHORITY/CUSTOMS인 계정만 200.
  * q를 안 주면 최신 발급분 50건을 돌려준다.
  */
-export function searchDppRegistry(q) {
-  const query = q ? `?q=${encodeURIComponent(q)}` : '';
-  return authedFetch(`/verify/dpp/search${query}`);
+export function searchDppRegistry(q, orgName, hsCode) {
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (orgName) params.set('orgName', orgName);
+  if (hsCode) params.set('hsCode', hsCode);
+  const qs = params.toString();
+  return authedFetch('/verify/dpp/search' + (qs ? '?' + qs : ''));
 }
 
 

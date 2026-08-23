@@ -184,12 +184,50 @@ public class CustomsClearanceService {
                 created.addAll(createSideRows("IMPORT", importCc, dpp, exportCc, importCc,
                         AUTO_IMPORTER_NAME, null, null, null, requesterOrgId));
             }
+            created.addAll(broadcastToRemainingCustoms(dpp, exportCc, importCc, requesterOrgId, created));
             log.info("발급 자동 통관 생성: dppId={}, {}->{}, {}건", dppId, exportCc, importCc, created.size());
             return created.size();
         } catch (RuntimeException e) {
             log.warn("dppId={} 발급 자동 통관 생성 실패(발급은 정상 처리): {}", dppId, e.getMessage());
             return 0;
         }
+    }
+
+    /**
+     * 데모 전용: 발급된 DPP를 국가 매칭과 무관하게 모든 ACTIVE 세관 큐에 올린다
+     * (2026-08-23 강 요청 "한국이든 EU든 발급이 끝나면 무조건 통관 대기 목록에 바로 보이게").
+     *
+     * 원래 배정 규칙은 수출국/수입국의 country_code와 일치하는 세관만이다 - 실제 통관은
+     * 그게 맞다. 하지만 데모에서는 어느 세관 계정으로 로그인하든 방금 발급한 건이 큐
+     * 최상단에 보여야 시연이 끊기지 않는다(큐 정렬은 이미 created_at DESC라 최신이 맨 위).
+     *
+     * 위에서 국가 매칭으로 이미 행을 받은 세관은 건너뛴다 - 같은 세관 큐에 같은 DPP가
+     * 두 번 뜨면 안 된다. 실서비스로 갈 때 이 메서드 호출 한 줄만 지우면 원래 규칙으로
+     * 돌아간다.
+     */
+    private List<CustomsClearance> broadcastToRemainingCustoms(Dpp dpp, String exportCc, String importCc,
+                                                                Long requesterOrgId,
+                                                                List<CustomsClearance> alreadyCreated) {
+        Set<Long> covered = alreadyCreated.stream()
+                .map(CustomsClearance::getCustomsOrgId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        List<CustomsClearance> rows = new ArrayList<>();
+        for (Organization customsOrg : organizationRepository
+                .findByOrgTypeAndApprovalStatusAndDeletedAtIsNull("CUSTOMS", OrgApprovalStatus.ACTIVE)) {
+            if (covered.contains(customsOrg.getOrgId())) {
+                continue;
+            }
+            // 이 세관의 나라를 수입국으로 적어둔다 - "미정"보다 화면에서 읽히는 값이 낫고,
+            // 어차피 발급 시점엔 실제 수입국이 정해져 있지 않다.
+            String cc = customsOrg.getCountryCode() == null ? importCc : customsOrg.getCountryCode();
+            rows.add(saveRow(customsOrg.getOrgId(), "IMPORT", dpp, exportCc, cc,
+                    AUTO_IMPORTER_NAME, null, null, null, requesterOrgId));
+        }
+        if (!rows.isEmpty()) {
+            log.info("dppId={} 데모 브로드캐스트 - 추가 세관 {}건에 배정", dpp.getDppId(), rows.size());
+        }
+        return rows;
     }
 
     private List<CustomsClearance> createSideRows(String side, String matchCountry, Dpp dpp,
@@ -366,8 +404,8 @@ public class CustomsClearanceService {
         List<CustomsCheckDto> checks = new ArrayList<>();
         checks.add(checkAnchor(row.getDppId()));
         checks.add(checkHsCode(row.getHsCode(), actualHsCode));
-        checks.add(checkDocument(modelId, "EU_DOC", "EU 적합성 선언서(DoC)"));
-        checks.add(checkTechFile(modelId));
+        checks.add(checkDocument(modelId, row.getDppId(), "EU_DOC", "EU 적합성 선언서(DoC)"));
+        checks.add(checkTechFile(modelId, row.getDppId()));
         checks.add(checkSvhc(row.getDppId()));
         checks.add(checkEoriFormat(row.getImporterEori()));
         boolean overallPass = checks.stream().allMatch(CustomsCheckDto::pass);
@@ -418,20 +456,20 @@ public class CustomsClearanceService {
                 pass ? "신고 품목(" + declaredHsCode + ")과 DPP 품목 일치" : "신고 " + declaredHsCode + " vs DPP " + actualHsCode + " 불일치");
     }
 
-    private CustomsCheckDto checkDocument(Long modelId, String docTypeCode, String label) {
+    private CustomsCheckDto checkDocument(Long modelId, Long dppId, String docTypeCode, String label) {
         if (modelId == null) {
             return new CustomsCheckDto(label, false, "제품 정보를 찾을 수 없습니다.");
         }
-        long count = customsCaseReadRepository.countApprovedDocuments(modelId, docTypeCode);
+        long count = customsCaseReadRepository.countApprovedDocuments(modelId, dppId, docTypeCode);
         return new CustomsCheckDto(label, count > 0,
                 count > 0 ? "문서 승인 완료 · " + count + "건" : "승인된 문서가 없습니다.");
     }
 
-    private CustomsCheckDto checkTechFile(Long modelId) {
+    private CustomsCheckDto checkTechFile(Long modelId, Long dppId) {
         if (modelId == null) {
             return new CustomsCheckDto("CE 마크", false, "제품 정보를 찾을 수 없습니다.");
         }
-        long count = customsCaseReadRepository.countApprovedDocuments(modelId, "TECH_FILE");
+        long count = customsCaseReadRepository.countApprovedDocuments(modelId, dppId, "TECH_FILE");
         return new CustomsCheckDto("CE 마크", count > 0,
                 count > 0 ? "부착 확인 · 기술문서 " + count + "건 확인됨" : "기술문서 미제출");
     }

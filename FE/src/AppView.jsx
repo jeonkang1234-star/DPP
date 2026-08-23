@@ -344,6 +344,7 @@ export default function AppView(v) {
     scPersonalMy,
     scProducts,
     scRegistry,
+    euOrgName, onEuOrgNameChange, euHsCode, onEuHsCodeChange, onEuSearchKeyDown,
     scScans,
     scans,
     scansEmpty,
@@ -1070,8 +1071,15 @@ export default function AppView(v) {
                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '600', flexWrap: 'wrap' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: '500', color: '#8494AC' }}>{d.req}</span></span>
                         {d.labelEn ? (<span style={{ fontSize: '11px', color: '#8494AC' }}>{d.labelEn}</span>) : null}
                       </span>
-                      <label htmlFor={d.inputId} style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '9px', background: '#fff', color: '#0045A9', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>{d.fileName ? '재업로드' : '업로드'}</label>
-                      <input id={d.inputId} type="file" onChange={d.onFileChange} style={{ display: 'none' }} />
+                      {/* 협력사 담당 문서는 제조사가 올리는 것이 아니다(2026-08-23 강 리포트).
+                          업로드 버튼 대신 담당 역할을 보여주고, 항목은 그대로 남겨 제출
+                          진행 상황을 볼 수 있게 한다. */}
+                      {d.partnerOwned
+                        ? (<span style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', border: '1px dashed rgba(16,32,64,.20)', borderRadius: '9px', background: '#F2F4F8', color: '#6B7A93', fontSize: '11.5px', fontWeight: '600', whiteSpace: 'nowrap', flex: 'none' }}>{d.partnerOwnerLabel}</span>)
+                        : (<>
+                          <label htmlFor={d.inputId} style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '9px', background: '#fff', color: '#0045A9', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>{d.fileName ? '재업로드' : '업로드'}</label>
+                          <input id={d.inputId} type="file" onChange={d.onFileChange} style={{ display: 'none' }} />
+                          </>)}
                     </div>
                     <span style={d.categoryChip}>{d.categoryLabel}</span>
                     <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{d.fileName || '아직 업로드되지 않았습니다'}</span>
@@ -1194,6 +1202,11 @@ export default function AppView(v) {
                       </span>
                       {renderInput(f)}
                       <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.sourceLabel}</span>
+                      {/* help_text(작성 요령·표기 규칙). 지금까지 협력사 화면에만 그려져
+                          있어서, 제조사 입력 화면에서는 서버가 내려준 설명이 아무 데도
+                          보이지 않았다 - HS 코드 자릿수 설명처럼 값의 형식을 좌우하는
+                          안내가 묻혔다(2026-08-23 강 요청). */}
+                      {f.hint ? (<span style={{ fontSize: '11px', color: '#8494AC', lineHeight: '1.55', overflowWrap: 'anywhere' }}>{f.hint}</span>) : null}
                     </label>
                     </React.Fragment>);
                   // 2026-08-18(2차) 강 요청: "파싱되는 데이터랑 그냥 입력하는 데이터랑
@@ -1796,9 +1809,9 @@ export default function AppView(v) {
             </div>
           </div>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>식별자(UUID 일부)</span><input value={euQuery} onChange={onEuQueryChange} placeholder="예: 3f2a 또는 SKU/모델명 일부" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>등록회사</span><input value={euQuery} readOnly placeholder="위 검색어로 함께 조회됨" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace', background: '#F7F9FD', color: '#8494AC' }} /></label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>HS 코드</span><input value={euQuery} readOnly placeholder="위 검색어로 함께 조회됨" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace', background: '#F7F9FD', color: '#8494AC' }} /></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>식별자(UUID 일부)</span><input value={euQuery} onChange={onEuQueryChange} onKeyDown={onEuSearchKeyDown} placeholder="예: 3f2a 또는 SKU/모델명 일부" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>등록회사</span><input value={euOrgName} onChange={onEuOrgNameChange} onKeyDown={onEuSearchKeyDown} placeholder="예: 가온스틸" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>HS 코드</span><input value={euHsCode} onChange={onEuHsCodeChange} onKeyDown={onEuSearchKeyDown} placeholder="예: 7208 또는 720851" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
             <button onClick={searchRegistry} style={{ height: '48px', padding: '0 26px', border: '0', borderRadius: '12px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>조회</button>
           </div>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>

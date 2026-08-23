@@ -51,8 +51,13 @@ export function euVals(ctx) {
   const { state, setState } = ctx;
   const rows = ctx.euRegistryData || [];
 
-  const runSearch = (q) => {
-    searchDppRegistry(q)
+  /*
+   * 2026-08-23 강 요청: 등록회사·HS 코드 칸이 각각 개별 필터로 동작해야 한다.
+   * 예전엔 두 칸이 첫 칸(euQuery) 값을 그대로 비추는 읽기전용 표시였다 - "HS 코드만으로
+   * 좁히기"가 아예 불가능했다. 이제 세 값을 따로 보내고 서버가 AND로 겹친다.
+   */
+  const runSearch = () => {
+    searchDppRegistry(state.euQuery || '', state.euOrgName || '', state.euHsCode || '')
       .then((res) => ctx.setEuRegistryData(res || []))
       .catch((err) => ctx.say(err.message || 'DPP 레지스트리 조회에 실패했습니다.'));
   };
@@ -60,6 +65,11 @@ export function euVals(ctx) {
   return {
     euQuery: state.euQuery || '',
     onEuQueryChange: (e) => setState({ euQuery: e.target.value }),
+    euOrgName: state.euOrgName || '',
+    onEuOrgNameChange: (e) => setState({ euOrgName: e.target.value }),
+    euHsCode: state.euHsCode || '',
+    onEuHsCodeChange: (e) => setState({ euHsCode: e.target.value }),
+    onEuSearchKeyDown: (e) => { if (e.key === 'Enter') runSearch(); },
     exportCsv: () => {
       if (rows.length === 0) { ctx.say('내보낼 조회 결과가 없습니다.'); return; }
       const header = 'publicUuid,serialNumber,modelName,orgName,hsCode,domain,issuedAtDate\n';
@@ -71,7 +81,7 @@ export function euVals(ctx) {
       URL.revokeObjectURL(url);
       ctx.say('조회 결과 ' + rows.length + '건을 CSV로 내보냈습니다.');
     },
-    searchRegistry: () => runSearch(state.euQuery || ''),
+    searchRegistry: () => runSearch(),
     registry: rows.map((r) => ({
       key: r.dppId, id: (r.publicUuid || '').slice(0, 8), fullId: r.publicUuid,
       code: r.serialNumber || '—', date: r.issuedAtDate || '—', time: '',
