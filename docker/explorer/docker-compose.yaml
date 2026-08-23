@@ -1,0 +1,76 @@
+# Hyperledger Explorer (blockchain-explorer v2.0.0) - EC2 데모 전용.
+#
+# 공식 저장소(hyperledger-labs/blockchain-explorer)의 docker-compose.yaml을 그대로 쓰되,
+# 경로만 환경변수로 뺐다(setup.sh가 .env에 채워 넣는다).
+#
+# 주의: 이 저장소는 2026-02-05에 아카이브(읽기 전용)됐다. Fabric 2.2/2.4/2.5까지는
+# 정상 동작하지만(우리는 2.5.16) 더 이상 유지보수되지 않는다 - 데모용 시각화 도구로만 쓴다.
+#
+# 실행: docker/explorer 에서  ./setup.sh /경로/fabric-samples/test-network
+services:
+
+  explorerdb.mynetwork.com:
+    image: ghcr.io/hyperledger-labs/explorer-db:latest
+    container_name: explorerdb.mynetwork.com
+    hostname: explorerdb.mynetwork.com
+    environment:
+      - DATABASE_DATABASE=fabricexplorer
+      - DATABASE_USERNAME=hppoc
+      - DATABASE_PASSWORD=password
+    healthcheck:
+      test: "pg_isready -h localhost -p 5432 -q -U postgres"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    volumes:
+      - explorer-pgdata:/var/lib/postgresql/data
+    networks:
+      - fabric
+
+  explorer.mynetwork.com:
+    image: ghcr.io/hyperledger-labs/explorer:latest
+    container_name: explorer.mynetwork.com
+    hostname: explorer.mynetwork.com
+    environment:
+      - DATABASE_HOST=explorerdb.mynetwork.com
+      - DATABASE_DATABASE=fabricexplorer
+      - DATABASE_USERNAME=hppoc
+      - DATABASE_PASSWD=password
+      - LOG_LEVEL_APP=info
+      - LOG_LEVEL_DB=info
+      - LOG_LEVEL_CONSOLE=info
+      - LOG_CONSOLE_STDOUT=true
+      # 브리지 네트워크로 붙으므로 반드시 false. true면 peer 주소를 localhost로
+      # 바꿔 찾다가 연결에 실패한다.
+      - DISCOVERY_AS_LOCALHOST=false
+      # 컨테이너 안에서는 8080 고정. 호스트 포트는 EXPLORER_HOST_PORT로 따로 잡는다 -
+      # 우리 backend가 이미 호스트 8080을 쓰고 있어서(docker-compose.yml) 겹치면 안 된다.
+      - PORT=8080
+    volumes:
+      - ${EXPLORER_CONFIG_FILE_PATH}:/opt/explorer/app/platform/fabric/config.json
+      - ${EXPLORER_PROFILE_DIR_PATH}:/opt/explorer/app/platform/fabric/connection-profile
+      # test-network의 crypto 산출물 전체를 읽기 전용으로 마운트한다. 커넥션 프로파일의
+      # /tmp/crypto/... 경로가 전부 이 안을 가리킨다.
+      - ${FABRIC_CRYPTO_PATH}:/tmp/crypto:ro
+      - explorer-wallet:/opt/explorer/wallet
+    ports:
+      # 기본은 127.0.0.1에만 바인딩한다 - 퍼블릭 IP에 기본 비밀번호(exploreradminpw)
+      # 그대로 열어두지 않기 위함. 외부에서 보려면 setup.sh 안내대로 SSH 터널을 쓰거나
+      # EXPLORER_BIND=0.0.0.0 으로 바꾸고 보안그룹을 내 IP로 제한할 것.
+      - "${EXPLORER_BIND:-127.0.0.1}:${EXPLORER_HOST_PORT:-8090}:8080"
+    depends_on:
+      explorerdb.mynetwork.com:
+        condition: service_healthy
+    networks:
+      - fabric
+
+volumes:
+  explorer-pgdata:
+  explorer-wallet:
+
+networks:
+  fabric:
+    # test-network가 이미 만들어 둔 도커 네트워크. 우리 backend도 여기에 붙는다
+    # (docker-compose.blockchain.yml 참고).
+    name: fabric_test
+    external: true

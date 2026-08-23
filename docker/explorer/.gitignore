@@ -1,0 +1,3 @@
+# setup.sh가 만들어내는 실제 설정(비밀번호·호스트 경로 포함) - 커밋 금지.
+.env
+connection-profile/dpp-network.json
