@@ -308,7 +308,9 @@ export function useAppLogic(userProps) {
     fetchMe().then((res) => { if (alive) setMeData(res); }).catch(() => {});
     // org_id 없는 계정(개인/미가입)은 400이 정상 - orgData는 그냥 null로 남고 profile()이
     // 기존 역할별 자리표시자로 폴백한다.
-    fetchOrganization().then((res) => { if (alive) setOrgData(res); }).catch(() => {});
+    // 400(조직 없는 계정)은 "조직이 없다"는 뜻이므로 반드시 null로 덮어써야 한다.
+    // 예전엔 조용히 넘겨서 이전 계정의 조직이 그대로 남았다(2026-08-23).
+    fetchOrganization().then((res) => { if (alive) setOrgData(res); }).catch(() => { if (alive) setOrgData(null); });
     fetchDashboard().then((res) => { if (alive) setDashboardData(res); }).catch(() => {});
     fetchScans().then((res) => { if (alive) setScansData(res || []); }).catch(() => {});
     fetchInvitations().then((res) => { if (alive) setInvitesData(res || []); }).catch(() => {});
@@ -316,7 +318,7 @@ export function useAppLogic(userProps) {
     fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
     // 조직 없는 계정(개인)은 400 - 조용히 무시하고 도메인 선택기를 감춘다.
-    fetchMyDomains().then((res) => { if (alive) setMyDomainsData(res); }).catch(() => {});
+    fetchMyDomains().then((res) => { if (alive) setMyDomainsData(res); }).catch(() => { if (alive) setMyDomainsData(null); });
     // ADMIN 계정이 아니면 403 - 도메인 확장 심사 목록도 마찬가지.
     fetchDomainGrants().then((res) => { if (alive) setDomainGrantsData(res || []); }).catch(() => {});
     // ADMIN 계정이 아니면 403 - 그 외 화면엔 영향 없이 조용히 무시(다른 fetch들과 동일한 패턴).
@@ -751,6 +753,46 @@ export function useAppLogic(userProps) {
     return null;
   }
 
+  /**
+   * 이전 계정의 서버 데이터를 전부 비운다.
+   *
+   * 2026-08-23 강 리포트("모든 계정이 이음제강으로 리다이렉트된다"). 로그아웃(resetSession)이
+   * 폼 상태만 지우고 meData/orgData/dashboardData 같은 응답 캐시는 메모리에 그대로 뒀다.
+   * 같은 탭에서 계정을 갈아타면 이전 조직 정보가 살아남아 헤더에 옛 회사명이 뜨고, 역할
+   * 교정 이펙트가 그 낡은 org_type으로 새 계정을 엉뚱한 화면에 밀어넣었다.
+   *
+   * 특히 조직이 없는 계정(관리자·개인)은 GET /me/organization이 400이라
+   * `.catch(() => {})`가 아무것도 안 하고 지나가서, 옛 조직 정보가 영원히 남았다.
+   * 그래서 로그아웃뿐 아니라 로그인 직후에도 한 번 비운다 - 새 응답이 오기 전까지는
+   * "모르는 상태(null)"가 옳지, 남의 계정 데이터가 아니다.
+   */
+  function clearAccountData() {
+    setMeData(null);
+    setOrgData(null);
+    setDashboardData(null);
+    setOrgApprovalsData(null);
+    setEuRegistryData(null);
+    setAdminDashboardData(null);
+    setAdminDashboardFetchedAt(null);
+    setAdminDashboardError(null);
+    setAdminMembersData(null);
+    setCustomsQueueData(null);
+    setAuditLogData(null);
+    setFieldFormData(null);
+    setFieldFormInputs({});
+    setDocumentFormData(null);
+    setScansData([]);
+    setProductResults([]);
+    setProductQuery('');
+    setProductSearched(false);
+    setInvitesData([]);
+    setParticipationsData([]);
+    setNotifCatsData([]);
+    setNotifsData([]);
+    setMyDomainsData(null);
+    setDomainGrantsData([]);
+  }
+
   function say(msg) {
     setState({ toast: msg });
     clearTimeout(timer.current);
@@ -805,8 +847,7 @@ export function useAppLogic(userProps) {
 
   /** 로그아웃 시 앱 내부 상태를 초기값으로 되돌립니다 (URL 이동은 MyPage 가 담당). */
   function resetSession() {
-    setFieldFormData(null);
-    setFieldFormInputs({});
+    clearAccountData();
     setState({
       view: 'login', role: props.startRole || 'steel', tab: 'dash',
       loginTab: 'company', suTab: 'company', suRole: 'maker',
@@ -857,6 +898,9 @@ export function useAppLogic(userProps) {
 
   /** extra: 로그인/가입 응답으로 받은 토큰 등을 세션에 같이 저장하고 싶을 때. */
   function go(role, extra) {
+    // 같은 탭에서 계정을 갈아탈 때 이전 계정의 응답 캐시가 새 계정 화면에 섞이지 않게
+    // 먼저 비운다(clearAccountData 주석 참고).
+    clearAccountData();
     saveSession({ role, at: Date.now(), ...extra });
     setState({ view: 'app', role, tab: firstTab(role), notifOpen: false, dppOpen: false, customsSearched: false, customsQuery: '' });
   }
