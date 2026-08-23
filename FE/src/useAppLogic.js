@@ -324,16 +324,45 @@ export function useAppLogic(userProps) {
     // EU_AUTHORITY/CUSTOMS org_type이거나 ADMIN이 아니면 403 - 마찬가지로 조용히 무시.
     searchDppRegistry('').then((res) => { if (alive) setEuRegistryData(res || []); }).catch(() => {});
     // ADMIN 계정이 아니면 403 - 관리자 대시보드 KPI/회원 목록도 마찬가지로 조용히 무시.
-    fetchAdminDashboard()
-      .then((res) => { if (alive) { setAdminDashboardData(res); setAdminDashboardFetchedAt(new Date()); setAdminDashboardError(null); } })
-      .catch((err) => {
-        // 403(= ADMIN 계정이 아님)은 정상 흐름이라 조용히 넘긴다. 그 외(특히 500)는
-        // 화면에 남겨서 "데이터가 없음"과 "불러오지 못함"을 구분할 수 있게 한다.
-        if (!alive || err?.status === 403) return;
-        console.error('[admin] /admin/dashboard 실패', err);
-        setAdminDashboardError(err?.message || '운영 지표를 불러오지 못했습니다.');
-      });
-    fetchAdminMembers().then((res) => { if (alive) setAdminMembersData(res || []); }).catch(() => {});
+    /*
+     * 관리자 KPI는 실패해도 재시도한다(2026-08-23).
+     *
+     * 이 화면이 통째로 '-'가 되는 사고가 두 번 있었고, 두 번째 원인은 커넥션 풀 고갈
+     * 이었다(문서 업로드가 파서/ZKP/Fabric을 트랜잭션 안에서 기다리는 동안 커넥션을
+     * 점유 -> 그때 들어온 이 요청이 타임아웃). 이런 일시적 실패는 몇 초 뒤 대개 회복
+     * 되는데, 예전엔 한 번 실패하면 사용자가 새로고침하기 전까지 영구히 빈 화면이었다.
+     * 403(ADMIN 아님)은 재시도해도 소용없으므로 즉시 포기한다.
+     */
+    const loadAdminDashboard = (attempt = 1) => {
+      fetchAdminDashboard()
+        .then((res) => {
+          if (!alive) return;
+          setAdminDashboardData(res);
+          setAdminDashboardFetchedAt(new Date());
+          setAdminDashboardError(null);
+        })
+        .catch((err) => {
+          if (!alive || err?.status === 403) return;
+          if (attempt < 3) {
+            setTimeout(() => { if (alive) loadAdminDashboard(attempt + 1); }, attempt * 2500);
+            return;
+          }
+          console.error('[admin] /admin/dashboard 실패', err);
+          setAdminDashboardError(err?.message || '운영 지표를 불러오지 못했습니다.');
+        });
+    };
+    loadAdminDashboard();
+    // 회원 목록도 같은 이유로 한 번 더 시도한다 - 대시보드만 살아나고 목록이 비어 있으면
+    // 원인을 오해하기 쉽다.
+    const loadAdminMembers = (attempt = 1) => {
+      fetchAdminMembers()
+        .then((res) => { if (alive) setAdminMembersData(res || []); })
+        .catch((err) => {
+          if (!alive || err?.status === 403) return;
+          if (attempt < 3) setTimeout(() => { if (alive) loadAdminMembers(attempt + 1); }, attempt * 2500);
+        });
+    };
+    loadAdminMembers();
     // 세관(org_type=CUSTOMS) 계정이 아니면 403 - 마찬가지로 조용히 무시.
     fetchCustomsQueue(false).then((res) => { if (alive) setCustomsQueueData(res || []); }).catch(() => {});
     // ADMIN이거나 EU_AUTHORITY 계정이 아니면 403 - 마찬가지로 조용히 무시.

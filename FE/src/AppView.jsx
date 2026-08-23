@@ -1828,10 +1828,9 @@ export default function AppView(v) {
               <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>변조 불가 · 블록체인 앵커링 검증</span>
               <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>감사 로그 조회</h1>
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button style={{ height: '46px', padding: '0 16px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '13px', background: '#fff', fontSize: '13.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>2026-07-01 ~ 07-30</button>
-              <button style={{ height: '46px', padding: '0 16px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '13px', background: '#fff', fontSize: '13.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>액션 전체</button>
-            </div>
+            {/* 2026-08-23 강 요청: 「2026-07-01 ~ 07-30」 기간 필터 버튼 삭제.
+                날짜를 하드코딩해 놓고 클릭해도 아무 동작이 없는 껍데기였다 -
+                실제로 걸리지 않는 필터를 보여주는 게 없는 것보다 나쁘다. */}
           </div>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.2fr 1.4fr 1.5fr .9fr 1.3fr', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
@@ -2132,8 +2131,10 @@ export default function AppView(v) {
               <div style={{ padding: '40px 0', textAlign: 'center', fontSize: '13.5px', color: '#8494AC' }}>표시할 항목이 없습니다.</div>
             ) : passportModalFields.map((f) => (
               <div key={f.key} style={{ display: 'grid', gridTemplateColumns: '210px 1fr', gap: '12px', padding: '10px 0', borderTop: '1px solid rgba(16,32,64,.07)', alignItems: 'baseline' }}>
-                <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{f.label}</span>
-                <span style={{ fontSize: '13.5px', fontWeight: '600', color: f.isProof ? '#0E7A3D' : '#0B1B33', wordBreak: 'break-word' }}>{f.value}</span>
+                <span style={{ fontSize: '12.5px', color: '#6B7A93', overflowWrap: 'anywhere' }}>{f.label}</span>
+                {/* wordBreak:'break-word'는 공백 없는 긴 문자열(URL 등)을 못 끊는다 -
+                    overflowWrap:'anywhere'라야 실제로 줄바꿈된다(2026-08-23 강 리포트). */}
+                <span style={{ fontSize: '13.5px', fontWeight: '600', color: f.isProof ? '#0E7A3D' : '#0B1B33', overflowWrap: 'anywhere', minWidth: '0' }}>{f.value}</span>
               </div>
             ))}
           </div>
