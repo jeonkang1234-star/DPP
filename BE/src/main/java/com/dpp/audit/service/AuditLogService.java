@@ -116,13 +116,38 @@ public class AuditLogService {
         return action + " · " + targetType;
     }
 
+    /**
+     * 네이티브 쿼리가 돌려준 created_at을 OffsetDateTime으로.
+     *
+     * 2026-08-23 강 리포트("감사 로그에서 시각이 안 보인다")의 원인이 여기였다.
+     * OffsetDateTime과 java.sql.Timestamp만 처리하고 나머지는 조용히 null을 돌려줬는데,
+     * Hibernate는 드라이버/방언 조합에 따라 timestamptz를 java.time.Instant로 주기도
+     * 한다. 그러면 atIso가 null이 되고 화면엔 '—'만 남는다 - 값은 DB에 멀쩡히 있는데도.
+     * AdminDashboardService에서 똑같은 버그를 고쳤고 여기가 같은 함정의 두 번째 자리다.
+     */
     private OffsetDateTime toOffsetDateTime(Object raw) {
+        if (raw == null) {
+            return null;
+        }
         if (raw instanceof OffsetDateTime odt) {
             return odt;
         }
         if (raw instanceof java.sql.Timestamp ts) {
             return ts.toInstant().atOffset(ZoneOffset.UTC);
         }
+        if (raw instanceof java.time.Instant inst) {
+            return inst.atOffset(ZoneOffset.UTC);
+        }
+        if (raw instanceof java.time.ZonedDateTime zdt) {
+            return zdt.toOffsetDateTime();
+        }
+        if (raw instanceof java.time.LocalDateTime ldt) {
+            return ldt.atOffset(ZoneOffset.UTC);
+        }
+        if (raw instanceof java.util.Date d) {
+            return d.toInstant().atOffset(ZoneOffset.UTC);
+        }
+        log.warn("감사 로그 시각을 해석하지 못했다(타입 {}) - 해당 행의 시각은 비워둔다", raw.getClass().getName());
         return null;
     }
 

@@ -424,6 +424,9 @@ export default function AppView(v) {
     passportModalOpen, passportModalLoading, passportModalTitle, passportModalSub,
     passportModalError, passportModalViewer, passportModalHiddenNote,
     passportModalFields, closePassportModal,
+    passportModalQr, passportModalUrl, copyPassportUrl,
+    txModalOpen, txModalHash, txModalAt, txModalAction, txModalTarget, txModalActor,
+    closeTxModal, copyTxHash,
     closeQrModal,
     goToProductsFromQr,
     tierRequestPending,
@@ -1836,12 +1839,16 @@ export default function AppView(v) {
             </div>
             {(auditLog || []).map((l, $index) => (<React.Fragment key={$index}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.2fr 1.4fr 1.5fr .9fr 1.3fr', gap: '12px', padding: '0 14px', height: '54px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
-              <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#0B1B33' }}>{l.at}</span>
-              <span style={{ fontSize: '12.5px', color: '#44546F' }}>{l.actor}</span>
-              <span style={{ fontSize: '12.5px', fontWeight: '600' }}>{l.action}</span>
-              <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#44546F' }}>{l.target}</span>
+              <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#0B1B33', whiteSpace: 'nowrap' }}>{l.at}</span>
+              <span style={{ fontSize: '12.5px', color: '#44546F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.actor}</span>
+              <span style={{ fontSize: '12.5px', fontWeight: '600', whiteSpace: 'nowrap' }}>{l.action}</span>
+              <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#44546F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.target}</span>
               <span style={l.chip}>{l.result}</span>
-              <a href="#" style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', fontWeight: '500' }}>{l.hash}</a>
+              {/* 해시는 64자라 그대로 넣으면 행 높이가 들쭉날쭉해진다 - 축약해서 한 줄로
+                  고정하고, 전체 값은 클릭해서 모달로 본다(2026-08-23 강 지적). */}
+              {l.hasHash
+                ? (<button onClick={l.openHash} title="전체 해시 보기" style={{ justifySelf: 'start', maxWidth: '100%', padding: '0', border: '0', background: 'transparent', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', fontWeight: '500', color: '#0045A9', cursor: 'pointer', textDecoration: 'underline', whiteSpace: 'nowrap' }}>{l.hashShort}</button>)
+                : (<span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#B7C0D1', whiteSpace: 'nowrap' }}>—</span>)}
             </div>
             </React.Fragment>))}
           </div>
@@ -2104,6 +2111,19 @@ export default function AppView(v) {
             <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{passportModalSub}</span>
           </div>
           <div style={{ padding: '18px 26px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0' }}>
+            {/* 공개 여권 QR(2026-08-23 강 요청) - 화면에서 보고 있는 제품을 현장에서
+                바로 대조하거나 공유할 수 있어야 한다. 값 자체는 로그인 없이 열리는
+                /p/{publicUuid} 주소이고, 그 페이지의 공개 범위는 서버가 정한다. */}
+            {!passportModalLoading && passportModalQr ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '18px', padding: '4px 0 16px', borderBottom: '1px solid rgba(16,32,64,.07)', marginBottom: '4px' }}>
+              <img src={passportModalQr} alt="공개 여권 QR" width="120" height="120" style={{ flex: 'none', borderRadius: '12px', border: '1px solid rgba(16,32,64,.08)' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', minWidth: '0' }}>
+                <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>공개 여권 QR</span>
+                <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC', wordBreak: 'break-all', lineHeight: '1.5' }}>{passportModalUrl}</span>
+                <button onClick={copyPassportUrl} style={{ alignSelf: 'flex-start', height: '30px', padding: '0 12px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>주소 복사</button>
+              </div>
+            </div>
+            ) : null}
             {passportModalLoading ? (
               <div style={{ padding: '40px 0', textAlign: 'center', fontSize: '13.5px', color: '#8494AC' }}>불러오는 중…</div>
             ) : passportModalError ? (
@@ -2120,6 +2140,31 @@ export default function AppView(v) {
           <div style={{ padding: '14px 26px 20px', borderTop: '1px solid rgba(16,32,64,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
             <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{passportModalHiddenNote}</span>
             <button onClick={closePassportModal} style={{ height: '42px', padding: '0 20px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer', flex: 'none' }}>닫기</button>
+          </div>
+        </div>
+      </div>
+      </>) : null}
+
+      {txModalOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '92', display: 'grid', placeItems: 'center', padding: '40px' }}>
+        <div onClick={closeTxModal} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.55)' }}></div>
+        <div style={{ position: 'relative', width: '560px', maxWidth: '100%', background: '#fff', borderRadius: '20px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#0045A9' }}>블록체인 트랜잭션</span>
+            <span style={{ fontSize: '18px', fontWeight: '700' }}>{txModalAction}</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '86px 1fr', rowGap: '8px', columnGap: '12px', fontSize: '12.5px' }}>
+            <span style={{ color: '#8494AC' }}>시각 (UTC)</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', color: '#0B1B33' }}>{txModalAt}</span>
+            <span style={{ color: '#8494AC' }}>행위자</span><span style={{ color: '#44546F' }}>{txModalActor}</span>
+            <span style={{ color: '#8494AC' }}>대상</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', color: '#44546F', wordBreak: 'break-all' }}>{txModalTarget}</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px 16px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)' }}>
+            <span style={{ fontSize: '11.5px', color: '#6B7A93' }}>트랜잭션 해시</span>
+            <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#0B1B33', wordBreak: 'break-all', lineHeight: '1.7' }}>{txModalHash}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <button onClick={copyTxHash} style={{ height: '40px', padding: '0 16px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '11px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>해시 복사</button>
+            <button onClick={closeTxModal} style={{ height: '40px', padding: '0 18px', border: '0', borderRadius: '11px', background: '#0045A9', fontSize: '13px', fontWeight: '600', color: '#fff', cursor: 'pointer' }}>닫기</button>
           </div>
         </div>
       </div>
