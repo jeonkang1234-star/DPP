@@ -147,8 +147,14 @@ public class DashboardService {
         }
 
         double average = summaries.isEmpty() ? 0.0 : Math.round(completenessSum / summaries.size() * 100) / 100.0;
-        long zkpPending = zkpProofRepository.countByDppIdInAndStatus(dppIds, "REQUESTED");
-        long zkpRejected = zkpProofRepository.countByDppIdInAndStatus(dppIds, "REJECTED");
+        // 유형별 "가장 마지막 증명"만 센다 - 반려된 문서를 고쳐서 다시 올려 통과해도
+        // 예전 REJECTED 행이 남아 "조건 미달 반려 1"이 사라지지 않던 버그를 막는다
+        // (2026-08-23 강 지적, 자세한 사정은 ZkpProofRepository 주석 참고).
+        // dppIds가 비면 네이티브 쿼리의 IN ()이 문법 오류가 되므로 여기서 먼저 끊는다.
+        long zkpPending = dppIds.isEmpty() ? 0L
+                : zkpProofRepository.countLatestByDppIdInAndStatus(dppIds, "REQUESTED");
+        long zkpRejected = dppIds.isEmpty() ? 0L
+                : zkpProofRepository.countLatestByDppIdInAndStatus(dppIds, "REJECTED");
 
         return new DashboardResponse(summaries.size(), newThisMonthCount, incompleteCount, average, summaries, missingFields,
                 zkpPending, zkpRejected);
