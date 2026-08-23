@@ -385,19 +385,23 @@ export function useAppLogic(userProps) {
    */
   useEffect(() => {
     if (state.view !== 'app' || !orgData || !orgData.orgType) return;
-    const correct = orgData.orgType === 'CUSTOMS' ? 'customs'
-      : orgData.orgType === 'EU_AUTHORITY' ? 'eu'
-      : orgData.orgType === 'MANUFACTURER'
-        ? (orgData.domain === 'BATTERY' ? 'battery' : orgData.domain === 'TEXTILE' ? 'textile' : 'steel')
-        : ['RAW_SUPPLIER', 'TEST_LAB', 'RECYCLER', 'LOGISTICS', 'DISTRIBUTOR'].includes(orgData.orgType) ? 'partner'
-        : null;
+    const correct = roleFromOrg(orgData.orgType, orgData.domain);
     if (!correct || correct === state.role) return;
     // 제조사는 승인받은 다른 도메인으로 화면을 바꿀 수 있다(도메인 확장, 2026-08-22).
     // 그 경우 role은 steel <-> battery <-> textile 사이를 오가므로, 여기서 주력 도메인으로
     // 되돌리면 선택 자체가 불가능해진다. 허용 목록 안에 있으면 그대로 둔다.
-    const allowedRoles = (myDomainsData?.allowedDomains || [])
-      .map((d) => (d.code === 'BATTERY' ? 'battery' : d.code === 'TEXTILE' ? 'textile' : 'steel'));
-    if (allowedRoles.includes(state.role)) return;
+    //
+    // 단 이 예외는 org_type이 MANUFACTURER일 때만이다(2026-08-23 강 리포트 "협력사 계정으로
+    // 로그인했는데 제조사처럼 리다이렉트된다"). V29__org_domain_grant.sql이 모든 조직의
+    // domain을 APPROVED로 백필했기 때문에, 협력사 조직도 domain='STEEL' 승인을 갖고 있다.
+    // 그래서 협력사가 어떤 이유로든 role='steel'로 착지하면 allowedRoles에 'steel'이 있어
+    // 교정이 통째로 스킵됐고, 제조사 화면에 그대로 갇혔다. 도메인 확장은 제조사만의
+    // 개념이므로 조건을 그렇게 좁힌다.
+    if (orgData.orgType === 'MANUFACTURER') {
+      const allowedRoles = (myDomainsData?.allowedDomains || [])
+        .map((d) => (d.code === 'BATTERY' ? 'battery' : d.code === 'TEXTILE' ? 'textile' : 'steel'));
+      if (allowedRoles.includes(state.role)) return;
+    }
     saveSession({ ...(loadSession() || {}), role: correct, at: Date.now() });
     setState({ role: correct, tab: firstTab(correct), notifOpen: false, dppOpen: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -726,6 +730,26 @@ export function useAppLogic(userProps) {
   }
 
   function firstTab(r) { return r === 'eu' ? 'registry' : r === 'personal' ? 'scans' : r === 'customs' ? 'clearance' : r === 'partner' ? 'assigned' : 'dash'; }
+
+  /**
+   * organization.org_type(+domain) -> 화면 역할. 서버의 LoginResponse.appRoleOf와 같은 표다.
+   *
+   * 이 함수를 따로 둔 이유(2026-08-23 강 리포트 "협력사 계정으로 로그인했는데 제조사처럼
+   * 리다이렉트된다"): 로그인 착지와 세션 교정이 각자 자기 매핑을 갖고 있었고, 로그인 쪽은
+   * appRole이 null이면 곧바로 'steel'로 떨어뜨렸다. 서버가 org_type을 분류하지 못한
+   * 계정은 그 순간 무조건 제조사 화면으로 갔다는 뜻이다. 이제 두 곳이 같은 함수를 쓰고,
+   * 로그인 응답에 함께 오는 orgType/domain으로 클라이언트에서 한 번 더 시도한다.
+   */
+  function roleFromOrg(orgType, domain) {
+    if (!orgType) return null;
+    if (orgType === 'CUSTOMS') return 'customs';
+    if (orgType === 'EU_AUTHORITY') return 'eu';
+    if (orgType === 'MANUFACTURER') {
+      return domain === 'BATTERY' ? 'battery' : domain === 'TEXTILE' ? 'textile' : 'steel';
+    }
+    if (['RAW_SUPPLIER', 'TEST_LAB', 'RECYCLER', 'LOGISTICS', 'DISTRIBUTOR'].includes(orgType)) return 'partner';
+    return null;
+  }
 
   function say(msg) {
     setState({ toast: msg });
@@ -1261,7 +1285,15 @@ export function useAppLogic(userProps) {
           // 제조사 화면이 떴다(2026-08-22 강 리포트). appRole이 없을 때만(조직 유형 미지정
           // 계정) 기존 휴리스틱으로 폴백한다.
           const heuristic = roleFromEmail(email);
+          // appRole -> 응답의 orgType/domain으로 직접 계산 -> mock 매핑표 -> 마지막에야 steel.
+          // 예전엔 appRole이 없으면 곧장 'steel'이라, 협력사·세관처럼 서버가 역할을 못 준
+          // 계정이 전부 제조사 화면으로 착지했다(2026-08-23 강 리포트).
+          const fromOrg = roleFromOrg(res.orgType, res.domain);
+          if (!res.appRole) {
+            console.warn('[login] 서버가 appRole을 주지 않았다', { orgType: res.orgType, domain: res.domain, fallback: fromOrg });
+          }
           const role = res.appRole
+            || fromOrg
             || (res.accountType === 'ADMIN' ? 'admin' : (heuristic && heuristic !== 'personal' ? heuristic : 'steel'));
           go(role, { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType });
         } catch (err) {
