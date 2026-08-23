@@ -489,11 +489,16 @@ public class FieldFormService {
         if (dpp.getModelId() == null) {
             return;
         }
-        String fieldValue = fieldValueRepository
-                .findByDppIdAndFieldCode(dpp.getDppId(), ProductNaming.nameFieldCode(dpp.getDomain()))
-                .map(DppFieldValue::getValueText)
-                .orElse(null);
-        String resolved = ProductNaming.firstRealName(fieldValue, dpp.getDisplayName());
+        // 제품명(MODEL_NAME)을 먼저 보고, 없으면 도메인별 대체 필드(철강이면 강종) 순
+        // (2026-08-23 강 요청 - QR 제목이 강종으로 뜨던 문제).
+        List<String> candidates = new ArrayList<>();
+        for (String code : ProductNaming.nameFieldCodes(dpp.getDomain())) {
+            candidates.add(fieldValueRepository.findByDppIdAndFieldCode(dpp.getDppId(), code)
+                    .map(DppFieldValue::getValueText)
+                    .orElse(null));
+        }
+        candidates.add(dpp.getDisplayName());
+        String resolved = ProductNaming.firstRealName(candidates.toArray(new String[0]));
         if (resolved == null) {
             return;
         }
@@ -522,9 +527,19 @@ public class FieldFormService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "승인되지 않은 도메인입니다. 마이페이지에서 도메인 확장을 신청해 주세요.");
         }
-        String nameFieldCode = ProductNaming.nameFieldCode(domain);
         String placeholder = ProductNaming.placeholder(domain);
-        String nameValue = values != null ? values.get(nameFieldCode) : null;
+        // 첫 임시저장에서도 제품명 칸을 먼저 본다 - 여기서 자리표시자가 박히면 그 뒤로
+        // syncModelName 이 고쳐줄 때까지 목록·QR에 "미입력 철강 제품"이 남는다.
+        String nameValue = null;
+        if (values != null) {
+            for (String code : ProductNaming.nameFieldCodes(domain)) {
+                String v = values.get(code);
+                if (v != null && !v.isBlank()) {
+                    nameValue = v;
+                    break;
+                }
+            }
+        }
 
         ProductModel model = new ProductModel();
         model.setOrgId(orgId);

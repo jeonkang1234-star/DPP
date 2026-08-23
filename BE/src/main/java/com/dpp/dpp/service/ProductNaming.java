@@ -1,5 +1,6 @@
 package com.dpp.dpp.service;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -21,8 +22,25 @@ final class ProductNaming {
     private ProductNaming() {
     }
 
-    /** 도메인별로 "제품명"에 가장 가까운 필드. 아직 제품 선택 UI가 없어서 이걸로 대신한다. */
-    static String nameFieldCode(String domain) {
+    /**
+     * 제품명으로 쓸 필드 코드 - 앞에 있는 것부터 본다.
+     *
+     * 2026-08-23 강 요청("QR 찍었을 때 맨 위에 강종 말고 제품명"). 그전까지는 도메인별
+     * 대체 필드(철강이면 STEEL_GRADE) 하나만 봤다. 그래서 사용자가 '제품명'(MODEL_NAME)
+     * 칸에 "과천제철 S355JR 열연코일"이라고 적어도 QR 화면 제목은 "S355JR"이었다 -
+     * MODEL_NAME 은 requirement_field 에 필수 항목으로 있는데 자바 코드 어디에서도
+     * 읽히지 않는 죽은 필드였다.
+     *
+     * 이제 MODEL_NAME 을 먼저 보고, 비어 있을 때만 도메인별 대체 필드로 내려간다.
+     * 대체 필드를 지우지 않는 이유: MODEL_NAME 이 필수가 되기 전에 만들어진 DPP는 그
+     * 값이 없어서, 강종이라도 보여주는 편이 빈칸보다 낫다.
+     */
+    static List<String> nameFieldCodes(String domain) {
+        return List.of("MODEL_NAME", domainNameFieldCode(domain));
+    }
+
+    /** 도메인별로 "제품명"에 가장 가까운 대체 필드. MODEL_NAME 이 비었을 때만 쓴다. */
+    static String domainNameFieldCode(String domain) {
         if (domain == null) {
             return "STEEL_GRADE";
         }

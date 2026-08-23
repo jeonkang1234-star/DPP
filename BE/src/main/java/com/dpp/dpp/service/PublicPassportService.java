@@ -214,8 +214,21 @@ public class PublicPassportService {
      */
     private String resolveProductName(ProductModel model, Dpp dpp, Map<String, String> values) {
         String modelName = model != null ? model.getModelName() : null;
-        String fieldValue = values.get(ProductNaming.nameFieldCode(dpp.getDomain()));
-        String resolved = ProductNaming.firstRealName(modelName, fieldValue, dpp.getDisplayName());
+        // 2026-08-23 강 요청("QR 맨 위에 강종 말고 제품명"). 순서를 바꿨다 - 예전엔
+        // product_model.model_name 을 가장 먼저 믿었는데, 그 값은 도메인별 대체 필드
+        // (철강이면 강종 S355JR)로 채워져 있어서 사용자가 제품명 칸에 뭘 적든 QR 제목이
+        // 강종이었다. 이제 제품명(MODEL_NAME) 필드값이 있으면 그게 언제나 이긴다.
+        //
+        // 이미 발급된 DPP도 여기서 바로잡힌다 - model_name 컬럼을 고치지 않아도 읽는
+        // 쪽에서 dpp_field_value 를 먼저 보기 때문이다(V33 이 컬럼도 같이 채우지만,
+        // 마이그레이션을 못 돌린 환경에서도 QR 화면은 맞게 나와야 한다).
+        List<String> candidates = new ArrayList<>();
+        for (String code : ProductNaming.nameFieldCodes(dpp.getDomain())) {
+            candidates.add(values.get(code));
+        }
+        candidates.add(modelName);
+        candidates.add(dpp.getDisplayName());
+        String resolved = ProductNaming.firstRealName(candidates.toArray(new String[0]));
         return resolved != null ? resolved : modelName;
     }
 
