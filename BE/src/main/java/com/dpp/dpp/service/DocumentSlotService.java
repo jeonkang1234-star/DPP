@@ -163,7 +163,8 @@ public class DocumentSlotService {
             List<DocumentSlotDto> draftSlots = draftFields.stream()
                     .map(f -> new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.getLabelEn(),
                             f.isRequired(), "NOT_UPLOADED", null, null,
-                            Boolean.TRUE.equals(draftZkpTargetByDocType.get(f.getLinkedDocType()))))
+                            Boolean.TRUE.equals(draftZkpTargetByDocType.get(f.getLinkedDocType())),
+                            f.getResponsibleRole()))
                     .toList();
             return new DocumentFormResponse(null, draftSlots);
         }
@@ -194,7 +195,8 @@ public class DocumentSlotService {
                     boolean zkpTarget = Boolean.TRUE.equals(zkpTargetByDocType.get(f.getLinkedDocType()));
                     return new DocumentSlotDto(f.getFieldCode(), f.getLinkedDocType(), f.getLabelKo(), f.getLabelEn(),
                             f.isRequired(), status, doc == null ? null : doc.getDocumentId(),
-                            doc == null ? null : doc.getFileName(), zkpTarget);
+                            doc == null ? null : doc.getFileName(), zkpTarget,
+                            f.getResponsibleRole());
                 })
                 .toList();
 

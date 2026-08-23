@@ -64,7 +64,7 @@ public class PasswordAuthService {
 
     @Transactional
     public LoginResponse login(String email, String rawPassword) {
-        UserAccount user = userAccountRepository.findByEmail(email)
+        UserAccount user = userAccountRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."));
 

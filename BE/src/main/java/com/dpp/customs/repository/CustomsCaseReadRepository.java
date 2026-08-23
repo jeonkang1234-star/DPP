@@ -42,11 +42,32 @@ public interface CustomsCaseReadRepository extends Repository<CustomsClearance, 
             + "ORDER BY ds.version_no DESC LIMIT 1", nativeQuery = true)
     List<Object[]> findLatestAnchor(@Param("dppId") Long dppId);
 
-    /** doc_type_code 하나에 대해 승인 완료(review_status=APPROVED)된 문서 건수 - MODEL 단위 문서(기술문서/DoC 등). */
-    @Query(value = "SELECT COUNT(*) FROM document "
-            + "WHERE owner_type = 'MODEL' AND owner_id = :modelId AND doc_type_code = :docTypeCode "
-            + "AND review_status = 'APPROVED' AND deleted_at IS NULL", nativeQuery = true)
-    long countApprovedDocuments(@Param("modelId") Long modelId, @Param("docTypeCode") String docTypeCode);
+    /**
+     * doc_type_code 하나에 대해 승인 완료(review_status='APPROVED')된 문서 건수.
+     *
+     * 2026-08-23 강 리포트("문서를 올렸는데도 세관에서 '승인된 문서가 없습니다'로 뜬다").
+     * 원인은 owner_type 불일치였다. 이 쿼리는 owner_type='MODEL'만 봤는데, 실제 업로드
+     * 경로는 전부 owner_type='DPP', owner_id=dpp_id로 저장한다(DocumentIngestService와
+     * DocumentSlotService 둘 다). 그래서 이 카운트는 구조적으로 항상 0이었고, 적합성
+     * 판정은 무엇을 올리든 실패했다.
+     *
+     * 세 가지를 모두 센다:
+     *   - MODEL 단위 문서(모델 전체에 걸리는 기술문서/DoC 등, 향후 경로)
+     *   - 이 DPP에 직접 올린 문서(현재 모든 업로드가 여기로 들어온다)
+     *   - 같은 모델의 다른 DPP에 올린 문서(document.owner_type 코멘트의 "배치 단위 문서
+     *     1건이 DPP 다수에 상속됨"을 실제로 구현하는 부분)
+     */
+    @Query(value = "SELECT COUNT(*) FROM document d "
+            + "WHERE d.doc_type_code = :docTypeCode "
+            + "AND d.review_status = 'APPROVED' AND d.deleted_at IS NULL "
+            + "AND ( (d.owner_type = 'MODEL' AND d.owner_id = :modelId) "
+            + "   OR (d.owner_type = 'DPP' AND d.owner_id = :dppId) "
+            + "   OR (d.owner_type = 'DPP' AND d.owner_id IN "
+            + "        (SELECT dp.dpp_id FROM dpp dp WHERE dp.model_id = :modelId AND dp.deleted_at IS NULL)) )",
+            nativeQuery = true)
+    long countApprovedDocuments(@Param("modelId") Long modelId,
+                                 @Param("dppId") Long dppId,
+                                 @Param("docTypeCode") String docTypeCode);
 
     /** SVHC 0.1중량% 초과 함유로 신고된 조성 건수. */
     @Query(value = "SELECT COUNT(*) FROM material_composition "

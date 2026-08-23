@@ -187,7 +187,7 @@ public class SnsAuthService {
         // SNS 프로필 이메일이 이미 다른 계정(주로 기업 이메일/비밀번호 계정)에 쓰이고 있으면
         // user_account.email 유니크 제약에 걸려 500이 난다. 미리 확인해서 이해 가능한 메시지로 막는다.
         // (계정 연동은 아직 지원하지 않음 - TODO)
-        if (normalizedEmail != null && userAccountRepository.existsByEmail(normalizedEmail)) {
+        if (normalizedEmail != null && userAccountRepository.existsByEmailAndDeletedAtIsNull(normalizedEmail)) {
             throw new IllegalStateException(
                     "이미 다른 방식으로 가입된 이메일(" + normalizedEmail + ")입니다. 기업 계정이라면 이메일/비밀번호로 로그인해 주세요.");
         }

@@ -43,12 +43,21 @@ public class DppRegistryService {
         this.dppRegistrySearchRepository = dppRegistrySearchRepository;
     }
 
+    /**
+     * q(자유 검색어) + orgName/hsCode(개별 필터)를 AND로 겹쳐 조회한다.
+     * 셋 다 비면 최신 발급 목록 - 예전 recent()와 같은 결과다.
+     * 빈 문자열로 정규화해서 넘기는 이유는 DppRegistrySearchRepository.search 주석 참고.
+     */
     @Transactional(readOnly = true)
-    public List<DppSearchResultDto> search(Long userId, String query) {
+    public List<DppSearchResultDto> search(Long userId, String query, String orgName, String hsCode) {
         requireRegulatorAccess(userId);
-        String q = query == null ? "" : query.trim();
-        List<Object[]> rows = q.isEmpty() ? dppRegistrySearchRepository.recent() : dppRegistrySearchRepository.search(q);
-        return rows.stream().map(this::toDto).toList();
+        return dppRegistrySearchRepository
+                .search(norm(query), norm(orgName), norm(hsCode))
+                .stream().map(this::toDto).toList();
+    }
+
+    private String norm(String v) {
+        return v == null ? "" : v.trim();
     }
 
     private DppSearchResultDto toDto(Object[] row) {

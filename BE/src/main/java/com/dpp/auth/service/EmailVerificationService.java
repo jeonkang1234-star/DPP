@@ -59,7 +59,7 @@ public class EmailVerificationService {
      */
     @Transactional
     public String requestCode(String email) {
-        if (userAccountRepository.existsByEmail(email)) {
+        if (userAccountRepository.existsByEmailAndDeletedAtIsNull(email)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 가입된 이메일입니다.");
         }
 

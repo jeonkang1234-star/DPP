@@ -117,6 +117,7 @@ public class InvitationService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP에 접근할 권한이 없습니다.");
         }
         String roleCode = resolveRoleCode(request.roleCode());
+        requireRegisteredPartnerEmail(email);
 
         Invitation invitation = new Invitation();
         invitation.setInviterOrgId(orgId);
@@ -143,28 +144,26 @@ public class InvitationService {
      * 조용히 리턴 - 알림이 여러 번 쌓이는 걸 막는다.
      */
     private void linkIfAlreadyRegistered(Invitation invitation) {
-        UserAccount existing = userAccountRepository.findByEmail(invitation.getInviteeEmail()).orElse(null);
+        UserAccount existing = userAccountRepository.findByEmailAndDeletedAtIsNull(invitation.getInviteeEmail()).orElse(null);
         if (existing == null || existing.getOrgId() == null) {
             return;
         }
-        boolean newlyLinked = false;
-
         DppParticipant participant = participantRepository
                 .findByDppIdAndGuestEmailAndRoleCode(invitation.getDppId(), invitation.getInviteeEmail(), invitation.getRoleCode())
                 .orElse(null);
         if (participant != null && participant.getOrgId() == null) {
             participant.setOrgId(existing.getOrgId());
             participantRepository.save(participant);
-            newlyLinked = true;
         }
 
-        if (!"ACCEPTED".equals(invitation.getStatus())) {
-            invitation.setStatus("ACCEPTED");
-            invitation.setAcceptedOrgId(existing.getOrgId());
-            invitation.setAcceptedAt(OffsetDateTime.now());
-            invitationRepository.save(invitation);
-            newlyLinked = true;
-        }
+        // 2026-08-23 강 리포트 "초대를 보내자마자 수락 상태로 바뀐다".
+        // 예전엔 여기서 곧바로 status='ACCEPTED', accepted_at=now()로 넘겼다. 조직 연결과
+        // 알림 발송이 목적이었는데 상태까지 같이 바꿔버린 것이 잘못이었다 - 협력사는
+        // 아무것도 수락한 적이 없고, 화면상 "보내자마자 수락됨"으로 보였다.
+        // 수락으로 넘어가는 지점은 두 곳뿐이다:
+        //   - 초대받은 사람이 가입을 완료할 때(BusinessSignupService.linkPendingCollaborations)
+        //   - 이미 가입된 협력사가 그 DPP에 실제로 자료를 제출할 때(markAcceptedOnSubmit)
+        // 여기서는 org_id 연결과 알림만 한다.
 
         // 알림은 newlyLinked와 무관하게 항상 남긴다(2026-08-21 강 리포트 "초대를 보냈는데
         // 알림이 안 온다"). 예전엔 "이번 초대로 participant.org_id가 처음 연결됐거나
@@ -199,6 +198,58 @@ public class InvitationService {
                     + roleLabel(invitation.getRoleCode()) + " 제출을 요청했습니다. '참여 DPP' 탭에서 확인해 주세요.");
             notification.setLinkUrl("/partner/assigned");
             notificationRepository.save(notification);
+        }
+    }
+
+    /**
+     * 초대 이메일은 반드시 "시스템에 등록된 계정의 이메일"이어야 한다(2026-08-23 강 요청).
+     *
+     * 예전엔 아무 문자열이나 받았다. 오타가 나면 초대 행과 dpp_participant 행은 만들어지고
+     * 메일도 그 주소로 나가지만, 그 이메일로 가입한 계정이 없으니 아무도 그 초대를 볼 수
+     * 없다 - 제조사 화면에는 "발송됨"으로 남아서 뭐가 잘못됐는지 알 방법이 없었다.
+     * 조용히 허공에 뜨는 것보다 그 자리에서 막는 쪽이 낫다.
+     *
+     * 트레이드오프: 아직 가입하지 않은 신규 협력사를 초대해서 가입시키는 흐름은 쓸 수 없다.
+     * 그 흐름이 필요해지면 "미등록 이메일 허용" 옵션을 요청에 추가하는 방식으로 되살릴 것.
+     */
+    private void requireRegisteredPartnerEmail(String email) {
+        UserAccount account = userAccountRepository.findByEmailAndDeletedAtIsNull(email).orElse(null);
+        if (account == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "시스템에 등록된 협력사 이메일이 아닙니다. 협력사가 가입할 때 사용한 이메일을 정확히 입력해 주세요.");
+        }
+        if (account.getOrgId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "이 계정은 아직 소속 조직이 없습니다. 협력사 가입 승인이 끝난 뒤 초대해 주세요.");
+        }
+    }
+
+    /**
+     * 협력사가 그 DPP에 실제로 자료를 제출하면 그때 초대를 수락으로 넘긴다
+     * (2026-08-23). 초대 -> 대기 -> (제출) -> 수락 순서가 실제 일어난 일과 일치한다.
+     * 제출 처리 자체를 막으면 안 되므로 실패해도 조용히 넘어간다.
+     */
+    /*
+     * @Transactional을 달지 않는다 - 항상 호출부(ParticipantSubmitStatusService.refresh)의
+     * 트랜잭션에 참여한다. try/catch로 감싸지도 않는다: 같은 트랜잭션 안에서 나는 예외는
+     * 잡아도 하이버네이트가 이미 rollback-only로 표시해서 커밋 시점에 다시 터진다
+     * (2026-08-22 audit_log 사고에서 확인한 함정 - 잡아서 "안전해 보이게" 만드는 게 오히려
+     * 원인 추적을 어렵게 한다). 여기서 하는 일은 방금 읽은 행의 단순 UPDATE뿐이고
+     * status='ACCEPTED'는 CHECK 제약이 허용하는 값이라 실패할 여지가 사실상 없다.
+     */
+    public void markAcceptedOnSubmit(Long dppId, Long partnerOrgId) {
+        if (dppId == null || partnerOrgId == null) {
+            return;
+        }
+        for (UserAccount member : userAccountRepository.findByOrgId(partnerOrgId)) {
+            for (Invitation inv : invitationRepository.findByDppIdAndInviteeEmail(dppId, member.getEmail())) {
+                if ("SENT".equals(inv.getStatus())) {
+                    inv.setStatus("ACCEPTED");
+                    inv.setAcceptedOrgId(partnerOrgId);
+                    inv.setAcceptedAt(OffsetDateTime.now());
+                    invitationRepository.save(inv);
+                }
+            }
         }
     }
 
