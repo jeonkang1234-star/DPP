@@ -85,21 +85,6 @@ export default function AppView(v) {
     dppPct,
     dppSpec,
     dppStatusChip,
-    dppCanRequestClearance,
-    openClearanceRequest,
-    closeClearanceRequest,
-    crOpen,
-    crImportCountryCode,
-    onCrImportCountryCode,
-    crImporterName,
-    onCrImporterName,
-    crImporterAddress,
-    onCrImporterAddress,
-    crImporterEori,
-    onCrImporterEori,
-    crDeclaredHsCode,
-    onCrDeclaredHsCode,
-    submitClearanceRequest,
     ecoCarbon,
     ecoCarbonUnit,
     ecoRecycled,
@@ -1950,33 +1935,6 @@ export default function AppView(v) {
                 <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>{dppPct === 100 ? 'QR을 스캔하면 이 DPP의 조회 화면으로 바로 연결됩니다.' : '발급 완료(완성도 100%) 후 QR이 자동으로 생성됩니다.'}</span>
               </span>
             </div>
-
-            {dppCanRequestClearance ? (<>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '13px', padding: '18px', borderRadius: '16px', background: '#FBFCFE', border: '1px solid rgba(16,32,64,.08)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: '700' }}>통관 신청</span>
-                  <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>수입국을 선언하면 수출/수입 관할 세관에 이 DPP가 심사 대기 건으로 배정됩니다.</span>
-                </span>
-                {!crOpen ? (<button onClick={openClearanceRequest} style={{ height: '38px', padding: '0 16px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '11px', background: '#fff', color: '#0045A9', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>신청하기</button>) : null}
-              </div>
-              {crOpen ? (<>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>수입국</span><input value={crImportCountryCode} onChange={onCrImportCountryCode} placeholder="독일" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px' }} /></label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>신고 HS 코드</span><input value={crDeclaredHsCode} onChange={onCrDeclaredHsCode} placeholder="7208.39" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-                </div>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>수입업체명</span><input value={crImporterName} onChange={onCrImporterName} placeholder="Nordwerk GmbH" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>수입업체 주소</span><input value={crImporterAddress} onChange={onCrImporterAddress} placeholder="독일 뒤스부르크 · Hafenstraße 22" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#44546F' }}>EORI 번호(선택)</span><input value={crImporterEori} onChange={onCrImporterEori} placeholder="DE7412880033100" style={{ height: '42px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', fontSize: '13px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                  <button onClick={closeClearanceRequest} style={{ height: '38px', padding: '0 16px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '11px', background: '#fff', color: '#44546F', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }}>취소</button>
-                  <button onClick={submitClearanceRequest} style={{ height: '38px', padding: '0 18px', border: '0', borderRadius: '11px', background: '#0045A9', color: '#fff', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>신청 제출</button>
-                </div>
-              </div>
-              </>) : null}
-            </div>
-            </>) : null}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <span style={{ fontSize: '14px', fontWeight: '700' }}>생애주기 진행상태</span>
