@@ -1,0 +1,9 @@
+{
+  "network-configs": {
+    "dpp-network": {
+      "name": "IEUM DPP Network",
+      "profile": "./connection-profile/dpp-network.json"
+    }
+  },
+  "license": "Apache-2.0"
+}
