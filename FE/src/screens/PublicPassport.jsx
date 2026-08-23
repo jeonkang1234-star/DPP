@@ -39,7 +39,7 @@ export default function PublicPassport() {
   }, [publicUuid]);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F7F9FD', display: 'flex', justifyContent: 'center', padding: '40px 16px', fontFamily: "'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif" }}>
+    <div style={{ minHeight: '100vh', background: '#F7F9FD', display: 'flex', justifyContent: 'center', padding: '40px 16px', overflowX: 'hidden', fontFamily: "'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif" }}>
       <div style={{ width: '100%', maxWidth: '520px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ width: '28px', height: '28px', borderRadius: '8px', background: '#0045A9', display: 'grid', placeItems: 'center', color: '#fff', fontSize: '13px', fontWeight: '700' }}>D</span>
@@ -60,9 +60,9 @@ export default function PublicPassport() {
             <span style={{ textAlign: 'center', color: '#C22B2B', fontSize: '14px', fontWeight: '600' }}>{state.error}</span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '14px', borderRadius: '12px', background: '#F7F9FD' }}>
               <span style={{ fontSize: '11.5px', color: '#6B7A93' }}>조회한 서버</span>
-              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12.5px', color: '#0B1B33', wordBreak: 'break-all' }}>{window.location.origin}</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12.5px', color: '#0B1B33', overflowWrap: 'anywhere' }}>{window.location.origin}</span>
               <span style={{ fontSize: '11.5px', color: '#6B7A93', marginTop: '6px' }}>DPP 식별자</span>
-              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12.5px', color: '#0B1B33', wordBreak: 'break-all' }}>{publicUuid}</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '12.5px', color: '#0B1B33', overflowWrap: 'anywhere' }}>{publicUuid}</span>
             </div>
             <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.7' }}>
               이 서버에 해당 DPP가 없습니다. DPP를 발급한 화면의 주소와 위 주소가 다르다면,
@@ -80,8 +80,8 @@ export default function PublicPassport() {
                 <span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#12A150' }} />
                 발급 완료
               </span>
-              <span style={{ fontSize: '22px', fontWeight: '700', color: '#0B1B33' }}>{state.data.modelName || '(제품명 미입력)'}</span>
-              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '13px', color: '#8494AC' }}>{state.data.internalSku}</span>
+              <span style={{ fontSize: '22px', fontWeight: '700', color: '#0B1B33', overflowWrap: 'anywhere' }}>{state.data.modelName || '(제품명 미입력)'}</span>
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '13px', color: '#8494AC', overflowWrap: 'anywhere' }}>{state.data.internalSku}</span>
               <div style={{ display: 'flex', gap: '16px', fontSize: '12.5px', color: '#6B7A93', paddingTop: '4px', borderTop: '1px solid rgba(16,32,64,.06)', marginTop: '6px', flexWrap: 'wrap' }}>
                 <span>도메인 {state.data.domain}</span>
                 <span>발급일 {state.data.issuedAtDate}</span>
@@ -96,16 +96,21 @@ export default function PublicPassport() {
               {(state.data.fields || []).length === 0 ? (
                 <span style={{ fontSize: '12.5px', color: '#8494AC' }}>공개된 항목이 없습니다.</span>
               ) : (state.data.fields || []).map((f, i) => (
+                /* 2026-08-23 강 리포트(모바일): URL처럼 공백 없는 긴 값이 줄바꿈되지
+                   않고 한 줄로 뻗어 화면을 깼다. 라벨은 flex:'none'이라 절대 줄지 않고,
+                   값 쪽에는 줄바꿈 규칙이 아예 없었다. 라벨은 줄어들 수 있게, 값은
+                   overflowWrap:'anywhere'로 어디서든 끊기게 한다. flex 자식은 기본
+                   min-width:auto라 minWidth:0을 같이 줘야 실제로 줄어든다. */
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '10px 0', borderBottom: i === state.data.fields.length - 1 ? 'none' : '1px solid rgba(16,32,64,.06)' }}>
                   {/* 2026-08-22 강 요청: 「법정필수」 배지 삭제. T0/T1 구분은 데이터를
                       채우는 제조사에게 필요한 정보이고, QR로 제품을 보는 소비자·세관에겐
                       항목 이름과 값만 있으면 된다. */}
-                  <span style={{ fontSize: '12.5px', color: '#8494AC', flex: 'none' }}>{f.labelKo}</span>
+                  <span style={{ fontSize: '12.5px', color: '#8494AC', flex: '0 1 auto', minWidth: '0', overflowWrap: 'anywhere' }}>{f.labelKo}</span>
                   {/* 영업비밀 항목은 값 대신 "한계값 충족" 증명 결과만 온다(proofLabel).
                       값이 비어 있는데 라벨만 뜨는 게 아니라, 무엇이 검증됐는지가 보여야 한다. */}
                   {f.value != null && f.value !== ''
-                    ? (<span style={{ fontSize: '13px', fontWeight: '600', color: '#0B1B33', textAlign: 'right' }}>{f.value}</span>)
-                    : (<span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: '600', color: '#0E7A3D', textAlign: 'right' }}>
+                    ? (<span style={{ fontSize: '13px', fontWeight: '600', color: '#0B1B33', textAlign: 'right', minWidth: '0', overflowWrap: 'anywhere' }}>{f.value}</span>)
+                    : (<span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '12px', fontWeight: '600', color: '#0E7A3D', textAlign: 'right', minWidth: '0', overflowWrap: 'anywhere' }}>
                          <span style={{ width: '6px', height: '6px', borderRadius: '999px', background: '#12A150' }} />
                          {f.proofLabel}
                        </span>)}
@@ -114,12 +119,12 @@ export default function PublicPassport() {
             </div>
 
             {qr ? (
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', alignItems: 'center', gap: '18px' }}>
+            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', alignItems: 'center', gap: '18px', flexWrap: 'wrap' }}>
               <img src={qr} alt="이 제품 여권의 QR" width="128" height="128" style={{ flex: 'none', borderRadius: '12px', border: '1px solid rgba(16,32,64,.08)' }} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', minWidth: '0' }}>
                 <span style={{ fontSize: '13px', fontWeight: '600', color: '#44546F' }}>제품 여권 QR</span>
                 <span style={{ fontSize: '12px', color: '#8494AC', lineHeight: '1.6' }}>휴대폰으로 스캔하면 이 화면이 그대로 열립니다.</span>
-                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', color: '#B7C0D1', wordBreak: 'break-all', lineHeight: '1.5' }}>{window.location.href}</span>
+                <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: '11px', color: '#B7C0D1', overflowWrap: 'anywhere', lineHeight: '1.5' }}>{window.location.href}</span>
               </div>
             </div>
             ) : null}
