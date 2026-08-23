@@ -61,27 +61,12 @@ export function dppVals(ctx) {
   const qrImg = done === 100 ? (state.dppQrCache && state.dppQrCache[displayId]) : null;
   const qrPending = done === 100 && !qrImg && !!(state.dppQrPending && state.dppQrPending[displayId]);
 
-  // --- 통관 신청 (2026-08-19 강 요청 "세관 실 데이터로 연결" - 세관 큐가 채워지려면
-  // 누군가는 "이 DPP를 어느 나라로 수출한다"를 실제로 선언해야 한다. 발급 완료(100%)된
-  // DPP에서만 열 수 있다. 수출국은 여기서 입력받지 않는다 - 서버(CustomsClearanceService)가
-  // 내 조직의 country_code에서 그대로 가져가므로 신청자가 임의로 바꿀 수 없다. ---
-  const cr = state.clearanceRequest || {};
-  const crOpen = !!cr.open && cr.dppId === id;
-  const submitClearanceRequest = () => {
-    if (!cr.importCountryCode || !cr.importCountryCode.trim()) { ctx.say('수입국을 입력해 주세요.'); return; }
-    if (!cr.importerName || !cr.importerName.trim()) { ctx.say('수입업체명을 입력해 주세요.'); return; }
-    ctx.requestCustomsClearance({
-      dppId: id,
-      importCountryCode: cr.importCountryCode.trim(),
-      importerName: cr.importerName.trim(),
-      importerAddress: (cr.importerAddress || '').trim(),
-      importerEori: (cr.importerEori || '').trim(),
-      declaredHsCode: (cr.declaredHsCode || '').trim(),
-    }).then((res) => {
-      setState({ clearanceRequest: null });
-      ctx.say('통관 신청을 접수했습니다. 관할 세관 ' + (res && res.createdCount != null ? res.createdCount : '') + '건에 배정되었습니다.');
-    }).catch((err) => ctx.say(err.message || '통관 신청에 실패했습니다.'));
-  };
+  // 통관 신청 UI는 삭제했다(2026-08-23 강 요청 "어차피 안 쓰니까"). 세관 심사 큐는
+  // 이 화면에서 손으로 신청하지 않아도 채워진다 - 발급 시점에 서버가 자동으로 접수한다
+  // (CustomsClearanceService.autoCreateOnIssue, V24 마이그레이션 주석 참고). 그래서
+  // 제조사가 수입국·수입업체를 다시 입력하는 이 폼은 하는 일이 겹쳤다.
+  // /me/clearance-requests 엔드포인트와 meApi.requestCustomsClearance는 남겨둔다 -
+  // 수입국을 실제로 골라야 하는 흐름이 생기면 화면만 다시 붙이면 된다.
 
   return {
     dppOpen: state.dppOpen,
@@ -115,21 +100,5 @@ export function dppVals(ctx) {
       }
     })),
 
-    // --- 통관 신청 모달 ---
-    dppCanRequestClearance: done === 100,
-    openClearanceRequest: () => setState({ clearanceRequest: { open: true, dppId: id, declaredHsCode: '' } }),
-    closeClearanceRequest: () => setState({ clearanceRequest: null }),
-    crOpen,
-    crImportCountryCode: cr.importCountryCode || '',
-    onCrImportCountryCode: (e) => setState({ clearanceRequest: { ...cr, importCountryCode: e.target.value } }),
-    crImporterName: cr.importerName || '',
-    onCrImporterName: (e) => setState({ clearanceRequest: { ...cr, importerName: e.target.value } }),
-    crImporterAddress: cr.importerAddress || '',
-    onCrImporterAddress: (e) => setState({ clearanceRequest: { ...cr, importerAddress: e.target.value } }),
-    crImporterEori: cr.importerEori || '',
-    onCrImporterEori: (e) => setState({ clearanceRequest: { ...cr, importerEori: e.target.value.toUpperCase() } }),
-    crDeclaredHsCode: cr.declaredHsCode || '',
-    onCrDeclaredHsCode: (e) => setState({ clearanceRequest: { ...cr, declaredHsCode: e.target.value } }),
-    submitClearanceRequest,
   };
 }
