@@ -97,4 +97,17 @@ public class UserAccount {
     private OffsetDateTime updatedAt = OffsetDateTime.now();
     // 주의: updated_at은 DB 트리거(fn_touch_updated_at)가 UPDATE 시 서버에서 덮어씀.
     // 여기서 설정하는 값은 INSERT 시점 초기값일 뿐, UPDATE 이후 실제 값과는 갱신 시점에 어긋날 수 있음.
+
+    /**
+     * 소프트 삭제 시각. 컬럼은 V1__schema.sql부터 있었지만 이 엔티티에는 매핑돼 있지
+     * 않았다(2026-08-23에 추가). 그래서 Spring Data가 existsByEmailAndDeletedAtIsNull /
+     * findByEmailAndDeletedAtIsNull 같은 파생 쿼리를 만들지 못하고
+     * "No property 'deletedAt' found for type 'UserAccount'"로 앱이 부팅 자체에
+     * 실패했다 - 컴파일은 통과하고 런타임에만 터지는 종류라 빌드로는 안 잡힌다.
+     *
+     * ux_user_email / ux_user_login_id / ux_user_sns 세 유니크 인덱스가 모두
+     * `WHERE deleted_at IS NULL` 부분 인덱스이므로, 조회도 이 값을 봐야 스키마 의도와 맞는다.
+     */
+    @Column(name = "deleted_at")
+    private OffsetDateTime deletedAt;
 }
