@@ -125,6 +125,27 @@ public class OrganizationService {
                 : organizationRepository.findByCountryCodeAndBizRegNoAndDeletedAtIsNull(countryCode, bizRegNoOrNull);
         if (existing.isPresent()) {
             Organization joined = existing.get();
+
+            // 2026-08-23 강 리포트("협력사로 가입했는데 제조사 화면이 뜬다")의 실제 원인.
+            // 같은 사업자등록번호를 넣으면 "같은 회사의 다른 담당자"로 보고 그 조직에
+            // 합류시키는데, 그때 가입 화면에서 고른 계정 유형은 조용히 무시됐다. 그래서
+            // 제조사로 등록된 번호로 '협력사'를 골라 가입하면 org_type이 MANUFACTURER인
+            // 조직에 들어가 제조사 화면을 보게 됐다 - 사용자 입장에선 버그로 보이지만
+            // 서버는 데이터대로 동작한 것이다.
+            //
+            // 조직 유형은 회사의 속성이지 가입자가 고르는 값이 아니므로, 기존 조직을
+            // 덮어쓰지 않는다. 대신 어긋나면 그 자리에서 막고 이유를 정확히 알려준다 -
+            // 조용히 다른 유형으로 만들어 버리는 것보다 낫다.
+            String requestedType = (orgType == null || orgType.isBlank()) ? null : orgType.trim().toUpperCase();
+            if (requestedType != null && joined.getOrgType() != null
+                    && !requestedType.equals(joined.getOrgType())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "이미 등록된 사업자등록번호입니다. 이 번호는 '" + joined.getOrgName() + "'("
+                                + orgTypeLabel(joined.getOrgType()) + ")로 등록되어 있어 "
+                                + orgTypeLabel(requestedType) + "(으)로는 가입할 수 없습니다. "
+                                + "다른 회사라면 그 회사의 사업자등록번호로 가입해 주세요.");
+            }
+
             log.info("기존 조직에 합류: org_id={}, countryCode={}, bizRegNo={}, approvalStatus={}",
                     joined.getOrgId(), countryCode, bizRegNoOrNull, joined.getApprovalStatus());
             // 아직 승인 전인 조직에 다시 가입하는 경우엔 이번에 낸 서류로 자동심사를 한 번 더
@@ -335,6 +356,20 @@ public class OrganizationService {
         }
 
         return OrganizationResponse.of(organizationRepository.save(org));
+    }
+
+    /** org_type 코드를 가입 화면에서 쓰는 말로. 에러 메시지에서만 쓴다. */
+    private static String orgTypeLabel(String orgType) {
+        if (orgType == null) return "미지정";
+        return switch (orgType) {
+            case "MANUFACTURER" -> "제조사";
+            case "RAW_SUPPLIER" -> "협력사";
+            case "TEST_LAB" -> "시험·인증기관";
+            case "RECYCLER" -> "재활용 처리업체";
+            case "CUSTOMS" -> "세관";
+            case "EU_AUTHORITY" -> "시장감독기관";
+            default -> orgType;
+        };
     }
 
     private Organization requireOrg(Long userId) {
