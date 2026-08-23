@@ -14,7 +14,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, fetchNotificationCategories, fetchNotifications,
+import { fetchMe, fetchScans, deleteScan, searchProducts, recordScan, fetchNotificationCategories, fetchNotifications,
   markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, requestCustomsClearance, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
   // 도메인 확장(2026-08-22) - 마이페이지 신청 / 관리자 심사 / DPP 생성 도메인 선택기.
   fetchMyDomains, requestDomainGrant, fetchDomainGrants, approveDomainGrant, rejectDomainGrant,
@@ -182,6 +182,14 @@ export function useAppLogic(userProps) {
   const [batteryCarbonResult, setBatteryCarbonResult] = useState(null);
   const [recyclingResult, setRecyclingResult] = useState(null);
   const [scansData, setScansData] = useState([]);
+  // 개인 회원 제품 검색(2026-08-23 강 요청) - 제품명·브랜드로 찾아서 공개 여권(QR과 같은
+  // 화면)으로 바로 넘어가고, 그 열람이 아래 scansData(최근 5건)에 쌓인다.
+  // searched는 "아직 검색 안 함"과 "검색했는데 0건"을 구분하기 위한 플래그 - 이게 없으면
+  // 화면 처음 진입부터 "검색 결과가 없습니다"가 떠 있다.
+  const [productQuery, setProductQuery] = useState('');
+  const [productResults, setProductResults] = useState([]);
+  const [productSearching, setProductSearching] = useState(false);
+  const [productSearched, setProductSearched] = useState(false);
   const [invitesData, setInvitesData] = useState([]);
   const [participationsData, setParticipationsData] = useState([]);
   const [notifCatsData, setNotifCatsData] = useState([]);
@@ -684,6 +692,52 @@ export function useAppLogic(userProps) {
     timer.current = setTimeout(() => setState({ toast: '' }), 2600);
   }
 
+  /**
+   * 개인 회원 제품 검색(2026-08-23 강 요청) - 제품명·브랜드로만 찾는다.
+   * BE가 2자 미만이면 빈 배열을 주지만, 여기서 먼저 막아서 "왜 아무것도 안 나오지"를 없앤다.
+   *
+   * 이 함수와 openPublicPassport는 반드시 컴포넌트 본문에 두고 아래 ctx에도 넣어야 한다 -
+   * renderVals() 안쪽에만 두면 viewModels에서 ctx.xxx로 못 부른다(2026-08-21 goToLink 사고).
+   */
+  async function runProductSearch() {
+    const q = (productQuery || '').trim();
+    if (q.length < 2) {
+      say('제품명 또는 브랜드를 2자 이상 입력해 주세요.');
+      return;
+    }
+    setProductSearching(true);
+    try {
+      const rows = await searchProducts(q);
+      setProductResults(rows || []);
+      setProductSearched(true);
+    } catch (err) {
+      say(err.message || '검색에 실패했습니다.');
+    } finally {
+      setProductSearching(false);
+    }
+  }
+
+  /**
+   * 공개 여권 열람 - QR을 휴대폰으로 찍었을 때와 완전히 같은 화면(/p/{publicUuid})으로 보낸다.
+   * 개인 회원에게 별도의 상세 화면을 주지 않는 이유: 공개 여권이 이미 "로그인 없이 보여줄 수
+   * 있는 범위"로 잘려 있어서, 개인 회원 열람 범위로 그대로 쓸 수 있다.
+   *
+   * 이동 전에 조회 기록을 남기지만, 기록 저장이 실패해도 열람은 막지 않는다.
+   */
+  async function openPublicPassport(publicUuid) {
+    const uuid = String(publicUuid || '').trim();
+    if (!uuid) return;
+    try {
+      const saved = await recordScan(uuid);
+      if (saved) {
+        setScansData((prev) => [saved, ...(prev || []).filter((x) => x.passportCode !== saved.passportCode)].slice(0, 5));
+      }
+    } catch {
+      // 기록 실패는 조용히 넘긴다 - 사용자가 원한 건 제품을 보는 것이다.
+    }
+    navigate('/p/' + uuid);
+  }
+
   /** 로그아웃 시 앱 내부 상태를 초기값으로 되돌립니다 (URL 이동은 MyPage 가 담당). */
   function resetSession() {
     setFieldFormData(null);
@@ -897,11 +951,29 @@ export function useAppLogic(userProps) {
           failed: sc.status === 'FAILED',
           statusIconStyle: { display: 'grid', placeItems: 'center', flex: 'none', color: sc.status === 'VERIFIED' ? '#12A150' : sc.status === 'UPDATED' ? '#0045A9' : '#C22B2B' },
           rowStyle: { display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: 12, padding: '13px 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' },
-          open: () => setState({ tab: 'passport', pubId: sc.passportCode })
+          // 예전엔 목데이터 화면(tab:'passport')으로 보냈다. 이제 실제 공개 여권으로 보낸다 -
+          // 기록에 남은 passportCode가 곧 public_uuid다(2026-08-23).
+          open: () => openPublicPassport(sc.passportCode)
         };
       }),
-      scanQr: () => say('QR 스캐너를 실행했습니다.'),
       scansEmpty: (scansData || []).length === 0,
+      // --- 개인 회원 제품 검색(제품명·브랜드) ---
+      scanSearchQ: productQuery,
+      setScanSearchQ: (v) => setProductQuery(v),
+      runScanSearch: runProductSearch,
+      scanSearchBusy: productSearching,
+      scanSearchDone: productSearched,
+      scanSearchClear: () => { setProductQuery(''); setProductResults([]); setProductSearched(false); },
+      scanResultsEmpty: productSearched && (productResults || []).length === 0,
+      scanResults: (productResults || []).map((r, i) => ({
+        key: r.publicUuid || i,
+        name: r.productName || '(제품명 없음)',
+        brand: r.brandName || '—',
+        maker: r.makerName || '—',
+        issued: r.issuedAtDate || '—',
+        rowStyle: { display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: 12, padding: '13px 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' },
+        open: () => openPublicPassport(r.publicUuid)
+      })),
       ...passportVals(ctx),
       scClearance: s.role === 'customs' && s.tab === 'clearance',
       scClearLog: s.role === 'customs' && s.tab === 'clearlog',
