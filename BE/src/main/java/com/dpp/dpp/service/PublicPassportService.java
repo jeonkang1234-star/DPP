@@ -170,7 +170,7 @@ public class PublicPassportService {
         return new PublicPassportResponse(
                 true,
                 model != null ? model.getInternalSku() : null,
-                model != null ? model.getModelName() : null,
+                resolveProductName(model, dpp, values),
                 dpp.getDomain(),
                 dpp.getIssuedAt().toLocalDate().format(DATE_FORMAT),
                 List.copyOf(visible),
@@ -179,6 +179,27 @@ public class PublicPassportService {
                 viewerRole,
                 viewerLabel(viewerRole)
         );
+    }
+
+    /**
+     * 공개 여권에 띄울 제품명.
+     *
+     * product_model.model_name은 예전엔 DPP를 처음 임시저장하는 순간에만 정해졌고,
+     * 그때 제품명 칸이 비어 있으면 "미입력 철강 제품" 같은 자리표시자가 그대로 남았다.
+     * 나중에 제품명을 채워도 그 값은 dpp_field_value로만 들어가서, QR로 열면 언제나
+     * "미입력 ..."이 보였다(2026-08-23 강 지적). FieldFormService.syncModelName이
+     * 이제 저장할 때마다 model_name을 다시 맞추지만, 그 수정 전에 발급된 DPP는 여전히
+     * 자리표시자를 들고 있다. 그래서 읽는 쪽에서도 한 번 더 대체 이름을 찾는다.
+     *
+     * 순서는 (1) 자리표시자가 아닌 model_name, (2) 도메인별 제품명 필드 값,
+     * (3) 소유 조직이 붙인 DPP 이름. 전부 없으면 마지막에 model_name을 그대로 준다
+     * (자리표시자라도 화면이 완전히 비는 것보다는 낫다).
+     */
+    private String resolveProductName(ProductModel model, Dpp dpp, Map<String, String> values) {
+        String modelName = model != null ? model.getModelName() : null;
+        String fieldValue = values.get(ProductNaming.nameFieldCode(dpp.getDomain()));
+        String resolved = ProductNaming.firstRealName(modelName, fieldValue, dpp.getDisplayName());
+        return resolved != null ? resolved : modelName;
     }
 
     /**

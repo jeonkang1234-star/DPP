@@ -227,6 +227,7 @@ public class FieldFormService {
         }
 
         upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode());
+        syncModelName(dpp);
         recalc(dpp.getDppId());
         if (!access.owner()) {
             participantSubmitStatusService.refresh(dpp, orgId, access.participantRoleCode());
@@ -451,6 +452,45 @@ public class FieldFormService {
         return user.getOrgId();
     }
 
+    /**
+     * product_model.model_name을 제품명 칸의 최신 값으로 다시 맞춘다.
+     *
+     * 예전에는 createDraftDpp(첫 임시저장) 한 번만 model_name을 썼다. 그 시점에 제품명
+     * 칸이 비어 있으면 "미입력 철강 제품" 같은 자리표시자가 박히고, 사용자가 그 다음
+     * 저장에서 제품명을 채워도 그 값은 dpp_field_value에만 들어갔다. 공개 여권(QR)은
+     * product_model.model_name을 읽으니 QR로 보면 영원히 "미입력 ..."이었다
+     * (2026-08-23 강 지적 "QR로 확인했을 때 DPP 이름 대신 미입력~으로 뜬다").
+     *
+     * 그래서 저장할 때마다 여기서 다시 맞춘다. 우선순위는 (1) 도메인별 제품명 필드 값,
+     * (2) 소유 조직이 붙인 DPP 이름(display_name). 둘 다 없으면 기존 값을 그대로 둔다 -
+     * 실제 이름이 이미 들어 있는 걸 자리표시자로 되돌리는 일은 없어야 한다.
+     *
+     * 협력사 저장에서도 부르지만, 제품명 필드는 소유 조직 담당이라 협력사 요청으로는
+     * 값이 바뀌지 않는다(upsertValues가 담당 필드만 저장한다). 여기서 하는 일은 DB에
+     * 이미 저장된 값을 읽어 반영하는 것뿐이라 권한 문제가 생기지 않는다.
+     */
+    private void syncModelName(Dpp dpp) {
+        if (dpp.getModelId() == null) {
+            return;
+        }
+        String fieldValue = fieldValueRepository
+                .findByDppIdAndFieldCode(dpp.getDppId(), ProductNaming.nameFieldCode(dpp.getDomain()))
+                .map(DppFieldValue::getValueText)
+                .orElse(null);
+        String resolved = ProductNaming.firstRealName(fieldValue, dpp.getDisplayName());
+        if (resolved == null) {
+            return;
+        }
+        productModelRepository.findById(dpp.getModelId()).ifPresent(model -> {
+            String current = model.getModelName();
+            if (resolved.equals(current)) {
+                return;
+            }
+            model.setModelName(trimTo(resolved, 200));
+            productModelRepository.save(model);
+        });
+    }
+
     // 새 DPP 발급 화면은 기존 제품(product_model)을 고르는 UI가 아직 없어서, 첫 임시저장
     // 시점에 product_model 1건 + dpp 1건을 함께 만든다. model_name은 도메인별로 가장 제품명에
     // 가까운 필드(철강=STEEL_GRADE, 섬유=FABRIC_TYPE, 배터리=BATTERY_MODEL_NO)로 채우고,
@@ -466,16 +506,8 @@ public class FieldFormService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "승인되지 않은 도메인입니다. 마이페이지에서 도메인 확장을 신청해 주세요.");
         }
-        String nameFieldCode = switch (domain) {
-            case "TEXTILE" -> "FABRIC_TYPE";
-            case "BATTERY" -> "BATTERY_MODEL_NO";
-            default -> "STEEL_GRADE";
-        };
-        String placeholder = switch (domain) {
-            case "TEXTILE" -> "미입력 섬유 제품";
-            case "BATTERY" -> "미입력 배터리 제품";
-            default -> "미입력 철강 제품";
-        };
+        String nameFieldCode = ProductNaming.nameFieldCode(domain);
+        String placeholder = ProductNaming.placeholder(domain);
         String nameValue = values != null ? values.get(nameFieldCode) : null;
 
         ProductModel model = new ProductModel();
