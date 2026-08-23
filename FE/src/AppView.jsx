@@ -332,6 +332,7 @@ export default function AppView(v) {
     saveDraft,
     resetSession,
     scAdminDash,
+    adminLoadErrorLabel,
     scApprove,
     scAudit,
     scClearance,
@@ -708,6 +709,12 @@ export default function AppView(v) {
 
         {scAdminDash ? (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+          {adminLoadErrorLabel ? (<>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', borderRadius: '14px', background: 'rgba(224,59,59,.07)', border: '1px solid rgba(224,59,59,.20)' }}>
+            <span style={{ width: '22px', height: '22px', flex: 'none', borderRadius: '999px', background: '#E03B3B', display: 'grid', placeItems: 'center', color: '#fff', fontSize: '13px', fontWeight: '700' }}>!</span>
+            <span style={{ fontSize: '13px', color: '#C22B2B', fontWeight: '600' }}>운영 지표를 불러오지 못했습니다 — {adminLoadErrorLabel} (자세한 원인은 서버 로그를 확인하세요)</span>
+          </div>
+          </>) : null}
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>운영 대시보드</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', maxWidth: '560px', height: '52px', padding: '0 8px 0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>

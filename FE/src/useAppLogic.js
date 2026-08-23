@@ -146,6 +146,10 @@ export function useAppLogic(userProps) {
   // KST") 대신 실제로 이 데이터를 받아온 시각을 보여준다.
   const [adminDashboardData, setAdminDashboardData] = useState(null);
   const [adminDashboardFetchedAt, setAdminDashboardFetchedAt] = useState(null);
+  // /admin/dashboard 호출 실패를 더 이상 조용히 삼키지 않는다(2026-08-23). 예전엔
+  // catch(()=>{})로 버려서, 서버가 500을 내면 화면엔 그냥 전부 '—'로 보이고 원인은
+  // 아무 데도 안 남았다 - 같은 증상으로 두 번 헤맸다.
+  const [adminDashboardError, setAdminDashboardError] = useState(null);
   // 관리자 "회원 관리" 표(GET /admin/members) - 마찬가지로 ADMIN 전용, 그 외엔 null 유지.
   const [adminMembersData, setAdminMembersData] = useState(null);
   // 세관 통관 큐(GET /customs/queue) - org_type=CUSTOMS 계정이 아니면 403으로 null 유지.
@@ -320,7 +324,15 @@ export function useAppLogic(userProps) {
     // EU_AUTHORITY/CUSTOMS org_type이거나 ADMIN이 아니면 403 - 마찬가지로 조용히 무시.
     searchDppRegistry('').then((res) => { if (alive) setEuRegistryData(res || []); }).catch(() => {});
     // ADMIN 계정이 아니면 403 - 관리자 대시보드 KPI/회원 목록도 마찬가지로 조용히 무시.
-    fetchAdminDashboard().then((res) => { if (alive) { setAdminDashboardData(res); setAdminDashboardFetchedAt(new Date()); } }).catch(() => {});
+    fetchAdminDashboard()
+      .then((res) => { if (alive) { setAdminDashboardData(res); setAdminDashboardFetchedAt(new Date()); setAdminDashboardError(null); } })
+      .catch((err) => {
+        // 403(= ADMIN 계정이 아님)은 정상 흐름이라 조용히 넘긴다. 그 외(특히 500)는
+        // 화면에 남겨서 "데이터가 없음"과 "불러오지 못함"을 구분할 수 있게 한다.
+        if (!alive || err?.status === 403) return;
+        console.error('[admin] /admin/dashboard 실패', err);
+        setAdminDashboardError(err?.message || '운영 지표를 불러오지 못했습니다.');
+      });
     fetchAdminMembers().then((res) => { if (alive) setAdminMembersData(res || []); }).catch(() => {});
     // 세관(org_type=CUSTOMS) 계정이 아니면 403 - 마찬가지로 조용히 무시.
     fetchCustomsQueue(false).then((res) => { if (alive) setCustomsQueueData(res || []); }).catch(() => {});
@@ -837,14 +849,17 @@ export function useAppLogic(userProps) {
     // ADMIN이 아니면 계속) 빈 배열로 둔다 - mock으로 되돌아가지 않는다("real data over
     // fake" 원칙, 2026-08-19 강 요청).
     const admin = adminDashboardData;
-    const anchorSeq = admin ? admin.anchorSparkline14d : [];
+    const anchorSeq = (admin && admin.anchorSparkline14d) || [];
     // "유형별 문의"도 mock(data.json inquiries: 계정·인증 140건 / Tier 심사 78건 ...)을
     // 버리고 /admin/dashboard의 실집계(notification category='INQUIRY', 최근 30일,
     // sub_type별)로 바꿨다(2026-08-20 강 요청). 문의 접수 기능이 아직 없어서 지금은
     // 항상 빈 배열이고, 화면은 그대로 "접수된 문의가 없습니다"를 보여준다 - 없는 숫자를
     // 지어내지 않는 게 이 코드베이스 원칙이다. Tier 심사 유형은 BE 쿼리에서 제외된다.
-    const inqData = admin ? admin.inquiriesByType : [];
+    const inqData = (admin && admin.inquiriesByType) || [];
     const adminMembersList = adminMembersData || [];
+    // 지표 하나가 실패하면 BE가 그 값만 null로 내려준다(AdminDashboardService.safe) -
+    // 여기서 null을 '—'로 바꿔서, 나머지 지표는 정상 표시되게 한다.
+    const num = (v) => (v == null ? '—' : Number(v).toLocaleString());
     const adminAnchorOk = !!(admin && admin.lastAnchoredMinutesAgo != null && admin.lastAnchoredMinutesAgo < 60 * 24);
     const adminLastAnchoredLabel = !admin || admin.lastAnchoredMinutesAgo == null
       ? '기록 없음'
@@ -1001,12 +1016,12 @@ export function useAppLogic(userProps) {
       adminLastAnchoredLabel,
       adminLastAnchorBlockLabel: admin && admin.lastAnchorBlockNo != null ? `#${admin.lastAnchorBlockNo.toLocaleString()}` : '—',
       adminAnchorSuccessLabel: admin && admin.anchorSuccessRate30d != null ? `${admin.anchorSuccessRate30d}%` : '집계 없음',
-      adminTotalUsersLabel: admin ? admin.totalUsers.toLocaleString() : '—',
-      adminUserBreakdownLabel: admin ? `기업 ${admin.businessUsers.toLocaleString()} · 개인 ${admin.personalUsers.toLocaleString()}` : '',
-      adminTotalDppsLabel: admin ? admin.totalDpps.toLocaleString() : '—',
-      adminDppBreakdownLabel: admin ? `철강 ${admin.steelDpps.toLocaleString()} · 배터리 ${admin.batteryDpps.toLocaleString()} · 섬유 ${admin.textileDpps.toLocaleString()}` : '',
-      adminPendingCountLabel: admin ? `처리 대기 ${admin.pendingApprovalCount.toLocaleString()}건` : '처리 대기 —',
-      adminPendingBadge: admin ? admin.pendingApprovalCount.toLocaleString() : '—',
+      adminTotalUsersLabel: admin ? num(admin.totalUsers) : '—',
+      adminUserBreakdownLabel: admin ? `기업 ${num(admin.businessUsers)} · 개인 ${num(admin.personalUsers)}` : '',
+      adminTotalDppsLabel: admin ? num(admin.totalDpps) : '—',
+      adminDppBreakdownLabel: admin ? `철강 ${num(admin.steelDpps)} · 배터리 ${num(admin.batteryDpps)} · 섬유 ${num(admin.textileDpps)}` : '',
+      adminPendingCountLabel: admin ? `처리 대기 ${num(admin.pendingApprovalCount)}건` : '처리 대기 —',
+      adminPendingBadge: admin ? num(admin.pendingApprovalCount) : '—',
       adminRefreshedAtLabel: adminDashboardFetchedAt ? `최근 갱신 ${fmtDateTime(adminDashboardFetchedAt.toISOString())}` : '',
       // 막대 길이는 최다 유형을 100%로 놓고 상대 비교한다. 예전 mock 시절엔 pct*2.6이라는
       // 고정 배율이었는데(최대값이 34%인 걸 전제로 눈대중으로 맞춘 수), 실데이터에서
@@ -1017,7 +1032,8 @@ export function useAppLogic(userProps) {
           style: bar(max > 0 ? Math.round(q.count * 100 / max) : 0, '#0045A9') }));
       })(),
       inquiriesEmpty: inqData.length === 0,
-      inquiryTotalLabel: admin ? `최근 30일 · ${admin.inquiryTotal30d.toLocaleString()}건` : '최근 30일 · —',
+      inquiryTotalLabel: admin ? `최근 30일 · ${num(admin.inquiryTotal30d)}건` : '최근 30일 · —',
+      adminLoadErrorLabel: adminDashboardError || '',
       members: adminMembersList.map((m) => ({
         key: m.orgId, name: m.orgName, biz: m.bizRegNo, joined: m.joinedDate, country: m.countryCode,
         domain: m.domainLabel, held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),

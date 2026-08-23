@@ -279,7 +279,11 @@ export function makerVals(ctx) {
   // 그 경우도 실데이터 분기를 그대로 타서 "0건/빈 목록"으로 정직하게 보여준다(가짜 숫자로
   // 안 채움). 목데이터로 폴백하는 건 dashboardData 자체가 아직 도착 전(null)이거나
   // 요청이 실패했을 때뿐.
-  const dash = ctx.dashboardData;
+  // dpps 배열까지 확인한다(2026-08-23). dash가 truthy이기만 하면 dash.dpps.map을 부르던
+  // 코드라, /me/dashboard가 예상과 다른 모양(빈 배열 등)을 돌려주면 그 자리에서 TypeError가
+  // 나고 앱 전체가 흰 화면이 됐다 - makerVals는 역할과 무관하게 항상 실행되므로 관리자
+  // 화면까지 같이 죽는다. 모양이 아니면 목데이터 폴백으로 내려간다.
+  const dash = ctx.dashboardData && Array.isArray(ctx.dashboardData.dpps) ? ctx.dashboardData : null;
   const completenessRows = dash
     ? dash.dpps.map(d => {
         const done = Math.round(d.completeness);
@@ -445,7 +449,9 @@ export function makerVals(ctx) {
     kpiNewBadgeStyle: ctx.badgeText3d('#0E7A3D'),
     kpiActionBadgeStyle: ctx.badgeText3d('#C22B2B'),
     kpiIncomplete: dash ? dash.incompleteCount : kpi[2],
-    kpiMissing: dash ? dash.missingFields.length : kpi[3],
+    // (dash.missingFields || []) - dpps와 같은 이유의 방어(2026-08-23). 이 한 줄 때문에
+    // 앱 전체가 흰 화면이 되면 안 된다.
+    kpiMissing: dash ? (dash.missingFields || []).length : kpi[3],
     kpiWaiting: dash ? 0 : kpi[4],
     kpiAvg: dash ? Math.round(dash.averageCompleteness) : kpi[5],
     kpiAvgBar: ctx.bar(dash ? Math.round(dash.averageCompleteness) : kpi[5], '#0045A9'),
