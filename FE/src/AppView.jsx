@@ -346,6 +346,14 @@ export default function AppView(v) {
     scScans,
     scans,
     scansEmpty,
+    scanSearchQ,
+    setScanSearchQ,
+    runScanSearch,
+    scanSearchBusy,
+    scanSearchDone,
+    scanSearchClear,
+    scanResults,
+    scanResultsEmpty,
     searchRegistry,
     sendInvite,
     setBatch,
@@ -1427,15 +1435,43 @@ export default function AppView(v) {
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', whiteSpace: 'nowrap' }}>제품 조회 기록</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', maxWidth: '460px', height: '52px', padding: '0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
               <span style={{ width: '14px', height: '14px', border: '1.8px solid #9AA8BE', borderRadius: '8px', flex: 'none' }}></span>
-              <input placeholder="제품명 · 브랜드 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
+              <input value={scanSearchQ || ''} onChange={(e) => setScanSearchQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') runScanSearch(); }} placeholder="제품명 · 브랜드 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
             </div>
+            <button onClick={runScanSearch} disabled={!!scanSearchBusy} style={{ height: '52px', padding: '0 22px', border: '0', borderRadius: '16px', background: scanSearchBusy ? '#9AA8BE' : '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: scanSearchBusy ? 'default' : 'pointer', flex: 'none' }}>{scanSearchBusy ? '검색 중…' : '검색'}</button>
           </div>
+          {scanSearchDone ? (<>
           <div style={{ width: '100%', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <span style={{ fontSize: '15px', fontWeight: '600' }}>검색 결과</span>
+              <button onClick={scanSearchClear} style={{ height: '30px', padding: '0 12px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
+            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-              <span>제품명</span><span>제조사</span><span>열람 일시</span><span>최근 갱신</span><span></span>
+              <span>제품명</span><span>브랜드</span><span>제조사</span><span>발급일</span><span></span>
+            </div>
+            {scanResultsEmpty ? (<>
+            <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>검색 결과가 없습니다. 제품명이나 브랜드를 다시 확인해 주세요.</div>
+            </>) : null}
+            {(scanResults || []).map((r) => (<React.Fragment key={r.key}>
+            <div style={r.rowStyle}>
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13.5px', fontWeight: '600' }}>{r.name}</span>
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#44546F' }}>{r.brand}</span>
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#44546F' }}>{r.maker}</span>
+              <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{r.issued}</span>
+              <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button onClick={r.open} style={{ height: '32px', padding: '0 14px', border: '0', borderRadius: '9px', background: '#0045A9', fontSize: '12px', fontWeight: '600', color: '#fff', cursor: 'pointer' }}>열람</button>
+              </span>
+            </div>
+            </React.Fragment>))}
+          </div>
+          </>) : null}
+
+          <div style={{ width: '100%', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <span style={{ fontSize: '15px', fontWeight: '600' }}>최근 조회 기록</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
+              <span>제품명</span><span>브랜드</span><span>열람 일시</span><span>최근 갱신</span><span></span>
             </div>
             {scansEmpty ? (<>
-            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>아직 조회한 제품이 없습니다. QR을 스캔하면 여기에 기록됩니다.</div>
+            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>아직 조회한 제품이 없습니다. 위에서 제품명·브랜드로 검색해 열람하면 최근 5건이 여기에 남습니다.</div>
             </>) : null}
             {(scans || []).map((p, $index) => (<React.Fragment key={$index}>
             <div style={p.rowStyle}>

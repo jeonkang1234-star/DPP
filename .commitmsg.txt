@@ -1,14 +1,15 @@
-fix(admin): 대시보드 최근 앵커링/블록 높이 KPI 복구
+feat(personal): 개인회원 제품 검색(제품명·브랜드) + 최근 조회 5건
 
-- findLatestAnchor: timestamptz를 그대로 내리는 대신 SQL에서 minutes_ago를
-  bigint로 계산. Hibernate가 Instant로 돌려줄 때 toOffsetDateTime이 조용히
-  null이 되어 '기록 없음'으로 보이던 문제 제거(성공률은 COUNT라 영향 없었음).
-- 블록 높이는 해당 행의 block_no가 아니라 MAX(block_no)= 체인 높이로 변경.
-  최신 앵커가 MOCK이면 CONFIRMED 앵커가 있어도 '-'로 보였다.
-- BlockchainClient: submitTransaction 대신 proposal/endorse/submitAsync로
-  Status.getBlockNumber()를 받아 ChainResult에 담는다. 그전까지 block_no를
-  기록하는 코드가 없어 '블록 높이'는 구조상 항상 비어 있었다.
-- 앵커 저장 13곳(문서 6종 x 2 + DPP 스냅샷)에서 setBlockNo 반영.
-- toOffsetDateTime/toLocalDate가 Instant/LocalDateTime/Date까지 받고,
-  모르는 타입은 warn 로그를 남기도록 확장(회원관리 가입일 동일 경로).
-- docker/diagnose-anchor-kpi.sql 추가.
+- GET /me/scans/search: model_name/brand만 매칭, ACTIVE DPP만, 최소 필드만 반환.
+  규제기관용 /verify/dpp/search와 분리 - 그쪽은 serial/hs_code/uuid까지 검색하고
+  검색어가 비면 최신 50건을 나열해서 개인회원에겐 레지스트리 전수 열람이 된다.
+  검색어 2자 미만이면 빈 결과(전체 나열 차단).
+- POST /me/scans: 공개 여권 열람 기록. 제품명·브랜드는 요청 본문이 아니라 DB에서
+  다시 읽는다(클라이언트가 보낸 문자열 저장 = 위조 가능). 없는 UUID는 404.
+  같은 제품 재열람은 새 행 대신 scanned_at 갱신.
+- GET /me/scans는 최근 5건만 반환(행은 유지, 응답만 자름).
+- FE: 조회 기록 화면 검색창 실연동 + 결과 목록. 열람 시 기록 저장 후
+  /p/{publicUuid}로 이동 - QR 스캔과 같은 공개 여권 화면이라 열람 범위가
+  자동으로 비로그인 공개 범위로 제한된다. 기존 기록의 열람도 동일 경로로 변경.
+- 빈 상태 문구를 검색 기준으로 수정(웹앱 내 카메라 스캔은 HTTP 환경에서 불가).
+- .gitignore에 .commitmsg.txt 추가(지난 커밋에 딸려 들어감).

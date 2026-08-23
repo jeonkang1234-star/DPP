@@ -54,3 +54,6 @@ docker/login.json
 
 # 로컬 전용 - 번들·브랜치 tar 보관함(커밋 대상 아님)
 _to_delete/
+
+# 커밋 메시지 임시 파일(PowerShell 커밋 블록) - 실수로 커밋된 적 있어서 무시 목록에 넣는다.
+.commitmsg.txt

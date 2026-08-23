@@ -79,6 +79,25 @@ export function deleteScan(scanId) {
 }
 
 /**
+ * 개인 회원 제품 검색 - 제품명·브랜드만 매칭한다(2026-08-23 강 요청).
+ * 검색어가 2자 미만이면 BE가 에러 대신 빈 배열을 준다(입력 중인 상태이므로).
+ */
+export function searchProducts(q) {
+  return authedFetch(`/me/scans/search?q=${encodeURIComponent(q || '')}`);
+}
+
+/**
+ * 공개 여권을 열람했다는 기록 남기기. 같은 제품을 다시 열면 새 행이 아니라
+ * 기존 행의 열람 일시만 갱신된다(최근 5칸을 한 제품이 다 먹지 않게).
+ */
+export function recordScan(publicUuid) {
+  return authedFetch('/me/scans', {
+    method: 'POST',
+    body: JSON.stringify({ publicUuid }),
+  });
+}
+
+/**
  * 로그인한 사용자 소속 조직(회사) 프로필. 계정에 연결된 조직이 없으면(org_id NULL)
  * BE가 400을 던진다 - 호출부에서 그 경우를 감안해서 처리할 것.
  */
