@@ -1,15 +1,15 @@
-feat(personal): 개인회원 제품 검색(제품명·브랜드) + 최근 조회 5건
+fix(admin): 지표 하나가 대시보드 전체를 지우지 않게 + 체인/ZKP 모니터링 SQL
 
-- GET /me/scans/search: model_name/brand만 매칭, ACTIVE DPP만, 최소 필드만 반환.
-  규제기관용 /verify/dpp/search와 분리 - 그쪽은 serial/hs_code/uuid까지 검색하고
-  검색어가 비면 최신 50건을 나열해서 개인회원에겐 레지스트리 전수 열람이 된다.
-  검색어 2자 미만이면 빈 결과(전체 나열 차단).
-- POST /me/scans: 공개 여권 열람 기록. 제품명·브랜드는 요청 본문이 아니라 DB에서
-  다시 읽는다(클라이언트가 보낸 문자열 저장 = 위조 가능). 없는 UUID는 404.
-  같은 제품 재열람은 새 행 대신 scanned_at 갱신.
-- GET /me/scans는 최근 5건만 반환(행은 유지, 응답만 자름).
-- FE: 조회 기록 화면 검색창 실연동 + 결과 목록. 열람 시 기록 저장 후
-  /p/{publicUuid}로 이동 - QR 스캔과 같은 공개 여권 화면이라 열람 범위가
-  자동으로 비로그인 공개 범위로 제한된다. 기존 기록의 열람도 동일 경로로 변경.
-- 빈 상태 문구를 검색 기준으로 수정(웹앱 내 카메라 스캔은 HTTP 환경에서 불가).
-- .gitignore에 .commitmsg.txt 추가(지난 커밋에 딸려 들어감).
+- AdminDashboardService: 집계마다 safe()로 독립 격리. 실패한 지표만 null이 되고
+  나머지는 정상 표시되며, 실패는 스택 트레이스까지 WARN 로그로 남는다.
+  기존엔 쿼리 하나가 던지면 응답 전체가 500 -> FE가 조용히 삼켜서(catch(()=>{}))
+  화면엔 전부 '-'로만 보였다(8/20, 8/23 두 번 같은 증상).
+- AdminDashboardResponse: 수치 long -> Long. 집계 실패에 0을 내려보내면
+  "가입자 0명"이라는 거짓말이 된다.
+- FE: /admin/dashboard 실패를 더 이상 삼키지 않는다. 403만 무시하고 500은
+  상단 빨간 배너 + console.error - "없음"과 "못 불러옴"을 구분한다.
+- FE 숫자 라벨을 null 안전하게(num 헬퍼).
+- makerVals: dash.dpps / dash.missingFields 방어. /me/dashboard 응답 모양이
+  조금만 달라도 TypeError로 앱 전체가 흰 화면이 됐고, makerVals는 역할과
+  무관하게 항상 실행돼서 관리자 화면까지 같이 죽었다.
+- docker/monitor-chain-zkp.sql 추가: 앵커 상태/실패/ZKP-앵커 조인/누락 탐지.

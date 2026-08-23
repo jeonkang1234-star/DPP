@@ -21,7 +21,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * 관리자 대시보드 KPI/회원 목록 - 예전엔 AppView.jsx에 "1,284"/"48,392"/"#8,412,930"/
@@ -48,31 +47,46 @@ public class AdminDashboardService {
         this.adminStatsRepository = adminStatsRepository;
     }
 
+    /**
+     * KPI 하나가 죽어도 나머지는 살린다.
+     *
+     * 2026-08-20과 2026-08-23, 같은 증상이 두 번 났다 - "전체 가입자 수/등록 DPP 수/앵커
+     * 상태가 전부 '—'". 두 번 다 원인은 집계 쿼리 하나가 예외를 던져서 GET /admin/dashboard
+     * 전체가 500이 된 것이었고, FE가 그 실패를 조용히 삼켜서(catch(()=>{})) 화면엔
+     * "데이터가 없다"로만 보였다. 지표 하나 때문에 대시보드 전체가 사라지는 구조 자체가
+     * 문제라서, 이제 각 집계를 독립적으로 감싼다:
+     *   - 실패한 지표만 null(화면에서 '—'), 나머지는 정상 표시
+     *   - 실패는 스택 트레이스까지 WARN 로그로 남는다(원인 추적 가능)
+     * 이건 예외를 숨기는 게 아니라, 예외의 폭발 반경을 지표 하나로 줄이는 것이다.
+     */
     @Transactional(readOnly = true)
     public AdminDashboardResponse getDashboard(Long adminUserId) {
         requireAdmin(adminUserId);
 
-        Map<String, Long> usersByType = adminStatsRepository.countUsersByAccountType().stream()
-                .collect(Collectors.toMap(r -> String.valueOf(r[0]), r -> ((Number) r[1]).longValue()));
-        long business = usersByType.getOrDefault("BUSINESS", 0L);
-        long personal = usersByType.getOrDefault("PERSONAL", 0L);
-        long adminCount = usersByType.getOrDefault("ADMIN", 0L);
-        long totalUsers = business + personal + adminCount;
+        Map<String, Long> usersByType = safe("가입자 수 집계",
+                () -> toCountMap(adminStatsRepository.countUsersByAccountType()), Map.of());
+        Long business = usersByType.get("BUSINESS");
+        Long personal = usersByType.get("PERSONAL");
+        Long adminCount = usersByType.get("ADMIN");
+        Long totalUsers = usersByType.isEmpty() ? null
+                : nz(business) + nz(personal) + nz(adminCount);
 
-        Map<String, Long> dppsByDomain = adminStatsRepository.countDppsByDomain().stream()
-                .collect(Collectors.toMap(r -> String.valueOf(r[0]), r -> ((Number) r[1]).longValue()));
-        long steel = dppsByDomain.getOrDefault("STEEL", 0L);
-        long battery = dppsByDomain.getOrDefault("BATTERY", 0L);
-        long textile = dppsByDomain.getOrDefault("TEXTILE", 0L);
-        long totalDpps = steel + battery + textile;
+        Map<String, Long> dppsByDomain = safe("도메인별 DPP 수 집계",
+                () -> toCountMap(adminStatsRepository.countDppsByDomain()), Map.of());
+        Long steel = dppsByDomain.get("STEEL");
+        Long battery = dppsByDomain.get("BATTERY");
+        Long textile = dppsByDomain.get("TEXTILE");
+        Long totalDpps = dppsByDomain.isEmpty() ? null : nz(steel) + nz(battery) + nz(textile);
 
-        long pending = adminStatsRepository.countPendingApprovals();
+        Long pending = safeOrNull("가입 승인 대기 건수",
+                () -> Long.valueOf(adminStatsRepository.countPendingApprovals()));
 
         // "몇 분 전"은 SQL이 이미 계산해서 숫자로 내려준다(AdminStatsRepository.findLatestAnchor
         // 주석 참고) - 여기서 timestamptz를 다시 자바 타입으로 변환하지 않는다.
+        Object[] latest = safeOrNull("최근 앵커링 조회",
+                () -> firstRow(adminStatsRepository.findLatestAnchor(), 2));
         Long lastAnchoredMinutesAgo = null;
         Long lastAnchorBlockNo = null;
-        Object[] latest = firstRow(adminStatsRepository.findLatestAnchor(), 2);
         if (latest != null) {
             if (latest[0] instanceof Number minutes) {
                 lastAnchoredMinutesAgo = Math.max(0L, minutes.longValue());
@@ -82,19 +96,23 @@ public class AdminDashboardService {
             }
         }
 
-        Object[] successRow = firstRow(adminStatsRepository.countAnchorSuccessRate30d(), 2);
-        long total30 = successRow == null ? 0L : toLong(successRow[0]);
-        long ok30 = successRow == null ? 0L : toLong(successRow[1]);
-        Double successRate = total30 > 0 ? Math.round(ok30 * 10000.0 / total30) / 100.0 : null;
+        Double successRate = safeOrNull("30일 앵커링 성공률", () -> {
+            Object[] successRow = firstRow(adminStatsRepository.countAnchorSuccessRate30d(), 2);
+            long total30 = successRow == null ? 0L : toLong(successRow[0]);
+            long ok30 = successRow == null ? 0L : toLong(successRow[1]);
+            return total30 > 0 ? Double.valueOf(Math.round(ok30 * 10000.0 / total30) / 100.0) : null;
+        });
 
-        List<Long> sparkline = buildSparkline(adminStatsRepository.dailyAnchorCounts14d());
+        List<Long> sparkline = safe("14일 앵커링 추이",
+                () -> buildSparkline(adminStatsRepository.dailyAnchorCounts14d()), List.of());
 
-        List<Object[]> inquiryRows = adminStatsRepository.countInquiriesByType30d();
-        long inquiryTotal = inquiryRows.stream().mapToLong(r -> ((Number) r[1]).longValue()).sum();
+        List<Object[]> inquiryRows = safe("30일 문의 유형별 집계",
+                adminStatsRepository::countInquiriesByType30d, List.of());
+        Long inquiryTotal = inquiryRows.stream().mapToLong(r -> toLong(r[1])).sum();
         List<AdminInquiryStatDto> inquiries = inquiryRows.stream()
                 .map(r -> {
                     String key = String.valueOf(r[0]);
-                    long count = ((Number) r[1]).longValue();
+                    long count = toLong(r[1]);
                     int pct = inquiryTotal > 0 ? (int) Math.round(count * 100.0 / inquiryTotal) : 0;
                     return new AdminInquiryStatDto(key, inquiryLabel(key), count, pct);
                 })
@@ -103,6 +121,45 @@ public class AdminDashboardService {
         return new AdminDashboardResponse(totalUsers, business, personal, totalDpps, steel, battery, textile,
                 pending, lastAnchoredMinutesAgo, lastAnchorBlockNo, successRate, sparkline,
                 inquiryTotal, inquiries);
+    }
+
+    /**
+     * 집계 하나를 감싸서, 실패하면 스택을 로그에 남기고 fallback을 돌려준다.
+     * 여기서 잡는 건 "이 지표를 못 구했다"뿐이다 - requireAdmin의 401/403처럼 응답 자체가
+     * 달라져야 하는 예외는 이 밖에서 던지므로 영향받지 않는다.
+     */
+    private <T> T safe(String label, java.util.function.Supplier<T> supplier, T fallback) {
+        try {
+            T value = supplier.get();
+            return value == null ? fallback : value;
+        } catch (RuntimeException e) {
+            log.warn("관리자 대시보드 지표 '{}' 집계 실패 - 이 지표만 비워둔다", label, e);
+            return fallback;
+        }
+    }
+
+    /** 실패하든 값이 없든 null이 정상인 지표용(대입 대상 타입으로 T가 결정된다). */
+    private <T> T safeOrNull(String label, java.util.function.Supplier<T> supplier) {
+        try {
+            return supplier.get();
+        } catch (RuntimeException e) {
+            log.warn("관리자 대시보드 지표 '{}' 집계 실패 - 이 지표만 비워둔다", label, e);
+            return null;
+        }
+    }
+
+    /** [키, 개수] 2컬럼 집계 결과를 Map으로. 같은 키가 두 번 나와도(이론상 없음) 죽지 않게 합산한다. */
+    private Map<String, Long> toCountMap(List<Object[]> rows) {
+        Map<String, Long> out = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            if (row == null || row.length < 2) continue;
+            out.merge(String.valueOf(row[0]), toLong(row[1]), Long::sum);
+        }
+        return out;
+    }
+
+    private long nz(Long v) {
+        return v == null ? 0L : v;
     }
 
     /**
