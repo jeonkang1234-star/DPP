@@ -108,7 +108,7 @@ _UNIT_FACTOR = {("kg", "t"): 0.001, ("g", "t"): 0.000001, ("t", "kg"): 1000.0,
                 ("g", "kg"): 0.001, ("kg", "g"): 1000.0, ("t", "g"): 1000000.0}
 # 단위 토큰은 숫자로 시작하지 않는 공백 없는 덩어리로 본다 - 'kg', '%', 'tCO2e/MWh',
 # 't/t' 처럼 안에 숫자나 슬래시가 들어가는 것까지 받으려면 첫 글자만 제한하면 된다.
-_TRAILING_UNIT = re.compile(r"^(?P<num>[-+]?[\d,]+(?:\.\d+)?)\s*(?P<unit>[^\s\d][^\s]{0,11})$")
+_TRAILING_UNIT = re.compile(r"^(?P<num>[-+]?[\d,]+(?:\.\d+)?)\s*(?P<unit>[^\s\d.][^\s]{0,11})$")
 
 
 def _clean_value(raw: str, unit) -> str:

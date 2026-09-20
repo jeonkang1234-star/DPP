@@ -227,6 +227,61 @@ def iso_certificate(path):
     demo_footer(d, "대한시험인증 주식회사 대표이사")
 
 
+
+# ── 7. 도메인 확장 - 신청서(과천제철, 배터리 진출) ─────────────────────
+#
+# 데모 흐름: 시연 대표 제조사 과천제철(사업자등록증_과천제철.pdf, 138-86-47212)이
+# 마이페이지에서 배터리 도메인 확장을 신청하며 이 문서를 첨부한다. 관리자 화면
+# iframe으로 열리므로 페이지 크기·글꼴은 다른 mock과 동일하다. (2026-08-24 강 요청)
+def gwacheon_domain_application(path):
+    d = Doc(path)
+    demo_header(d, "과천제철 주식회사", "과천제철-경영기획-2026-0824")
+    d.line("도메인 확장 신청서 (배터리)", size=19, bold=True, gap=30)
+
+    d.line("수신 : IEUM DPP 플랫폼 운영기관장", size=10.5, gap=16)
+    d.line("제목 : 디지털 제품여권 배터리 도메인 발급 권한 확장 신청", size=10.5, gap=22)
+    d.rule()
+
+    d.band("1. 신청 기업", gap=18)
+    d.line("회사명 : 과천제철 주식회사", size=10.5, gap=15)
+    d.line("사업자등록번호 : 138-86-47212", size=10.5, gap=15)
+    d.line("대표자 : 정하람", size=10.5, gap=15)
+    d.line("본사 소재지 : 경기도 과천시 과천대로 132", size=10.5, gap=15)
+    d.line("현재 보유 도메인 : 철강 (STEEL) · 2026년 07월 승인", size=10.5, gap=20)
+
+    d.band("2. 신청 도메인 및 사유", gap=18)
+    d.line("신청 도메인 : 배터리 (BATTERY)", size=10.5, bold=True, gap=16)
+    d.line("당사는 이차전지용 전지케이스·모듈 프레임 강재를 공급해 왔으며, 2026년 하반기", size=10.5, gap=15)
+    d.line("평택제철소 부지 내 이차전지 셀·모듈 제조 라인을 신설하여 배터리 완제품 사업에", size=10.5, gap=15)
+    d.line("진출하고자 합니다. 이에 따라 배터리 도메인의 DPP 발급 권한을 신청합니다.", size=10.5, gap=20)
+
+    d.band("3. 신설 설비 개요", gap=18)
+    d.line("설비 소재지 : 경기도 평택시 포승읍 포승공단로 128 (평택제철소 제3부지)", size=10.5, gap=15)
+    d.line("업종 : 일차전지 및 축전지 제조업 (표준산업분류 28202)", size=10.5, gap=15)
+    d.line("주요 생산 예정품 : 리튬이온 이차전지 셀 · ESS용 모듈", size=10.5, gap=15)
+    d.line("설비 구성 : 전극 코팅 1기 · 조립 라인 2기 · 화성 공정 1기", size=10.5, gap=15)
+    d.line("가동 예정일 : 2026년 11월 02일", size=10.5, gap=20)
+
+    d.band("4. 준수 사항", gap=18)
+    d.line("가. EU 배터리규정(EU) 2023/1542에 따른 배터리 여권 데이터 항목을 성실히 등록합니다.", size=10.5, gap=15)
+    d.line("나. 탄소발자국 선언 및 재생원료 함유율 증빙은 문서 파싱·영지식증명 절차를 따릅니다.", size=10.5, gap=15)
+    d.line("다. 승인 전 배터리 도메인으로 DPP를 발급하지 않습니다.", size=10.5, gap=20)
+
+    d.band("5. 첨부 서류", gap=18)
+    d.line("1) 공장등록증 사본 1부 (평택시청, 이차전지 제조 라인 신설)", size=10.5, gap=15)
+    d.line("2) 사업자등록증 사본 1부", size=10.5, gap=15)
+    d.line("3) 이차전지 사업 진출 계획 요약 1부", size=10.5, gap=22)
+    d.rule()
+
+    d.line("위와 같이 도메인 확장을 신청합니다.", size=10.5, gap=24)
+    d.line("2026 년 08 월 24 일", size=11, gap=22)
+    d.line("과천제철 주식회사 대표이사 정하람", size=14, bold=True, gap=30)
+    d.rule()
+    d.line("※ 본 문서는 IEUM DPP 플랫폼 데모용으로 생성된 가상의 문서입니다.", size=8.5, gap=12, color=GREY)
+    d.line("   기재된 기업·직위·성명은 모두 실존하지 않으며, 어떠한 법적 효력도 없습니다.", size=8.5, gap=12, color=GREY)
+    d.save()
+
+
 DOCS = [
     ("기관_세관_지정공문_한서세관.pdf", customs_designation),
     ("기관_세관_재직증명서_한지원.pdf", customs_employment),
@@ -234,6 +289,7 @@ DOCS = [
     ("기관_시장감독_재직증명서_윤가람.pdf", msa_employment),
     ("도메인확장_공장등록증_한빛제강-배터리.pdf", factory_registration),
     ("도메인확장_ISO9001인증서_한빛제강-섬유.pdf", iso_certificate),
+    ("도메인확장_신청서_과천제철-배터리.pdf", gwacheon_domain_application),
 ]
 
 
