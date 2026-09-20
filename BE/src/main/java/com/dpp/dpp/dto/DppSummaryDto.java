@@ -1,5 +1,6 @@
 package com.dpp.dpp.dto;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -31,6 +32,20 @@ public record DppSummaryDto(
         int requiredCount,
         String serialNumber,
         String issuedAtDate,
-        boolean needsPartnerInput
+        boolean needsPartnerInput,
+        // ── 2026-09-19 배터리 조건부 검증 / 생애주기 ──────────────────────
+        /**
+         * 생애주기 단계별 진행(v_dpp_lifecycle_status, V36). 그 단계에 귀속된 필수 항목이
+         * 다 채워지면 그 단계가 끝난 것으로 본다 - 예전엔 FE 가 "미충족 필드의 책임 역할"로
+         * 단계를 역산했는데(dppVals.js), 그건 원자재 공급사 담당 필드가 하나도 없는 DPP 를
+         * 무조건 1단계 완료로 보이게 만드는 추정이었다.
+         */
+        List<LifecycleStageDto> lifecycle,
+        /** 배터리 여권 의무 대상 여부. 배터리가 아니거나 분류 미입력이면 null. */
+        Boolean passportRequired,
+        /** 화면 배지 문구("배터리 여권 대상" 등). 배터리가 아니면 null. */
+        String complianceTrack,
+        /** 문서 파싱값과 어긋난 입력값 건수. 0보다 크면 발급이 막힌다. */
+        int crossCheckMismatchCount
 ) {
 }

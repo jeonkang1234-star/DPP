@@ -40,6 +40,19 @@ public class FieldFormController {
         return ResponseEntity.ok(fieldFormService.saveDraft(parseUserId(authentication), request));
     }
 
+    /**
+     * 문서값과 입력값이 어긋난 항목을 정리한다(2026-09-19). 정리하지 않으면 발급이 막힌다.
+     * resolution: KEEP_ENTERED=입력값 유지 / USE_PARSED=문서에서 읽은 값 채택.
+     */
+    @PostMapping("/me/field-form/{dppId}/cross-checks/{checkId}")
+    public ResponseEntity<FieldFormResponse> resolveCrossCheck(Authentication authentication,
+                                                                 @PathVariable Long dppId,
+                                                                 @PathVariable Long checkId,
+                                                                 @RequestParam String resolution) {
+        return ResponseEntity.ok(fieldFormService.resolveCrossCheck(
+                parseUserId(authentication), dppId, checkId, resolution));
+    }
+
     @PostMapping("/me/field-form/{dppId}/issue")
     public ResponseEntity<FieldFormResponse> issue(Authentication authentication, @PathVariable Long dppId) {
         return ResponseEntity.ok(fieldFormService.issue(parseUserId(authentication), dppId));

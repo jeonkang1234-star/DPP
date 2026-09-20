@@ -29,6 +29,20 @@ public record FieldFormResponse(
         int requiredCount,
         List<FieldFormItemDto> fields,
         List<FieldFormSectionDto> sections,
-        List<CodeOptionDto> codeOptions
+        List<CodeOptionDto> codeOptions,
+        // ── 2026-09-19 배터리 조건부 검증 ────────────────────────────────────
+        /**
+         * EU 2023/1542 제77조 배터리 여권 의무 대상 여부. TRUE=대상, FALSE=비대상,
+         * null=판정 보류(분류 미입력) 또는 배터리 도메인이 아님.
+         */
+        Boolean passportRequired,
+        /** 화면 배지 문구. 배터리가 아니면 null - 철강/섬유 화면엔 배지를 안 그린다. */
+        String complianceTrackLabel,
+        /** 발급을 막고 있는 필수 항목 라벨. 비어 있으면 발급 가능. */
+        List<String> issueBlockers,
+        /** 문서 파싱값과 어긋난 입력값(status=MISMATCH 포함 전체 비교 이력). */
+        List<CrossCheckDto> crossChecks,
+        /** 생애주기 단계별 진행 - 그 단계 귀속 필수 항목이 다 차면 그 단계가 끝난 것. */
+        List<LifecycleStageDto> lifecycle
 ) {
 }

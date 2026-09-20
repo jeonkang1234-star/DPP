@@ -115,4 +115,40 @@ public interface DppQueryRepository extends JpaRepository<Dpp, Long> {
 
     @Query(value = "SELECT content_hash FROM dpp_snapshot WHERE snapshot_id = :snapshotId", nativeQuery = true)
     String findSnapshotContentHash(@Param("snapshotId") Long snapshotId);
+    // ── V36 배터리 조건부 검증 / 생애주기 / 교차검증 ─────────────────────────
+
+    /**
+     * EU 2023/1542 제77조 배터리 여권 의무 대상 여부(V36 fn_battery_passport_required).
+     * TRUE=대상, FALSE=비대상, null=판정 보류(분류 미입력) 또는 배터리 도메인이 아님.
+     */
+    @Query(value = "SELECT fn_battery_passport_required(:dppId)", nativeQuery = true)
+    Boolean findPassportRequired(@Param("dppId") Long dppId);
+
+    /**
+     * 이 DPP 에서 실제로 적용되는 필드 코드. 배터리 여권 비대상이면 여권 전용 항목
+     * (BMS/성능내구성/핵심원자재/공급망실사 등)이 여기서 빠진다 - 입력 폼은 이 목록으로
+     * 거른다. 조건이 없는 도메인(철강/섬유)은 전체 필드가 그대로 나온다.
+     */
+    @Query(value = "SELECT field_code FROM v_dpp_requirement_status "
+            + "WHERE dpp_id = :dppId AND is_applicable", nativeQuery = true)
+    List<String> findApplicableFieldCodes(@Param("dppId") Long dppId);
+
+    /**
+     * 발급을 막고 있는 항목 - 적용 대상이고, 발급 게이트 단계(1~8)이고, 아직 안 찬 필수 항목.
+     * Object[] 순서: label_ko, section, stage_no.
+     */
+    @Query(value = "SELECT label_ko, section, stage_no FROM v_dpp_requirement_status "
+            + "WHERE dpp_id = :dppId AND effective_required AND is_issue_gate AND NOT is_filled "
+            + "ORDER BY sort_order", nativeQuery = true)
+    List<Object[]> findIssueBlockers(@Param("dppId") Long dppId);
+
+    /**
+     * 생애주기 단계별 진행(v_dpp_lifecycle_status).
+     * Object[] 순서: dpp_id, stage_no, stage_code, stage_name_ko, is_issue_gate,
+     * required_count, filled_count.
+     */
+    @Query(value = "SELECT dpp_id, stage_no, stage_code, stage_name_ko, is_issue_gate, "
+            + "required_count, filled_count FROM v_dpp_lifecycle_status "
+            + "WHERE dpp_id IN (:dppIds) ORDER BY dpp_id, stage_no", nativeQuery = true)
+    List<Object[]> findLifecycleStatus(@Param("dppIds") List<Long> dppIds);
 }

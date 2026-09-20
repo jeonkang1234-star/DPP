@@ -38,6 +38,16 @@ public record DocumentSlotDto(
          * 여기 값이 있으면(예: "○○리사이클(재활용 처리업체) 제출 대기") 그때만 잠근다.
          * null이면 지금 보는 사람이 올릴 수 있다.
          */
-        String partnerLockLabel
+        String partnerLockLabel,
+        /**
+         * 이 문서를 제출하는 생애주기 단계(1~12, V36). null 이면 제조 단계.
+         * 재활용 처리 결과 보고서처럼 발급 시점에 존재할 수 없는 문서가 여기서 갈린다.
+         */
+        Integer lifecycleStage,
+        /**
+         * 발급 전에 있어야 하는 문서인가(단계 1~8). false 면 발급을 막지 않고 발급 이후에
+         * 제출한다 - 2026-09-19 강 요청 5번.
+         */
+        boolean issueGate
 ) {
 }

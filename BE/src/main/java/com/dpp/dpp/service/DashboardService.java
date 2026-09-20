@@ -4,6 +4,7 @@ import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.dpp.dto.DashboardResponse;
 import com.dpp.dpp.dto.DppSummaryDto;
+import com.dpp.dpp.dto.LifecycleStageDto;
 import com.dpp.dpp.dto.MissingFieldDto;
 import com.dpp.dpp.entity.Dpp;
 import com.dpp.dpp.entity.ProductModel;
@@ -50,15 +51,18 @@ public class DashboardService {
     private final DppQueryRepository dppRepository;
     private final ProductModelRepository productModelRepository;
     private final ZkpProofRepository zkpProofRepository;
+    private final DppComplianceService complianceService;
 
     public DashboardService(UserAccountRepository userAccountRepository,
                              DppQueryRepository dppRepository,
                              ProductModelRepository productModelRepository,
-                             ZkpProofRepository zkpProofRepository) {
+                             ZkpProofRepository zkpProofRepository,
+                             DppComplianceService complianceService) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.productModelRepository = productModelRepository;
         this.zkpProofRepository = zkpProofRepository;
+        this.complianceService = complianceService;
     }
 
     // recalcCompleteness가 dpp 테이블을 직접 UPDATE하는 실제 쓰기 작업이라 readOnly로
@@ -90,6 +94,11 @@ public class DashboardService {
         Set<Long> needsPartnerInputIds = new HashSet<>(
                 dppRepository.findDppIdsNeedingPartnerInput(allDppIds));
 
+        // 생애주기 단계는 DPP 목록 전체를 한 번에 읽는다(V36 v_dpp_lifecycle_status).
+        // 예전엔 FE 가 미충족 필드의 책임 역할로 단계를 역산했는데, 그건 "원자재 공급사
+        // 담당 필드가 없으면 원자재 단계 완료"처럼 사실이 아닌 결론을 냈다.
+        Map<Long, List<LifecycleStageDto>> lifecycleByDpp = complianceService.lifecycleByDpp(allDppIds);
+
         List<DppSummaryDto> summaries = new ArrayList<>();
         double completenessSum = 0;
         int incompleteCount = 0;
@@ -106,6 +115,12 @@ public class DashboardService {
             int[] counts = fetchCounts(dpp.getDppId());
             ProductModel model = modelsById.get(dpp.getModelId());
 
+            // 배터리 여권 대상 판정과 교차검증 불일치는 DPP 단위 조회다 - 이 대시보드가
+            // 이미 DPP 마다 recalc/fetchCounts 를 부르고 있어서(조직당 DPP 수십 건 규모)
+            // 같은 수준의 N+1 로 맞춘다.
+            Boolean passport = complianceService.passportRequired(dpp.getDppId());
+            int mismatches = complianceService.openMismatches(dpp.getDppId()).size();
+
             summaries.add(new DppSummaryDto(
                     dpp.getDppId(),
                     dpp.getPublicUuid(),
@@ -120,7 +135,11 @@ public class DashboardService {
                     counts[1],
                     dpp.getSerialNumber(),
                     dpp.getIssuedAt() != null ? dpp.getIssuedAt().toLocalDate().toString() : null,
-                    needsPartnerInputIds.contains(dpp.getDppId())
+                    needsPartnerInputIds.contains(dpp.getDppId()),
+                    lifecycleByDpp.getOrDefault(dpp.getDppId(), List.of()),
+                    passport,
+                    complianceService.trackLabel(dpp.getDomain(), passport),
+                    mismatches
             ));
             completenessSum += rate;
             if (rate < 100.0) {
