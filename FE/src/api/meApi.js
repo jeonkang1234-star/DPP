@@ -25,6 +25,11 @@ async function authedFetch(path, options = {}) {
 
   const res = await fetch(path, {
     ...options,
+    // 브라우저 HTTP 캐시를 완전히 우회한다(2026-08-24 강 리포트). 백엔드가 잠깐 죽었거나
+    // 프록시가 SPA 폴백(index.html)으로 응답한 순간이 있으면, 그 200 HTML이 디스크 캐시에
+    // 남아 이후 fetch가 계속 그걸 재생한다 - 운영자 대시보드가 새로고침마다 '—'로 죽던
+    // 원인. API 응답은 캐시할 이유가 없으므로 no-store로 못박는다.
+    cache: 'no-store',
     headers: {
       ...(options.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -149,6 +154,15 @@ export function saveFieldFormDraft(dppId, domain, values, displayName) {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * 문서에서 읽은 값과 직접 입력한 값이 어긋난 항목을 정리한다(2026-09-19).
+ * resolution: 'KEEP_ENTERED'(입력값 유지) | 'USE_PARSED'(문서값 채택).
+ * 정리하지 않으면 발급이 막힌다(FieldFormService.issue).
+ */
+export function resolveCrossCheck(dppId, checkId, resolution) {
+  return authedFetch(`/me/field-form/${dppId}/cross-checks/${checkId}?resolution=${resolution}`, { method: 'POST' });
 }
 
 /** DPP 발급 제출 - status를 PENDING으로 바꾸고 issued_at을 찍는다(블록체인 앵커링은 별도 문서 업로드 플로우의 몫). */
@@ -360,6 +374,7 @@ export async function fetchDomainGrantEvidenceBlob(grantId) {
   const session = loadSession();
   const token = session?.accessToken;
   const res = await fetch(`/admin/domain-grants/${grantId}/evidence`, {
+    cache: 'no-store',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (res.status === 401 && !redirectingToLogin) {
@@ -389,6 +404,7 @@ export async function fetchOrgBizCertBlob(orgId) {
   const session = loadSession();
   const token = session?.accessToken;
   const res = await fetch(`/admin/organizations/${orgId}/biz-cert`, {
+    cache: 'no-store',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (res.status === 401 && !redirectingToLogin) {
@@ -472,4 +488,46 @@ export function decideCustomsCase(clearanceId, decision, reason) {
  */
 export function fetchAuditLog() {
   return authedFetch('/audit-log');
+}
+
+/**
+ * "관리자에게 문의" 챗봇 위젯 전용(2026-09-17 강 요청 - com.dpp.inquiry.controller.
+ * InquiryController). 실시간은 WebSocket이 아니라 폴링으로 한다(강 선택) - 패널이 열려
+ * 있는 동안 useAppLogic.js가 fetchInquiryMessages를 몇 초 간격으로 다시 부른다.
+ */
+export function createInquiry(category) {
+  return authedFetch('/me/inquiries', { method: 'POST', body: JSON.stringify({ category }) });
+}
+
+/** 내 조직의 문의 스레드 목록(최신순). */
+export function fetchMyInquiries() {
+  return authedFetch('/me/inquiries');
+}
+
+/** 스레드 하나의 메시지 전체(오래된 순) - 폴링 대상. */
+export function fetchInquiryMessages(inquiryId) {
+  return authedFetch(`/me/inquiries/${inquiryId}/messages`);
+}
+
+export function sendInquiryMessage(inquiryId, message) {
+  return authedFetch(`/me/inquiries/${inquiryId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+}
+
+/** 관리자 문의함 - com.dpp.inquiry.controller.AdminInquiryController, ADMIN 계정만 200. */
+export function fetchAdminInquiries() {
+  return authedFetch('/admin/inquiries');
+}
+
+export function fetchAdminInquiryMessages(inquiryId) {
+  return authedFetch(`/admin/inquiries/${inquiryId}/messages`);
+}
+
+export function sendAdminInquiryReply(inquiryId, message) {
+  return authedFetch(`/admin/inquiries/${inquiryId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
 }

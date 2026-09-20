@@ -6,17 +6,38 @@
  * 백엔드로 프록시하도록 이미 맞춰져 있어서, 여기서는 그냥 상대경로로 호출한다.
  */
 
+/**
+ * 서버가 본문(message)을 못 준 경우(nginx의 502/503/504 HTML 에러 페이지 등)에 쓰는
+ * 상태코드별 기본 문구. 예전엔 전부 '요청을 처리하지 못했습니다.' 하나라서, 백엔드가 죽어
+ * nginx가 502를 돌려줘도 사용자는 비밀번호 문제인지 서버 문제인지 구분할 수 없었다(2026-09-19).
+ */
+function defaultMessageFor(status) {
+  if (status === 502 || status === 503 || status === 504) {
+    return '서버에 연결할 수 없습니다. 서버가 점검 중이거나 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해 주세요.';
+  }
+  if (status >= 500) return '서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+  if (status === 429) return '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.';
+  if (status === 413) return '업로드한 파일이 너무 큽니다.';
+  if (status === 404) return '요청한 경로를 찾을 수 없습니다.';
+  if (status === 401) return '인증에 실패했습니다.';
+  if (status === 403) return '접근 권한이 없습니다.';
+  return '요청을 처리하지 못했습니다.';
+}
+
 async function handleResponse(res) {
   if (!res.ok) {
-    let message = '요청을 처리하지 못했습니다.';
+    let message = defaultMessageFor(res.status);
+    let code;
     try {
       const data = await res.json();
       if (data && data.message) message = data.message;
+      if (data && data.code) code = data.code;
     } catch {
-      /* 본문이 없는 에러 응답(204 등)은 무시 */
+      /* 본문이 없거나 JSON이 아닌 에러 응답(nginx HTML 등)은 상태코드별 기본 문구를 쓴다 */
     }
     const err = new Error(message);
     err.status = res.status;
+    if (code) err.code = code;
     throw err;
   }
 
@@ -31,8 +52,20 @@ async function handleResponse(res) {
   }
 }
 
+/** fetch 자체가 실패(서버 다운·네트워크 끊김 등)하면 status 0짜리 에러로 바꿔 던진다. */
+async function safeFetch(path, options) {
+  try {
+    return await fetch(path, options);
+  } catch {
+    const err = new Error('서버에 연결할 수 없습니다. 네트워크 상태를 확인하거나 잠시 후 다시 시도해 주세요.');
+    err.status = 0;
+    throw err;
+  }
+}
+
 async function postJson(path, body) {
-  const res = await fetch(path, {
+  const res = await safeFetch(path, {
+    cache: 'no-store',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -51,7 +84,7 @@ async function postMultipart(path, jsonPart, files) {
   Object.entries(files || {}).forEach(([key, file]) => {
     if (file) form.append(key, file);
   });
-  const res = await fetch(path, { method: 'POST', body: form });
+  const res = await safeFetch(path, { method: 'POST', body: form, cache: 'no-store' });
   return handleResponse(res);
 }
 

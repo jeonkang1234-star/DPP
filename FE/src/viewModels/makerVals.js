@@ -127,7 +127,11 @@ const AUTO_FILL_DOC_NAME = {
 // 되는 항목이라면 굳이 표시할 필요 X"). 등급 자체는 f.tier로 남아 있어서 정렬(법정필수
 // 우선)과 근거 조항 툴팁은 그대로 동작한다.
 const TIER_LABEL = { T0: '법정필수' };
-const DISCLOSURE_LABEL = { RESTRICTED: '권한자 한정', TRADE_SECRET: '영업비밀(ZKP 대체)' };
+// 2026-09-19 강 요청으로 RESTRICTED('권한자 한정')는 뺐다 - 어떤 항목이 필요한지는
+// 배터리 분류에 따라 어차피 달라지고, 공개범위는 제조사가 입력하면서 판단할 거리가
+// 아니라 조회 쪽 규칙이라 입력 폼에서는 소음이었다. TRADE_SECRET 은 남긴다 - 그 항목은
+// 입력칸 자체가 없고 O/X 배지만 뜨기 때문에, 라벨을 빼면 왜 못 쓰는지 알 길이 없다.
+const DISCLOSURE_LABEL = { TRADE_SECRET: '영업비밀(ZKP 대체)' };
 
 /** 이 필드가 문서 파싱으로 채워지는가. 서버의 data_source가 정답, 없으면 구 화이트리스트. */
 function isParserField(f) {
@@ -264,6 +268,27 @@ function groupBySection(fields, sections, openMap, setState) {
  * Builds the view-model slice consumed by AppView.
  * @param ctx shared context from useAppLogic (state, setState, props, style + helper fns)
  */
+// 회사 프로필(GET /me/organization)에 이미 등록된 값으로 폼을 미리 채울 칸(2026-09-19 강 요청:
+// "제조사명은 시스템에서 연동해서 바로 입력되게, 연락 이메일·웹사이트도 등록돼 있으면 바로").
+// 값이 프로필에 없으면 그 칸은 건드리지 않는다 - 빈 값을 채워 넣는 건 채우지 않는 것과 같다.
+// EORI(UOI_MANUFACTURER)는 일부러 뺐다 - 문서 파싱 필드라 값이 있으면 '파싱됨'으로 잠긴다.
+const ORG_AUTOFILL_LABEL = '회사 프로필에서 자동 입력';
+export function orgAutofillValues(org) {
+  if (!org) return {};
+  const src = {
+    OPERATOR_MANUFACTURER: org.orgName,
+    MANUFACTURER_EMAIL_CONTACT: org.contactEmail,
+    MANUFACTURER_WEBSITE: org.websiteUrl,
+    BRAND_CONTACT_EMAIL: org.contactEmail
+  };
+  const out = {};
+  Object.keys(src).forEach((k) => {
+    const v = src[k] == null ? '' : String(src[k]).trim();
+    if (v) out[k] = v;
+  });
+  return out;
+}
+
 export function makerVals(ctx) {
   const { state, setState, props, data } = ctx;
   /**
@@ -306,6 +331,39 @@ export function makerVals(ctx) {
         return [d.dppId, d.internalSku || ('DPP-' + d.dppId), d.displayName || d.modelName || '(이름 없음)', done, 0, 100 - done, isIssuedDpp(d)];
       })
     : ctx.compData().map(([id, name, done, prog, none]) => [id, id, name, done, prog, none, done === 100]);
+  // 2026-09-17 강 요청: "등록 DPP 수"는 전체 등록 건수가 아니라 "작성 완료된"(완성도
+  // 100%) DPP 기준으로 세고, "등록 DPP 수"/"작성중인 DPP 수" 카드를 클릭하면 그 목록을
+  // 팝업으로 보여준다. completenessRows(위)를 그대로 필터링해서 카드 숫자와 팝업 목록이
+  // 항상 같은 데이터를 보게 한다 - 백엔드 집계치(dash.totalCount/incompleteCount)를
+  // 따로 또 믿지 않는다.
+  // 2026-09-17 강 2차 피드백: 입력률 막대의 하늘색(#2FB2E8 고정)이 "색이 붕 뜬다"는
+  // 지적 - 대시보드 "+ 새 DPP 생성" 버튼과 같은 브랜드 블루(#0045A9)를 100% 기준으로,
+  // 입력률이 낮을수록 옅어지는 그라데이션 색으로 바꾼다(고정 색 대신 값 기반 색상).
+  const hexToRgb = (hex) => {
+    const h = hex.replace('#', '');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  };
+  const rgbToHex = (r, g, b) => '#' + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  const lerpHex = (c1, c2, t) => {
+    const [r1, g1, b1] = hexToRgb(c1);
+    const [r2, g2, b2] = hexToRgb(c2);
+    return rgbToHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
+  };
+  // 0%는 옅은 하늘색, 100%는 "+ 새 DPP 생성" 버튼과 완전히 같은 브랜드 블루(#0045A9).
+  const pctFillColor = (pct) => lerpHex('#CFE3FA', '#0045A9', Math.max(0, Math.min(100, pct)) / 100);
+
+  const completedDppRows = completenessRows.filter(row => row[3] === 100);
+  const incompleteDppRows = completenessRows.filter(row => row[3] !== 100);
+  const toDppListRow = ([openId, displayId, name, done, , , issued]) => ({
+    key: openId,
+    serial: displayId,
+    productName: name || '(이름 없음)',
+    statusLabel: issued ? '발급 완료' : done === 100 ? '발급 대기' : done === 0 ? '입력 대기' : (done + '% 작성 중'),
+    statusChip: { ...(issued ? ctx.badgeText3d('#0E7A3D') : done === 0 ? ctx.badgeText3d('#6B7A93') : ctx.badgeText3d('#96660A')), fontSize: '11.5px' },
+    // 팝업에서 행을 클릭하면 팝업을 닫고 그 DPP의 상세(생애주기·미충족 필드) 모달을 연다.
+    open: () => setState({ dppListOpen: null, dppOpen: true, dppId: openId })
+  });
+
   const inputMeta = data.makerInputMeta[r] || {};
   const fieldSets = data.makerFieldSets[r] || [];
   // 배치 대량 발급은 철강 전용(강 지시, 2026-08-16: "이거는 철강 말고는 필요없는 것 같으니까
@@ -327,8 +385,17 @@ export function makerVals(ctx) {
   // 2026-08-23 강 지적: "99개를 안 채워도 발급이 된다". 화면 숫자(n/m 입력됨)는 전체 항목
   // 기준이었는데 발급 게이트는 필수(T0) 항목만 본다 - 같은 화면에서 두 기준이 섞여 있었다.
   // 숫자를 발급 조건과 같은 기준(필수)으로 통일하고, 선택 항목은 따로 세어 별도로 보여준다.
-  const ffRequired = ff ? ff.fields.filter(f => f.required) : [];
-  const ffOptional = ff ? ff.fields.filter(f => !f.required) : [];
+  // 2026-09-19: 발급 게이트는 "지금 채울 수 있는 항목"만 본다. BMS 동적데이터(사용 단계)나
+  // 재활용 처리 결과(수명종료 단계)처럼 발급 이후 단계에 귀속된 항목은 필수여도 발급을
+  // 막지 않는다 - 서버가 f.issueGate=false로 내려준다(V36 requirement_field.lifecycle_stage).
+  // 구버전 BE는 이 값을 안 주므로 undefined면 기존처럼 전부 게이트 대상으로 본다.
+  const inIssueGate = (f) => f.issueGate !== false;
+  const ffRequired = ff ? ff.fields.filter(f => f.required && inIssueGate(f)) : [];
+  const ffOptional = ff ? ff.fields.filter(f => !f.required && inIssueGate(f)) : [];
+  // 발급 이후 단계 항목 - 화면에는 그대로 두되 "추후 제출"로 표시하고 발급 조건에서 뺀다.
+  const ffLater = ff ? ff.fields.filter(f => !inIssueGate(f)) : [];
+  // 문서 파싱값과 어긋난 입력값(dpp_field_cross_check). 남아 있으면 발급이 막힌다.
+  const ffMismatches = ff && ff.crossChecks ? ff.crossChecks.filter(c => c.status === 'MISMATCH') : [];
   const ffRequiredFilled = ffRequired.filter(f => !!ffInputs[f.fieldCode]).length;
   const ffOptionalFilled = ffOptional.filter(f => !!ffInputs[f.fieldCode]).length;
   // 이번 세션에 문서 업로드로 "방금 채워진" 필드 - { [fieldCode]: 문서라벨 }. 파싱된
@@ -352,6 +419,14 @@ export function makerVals(ctx) {
   // (2026-08-16).
   const bcr = (r === 'battery') ? ctx.batteryCarbonResult : null;
   const rcr = (r === 'battery') ? ctx.recyclingResult : null;
+  // lifecycle_stage_def(V3__seed_master.sql)의 단계명. 도메인마다 2~4단계 이름이 조금씩
+  // 다르지만(철강 '제강' vs 배터리 '셀 제조') 화면에는 "언제 채우는 항목인지"만 알려주면
+  // 되는 자리라 공통 표현으로 둔다.
+  const LIFECYCLE_STAGE_LABEL = {
+    1: '원자재 조달', 2: '소재 생산', 3: '셀 제조', 4: '제조·조립', 5: '포장',
+    6: '운송·물류', 7: '보관', 8: '유통·판매', 9: '사용', 10: '유지보수·재사용',
+    11: '회수·수명종료', 12: '재활용·폐기'
+  };
   const DOC_STATUS_LABEL = { NOT_UPLOADED: '미제출', PENDING: '검토 중', APPROVED: '제출 완료', REJECTED: '반려됨', EXPIRED: '만료됨' };
   const DOC_STATUS_COLOR = { NOT_UPLOADED: '#9AA8BE', PENDING: '#E3A008', APPROVED: '#12A150', REJECTED: '#E03B3B', EXPIRED: '#C22B2B' };
   // DPP 발급 조건(강 요청, 2026-08-17): 제조사가 반드시 채워야 하는 필수 데이터를 전부
@@ -363,23 +438,96 @@ export function makerVals(ctx) {
   // 같은 상태를 화면마다 다른 이름으로 부르고 있었다(2026-08-20 강 요청 - "발급 완료"로 통일). 기존에도 버튼 자리(상태 전체/기간
   // 90일)는 있었지만 onClick이 없어 눌러도 아무 동작이 없었다.
   const pStatusFilter = state.productStatusFilter || 'all';
-  const requiredFieldsOk = ff ? ff.fields.filter(f => f.required).every(f => !!ffInputs[f.fieldCode]) : true;
-  const requiredDocsOk = df ? df.documents.filter(d => d.required).every(d => d.status === 'APPROVED') : true;
-  const issueReady = ff ? (requiredFieldsOk && requiredDocsOk) : true;
-  const issueDisabledHint = issueReady ? '' : !requiredFieldsOk
+  const requiredFieldsOk = ff ? ffRequired.every(f => !!ffInputs[f.fieldCode]) : true;
+  // 발급 이후 단계에 제출하는 문서(재활용 처리 결과 보고서 등)는 발급을 막지 않는다 -
+  // 서버가 d.issueGate=false로 내려준다(V36). 구버전 BE면 undefined라 기존 동작 유지.
+  const inDocIssueGate = (d) => d.issueGate !== false;
+  const requiredDocsOk = df
+    ? df.documents.filter(d => d.required && inDocIssueGate(d)).every(d => d.status === 'APPROVED')
+    : true;
+  const crossCheckOk = ffMismatches.length === 0;
+  const issueReady = ff ? (requiredFieldsOk && requiredDocsOk && crossCheckOk) : true;
+  const issueDisabledHint = issueReady ? '' : !crossCheckOk
+    // 교차검증 불일치가 먼저다 - 필수 칸이 다 차 있어도 그 값이 문서와 어긋나면
+    // 발급된 여권이 검증을 통과할 수 없다.
+    ? `문서에서 읽은 값과 다른 입력값이 ${ffMismatches.length}건 있습니다. 먼저 확인해 주세요.`
+    : !requiredFieldsOk
     // 협력사가 수락해서 잠긴 칸이 비어 있는 것은 제조사가 손쓸 수 없는 일이다 - "입력하세요"가
     // 아니라 누구를 기다리는 중인지 말해준다(2026-08-23).
     ? (ffRequired.filter(f => !ffInputs[f.fieldCode]).every(f => f.partnerLockLabel)
         ? `협력사가 담당 항목을 제출하면 발급할 수 있습니다. (${ffRequiredFilled}/${ffRequired.length})`
         : `필수 필드를 모두 입력해야 발급할 수 있습니다. (${ffRequiredFilled}/${ffRequired.length})`)
     : '필수 문서를 모두 제출·검증 완료해야 발급할 수 있습니다.';
+  // ── 배터리 분류 선택(2026-09-19 강 요청) ────────────────────────────────
+  // 분류와 정격용량이 나머지 항목을 전부 결정하므로(여권 대상이면 140개, 비대상이면
+  // 축약 세트) 폼 맨 위에서 먼저 고르게 한다. 섹션 목록 안쪽에 묻혀 있으면 순서가
+  // 거꾸로다 - 무엇을 입력해야 하는지 모르는 채로 스크롤부터 하게 된다.
+  // 같은 칸을 두 번 묻지 않도록 아래 formFields 에서는 이 두 개를 뺀다.
+  const CLASSIFY_CODES = ['BATTERY_CATEGORY', 'RATED_CAPACITY_KWH'];
+  const isBatteryForm = !!ff && ff.domain === 'BATTERY';
+  const classifyField = (code) => (isBatteryForm ? ff.fields.find(f => f.fieldCode === code) : null);
+  const catField = classifyField('BATTERY_CATEGORY');
+  const capField = classifyField('RATED_CAPACITY_KWH');
+  const catValue = catField ? (ffInputs[catField.fieldCode] || '') : '';
+  const capValue = capField ? (ffInputs[capField.fieldCode] || '') : '';
+  const setClassifyValue = (code, v) => ctx.setFieldFormInputs(prev => ({ ...prev, [code]: v }));
+  // 서버가 이미 저장해 둔 분류값. 아래 항목이 어떤 것들로 채워질지는 서버가 "저장된" 값으로만
+  // 판정한다(fn_battery_passport_required, V36) - 화면에서 값을 바꾸기만 하고 저장하지 않으면
+  // 아래 목록은 절대 바뀌지 않는다. 예전엔 이걸 알려주는 표시도, 반영시키는 버튼도 없어서
+  // 값을 바꿔도 아무 일도 안 일어나는 것처럼 보였다(2026-09-19 강 리포트). 입력값과 저장값이
+  // 다르면 "아직 반영 안 됨"이고, 「확인」이 저장 + 폼 재조회로 아래 항목을 바꾼다.
+  const savedCat = catField ? (catField.value || '') : '';
+  const savedCap = capField ? (capField.value || '') : '';
+  const classifyDirty = isBatteryForm && (catValue !== savedCat || capValue !== savedCap);
+  const classifyReady = !!catValue && !!capValue;
+  const classifyApplied = isBatteryForm && classifyReady && !classifyDirty;
+  const applyClassification = async () => {
+    if (!ff || state.classifyBusy) return;
+    if (!catValue) { ctx.say('배터리 분류를 먼저 선택해 주세요.'); return; }
+    const capNum = Number(String(capValue).replace(/,/g, ''));
+    if (!capValue || !isFinite(capNum) || capNum <= 0) { ctx.say('정격용량은 0보다 큰 숫자(kWh)로 입력해 주세요.'); return; }
+    setState({ classifyBusy: true });
+    try {
+      const isNewDpp = !ff.dppId;
+      const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend());
+      ctx.setFieldFormData(result);
+      ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
+      setState(s => ({ fieldFormDppId: result.dppId, classifyBusy: false, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
+      if (isNewDpp) ctx.refreshDashboard();
+      const shown = (result.fields || []).filter(f => CLASSIFY_CODES.indexOf(f.fieldCode) < 0).length;
+      ctx.say('분류를 적용했습니다 · ' + (result.complianceTrackLabel ? result.complianceTrackLabel + ' · ' : '') + '입력 항목 ' + shown + '개');
+    } catch (e) {
+      setState({ classifyBusy: false });
+      ctx.say((e && e.message) || '분류를 적용하지 못했습니다.');
+    }
+  };
+
+  /**
+   * 교차검증 불일치 1건을 정리한다(2026-09-19). KEEP_ENTERED=입력값이 맞다,
+   * USE_PARSED=문서에서 읽은 값으로 바꾼다. 서버가 값까지 바꿔주므로 폼을 다시 읽어야
+   * 화면과 맞는다 - refreshFieldForm이 fieldFormData/fieldFormInputs를 둘 다 갱신한다.
+   */
+  const resolveCrossCheckRow = (checkId, resolution) => {
+    if (!ff || !ff.dppId) return;
+    ctx.resolveCrossCheck(ff.dppId, checkId, resolution)
+      .then(() => {
+        ctx.refreshFieldForm(ff.dppId);
+        ctx.say(resolution === 'USE_PARSED' ? '문서에서 읽은 값으로 바꿨습니다.' : '입력값을 그대로 유지합니다.');
+      })
+      .catch((err) => ctx.say((err && err.message) || '교차검증 항목을 정리하지 못했습니다.'));
+  };
+
   // 입력 폼 필드 목록. 예전엔 return 객체 안에 인라인으로 있었는데, 섹션 묶음
   // (fieldSections)이 같은 목록을 다시 봐야 해서 밖으로 뺐다.
   const formFields = ff
     // 파싱되는(자동 채움) 필드를 위쪽에, 수기 입력 필드를 아래쪽에 배치(2026-08-18 강
     // 요청) - AUTO_FILL_FIELD_CODES 화이트리스트 기준 안정 정렬(같은 그룹 안에서는
     // 서버가 내려준 원래 순서 유지), documentSlots의 required 정렬과 동일한 패턴.
-    ? [...ff.fields].sort((a, b) => (isParserField(b) ? 1 : 0) - (isParserField(a) ? 1 : 0)).map(f => {
+    ? [...ff.fields]
+        // 분류/정격용량은 위 전용 칸에서 받는다 - 여기서 또 그리면 같은 값을 두 군데서
+        // 고칠 수 있게 되고, 둘 중 어느 쪽이 진짜인지 화면만 봐서는 알 수 없다.
+        .filter(f => !(isBatteryForm && CLASSIFY_CODES.indexOf(f.fieldCode) >= 0))
+        .sort((a, b) => (isParserField(b) ? 1 : 0) - (isParserField(a) ? 1 : 0)).map(f => {
         const value = ffInputs[f.fieldCode] || '';
         const parsedFrom = parsedSources[f.fieldCode];
         const isAutoFillable = isParserField(f);
@@ -412,6 +560,13 @@ export function makerVals(ctx) {
           sourceLabel = '직접 입력됨';
           sourceChip = ctx.chip('rgba(132,148,172,.16)', '#6B7A93');
         }
+        // 회사 프로필에서 미리 채운 값이면 출처를 그렇게 표시한다(값이 그대로일 때만 - 사용자가
+        // 고쳐 썼다면 더 이상 프로필 값이 아니다).
+        const orgAuto = orgAutofillValues(ctx.orgData)[f.fieldCode];
+        if (orgAuto && value && value === orgAuto && !parsedFrom) {
+          sourceLabel = ORG_AUTOFILL_LABEL;
+          sourceChip = ctx.chip('rgba(0,69,169,.10)', '#0045A9');
+        }
         // 2026-08-18 강 요청: "파싱된 이후로는 안지워지게 막기 - 수정하려면 수정 버튼
         // 누르고 수정". 파싱된 상태(이번 세션에 감지됐거나, 화이트리스트 필드에 값이
         // 이미 있는 경우)인 필드는 기본적으로 읽기 전용으로 잠그고, "수정" 버튼을 눌러
@@ -428,6 +583,12 @@ export function makerVals(ctx) {
           key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
           labelEn: f.labelEn || '',
           req: f.required ? '필수' : '선택',
+          // 발급 이후 단계에 채우는 항목(BMS 동적데이터·재활용 처리 결과 등)은 필수여도
+          // 발급을 막지 않는다. 비어 있다고 빨간 테두리로 재촉하면 거짓말이 된다
+          // (2026-09-19 강 요청 5번 - "발급 단계에서 받을 수 없는 문서는 이후 제출로").
+          laterStage: !inIssueGate(f),
+          laterLabel: !inIssueGate(f) ? (LIFECYCLE_STAGE_LABEL[f.lifecycleStage] || '발급 이후') + ' 단계 제출' : '',
+          laterStyle: !inIssueGate(f) ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : null,
           // help_text가 길면 placeholder로 쓰지 않는다(2026-08-23). HS 코드처럼 설명이
           // 한 문장 이상인 항목은 입력칸 안에 들어가면 잘려서 오히려 안 읽힌다 -
           // 짧은 것만 placeholder로 쓰고, 전체 문장은 아래 hint로 보여준다.
@@ -465,7 +626,8 @@ export function makerVals(ctx) {
           ...zkpVerdictOf(f),
           // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
           // 협력사가 채울 칸은 비어 있어도 제조사 잘못이 아니다 - 빨간 테두리로 재촉하지 않는다.
-          inputBorderColor: value ? '#12A150' : (partnerLockLabel ? 'rgba(16,32,64,.14)' : '#E03B3B'),
+          inputBorderColor: value ? '#12A150'
+            : (partnerLockLabel || !inIssueGate(f)) ? 'rgba(16,32,64,.14)' : '#E03B3B',
           locked,
           partnerLockLabel,
           // 협력사 잠금은 못 푼다 - '수정' 버튼 자체를 주지 않는다(AppView는 unlock이
@@ -480,7 +642,7 @@ export function makerVals(ctx) {
       }));
 
   return {
-    kpiTotal: dash ? String(dash.totalCount) : kpi[0],
+    kpiTotal: dash ? String(completedDppRows.length) : kpi[0],
     // "이번 달 신규" - 2026-08-19 수정: 예전엔 실데이터 쪽에 대응하는 집계가 없어서
     // 항상 0을 보여줬다("등록 DPP 수" 옆 +N 배지가 실제 값을 반영 못하던 버그) - 이제
     // DashboardResponse.newThisMonthCount(BE, dpp.created_at 기준 집계)를 그대로 쓴다.
@@ -491,11 +653,49 @@ export function makerVals(ctx) {
     // 주는 badgeText3d로 교체(색은 기존과 동일하게 유지: 초록/빨강).
     kpiNewBadgeStyle: ctx.badgeText3d('#0E7A3D'),
     kpiActionBadgeStyle: ctx.badgeText3d('#C22B2B'),
-    kpiIncomplete: dash ? dash.incompleteCount : kpi[2],
+    kpiIncomplete: dash ? incompleteDppRows.length : kpi[2],
     // (dash.missingFields || []) - dpps와 같은 이유의 방어(2026-08-23). 이 한 줄 때문에
     // 앱 전체가 흰 화면이 되면 안 된다.
     kpiMissing: dash ? (dash.missingFields || []).length : kpi[3],
     kpiWaiting: dash ? 0 : kpi[4],
+    // "등록 DPP 수"/"작성중인 DPP 수" 카드 클릭 -> 목록 팝업(2026-09-17 강 요청).
+    openDppTotalList: () => setState({ dppListOpen: 'total' }),
+    openDppIncompleteList: () => setState({ dppListOpen: 'incomplete' }),
+    closeDppList: () => setState({ dppListOpen: null }),
+    dppListOpen: !!state.dppListOpen,
+    dppListTitle: state.dppListOpen === 'incomplete' ? '작성중인 DPP' : '등록 DPP (작성 완료)',
+    dppListRows: (state.dppListOpen === 'incomplete' ? incompleteDppRows : completedDppRows).map(toDppListRow),
+    dppListEmpty: (state.dppListOpen === 'incomplete' ? incompleteDppRows : completedDppRows).length === 0,
+    // 2026-09-17 강 3차 피드백: 'DPP 현황' 대시보드 검색창이 장식용이었다 - 실제로
+    // 제품명/DPP 식별자로 입력하면 일치하는 DPP를 네이버 검색창처럼 드롭다운으로
+    // 보여주고, 클릭하면 제품 조회 탭으로 이동해 그 DPP 상세를 바로 연다.
+    // completenessRows(위)를 그대로 검색 대상으로 쓴다 - 카드/팝업과 항상 같은 데이터.
+    dashSearchQuery: state.dashSearchQuery || '',
+    setDashSearchQuery: (v) => setState({ dashSearchQuery: v, dashSearchOpen: true }),
+    closeDashSearch: () => setState({ dashSearchOpen: false }),
+    dashSearchResults: (() => {
+      const q = (state.dashSearchQuery || '').trim().toLowerCase();
+      if (!q) return [];
+      const starts = [];
+      const contains = [];
+      completenessRows.forEach((row) => {
+        const [openId, displayId, name, done, , , issued] = row;
+        const dn = String(displayId || '').toLowerCase();
+        const nm = String(name || '').toLowerCase();
+        if (dn.startsWith(q) || nm.startsWith(q)) starts.push(row);
+        else if (dn.includes(q) || nm.includes(q)) contains.push(row);
+      });
+      return [...starts, ...contains].slice(0, 8).map(([openId, displayId, name, done, , , issued]) => ({
+        key: openId,
+        serial: displayId,
+        productName: name || '(이름 없음)',
+        statusLabel: issued ? '발급 완료' : done === 100 ? '발급 대기' : done === 0 ? '입력 대기' : (done + '% 작성 중'),
+        // 검색 결과를 누르면 드롭다운을 닫고, 제품 조회 탭으로 이동한 뒤 그 DPP의
+        // 상세(생애주기·미충족 필드) 모달을 바로 연다.
+        select: () => setState({ dashSearchQuery: '', dashSearchOpen: false, tab: 'products', dppOpen: true, dppId: openId })
+      }));
+    })(),
+    dashSearchOpen: !!state.dashSearchOpen && (state.dashSearchQuery || '').trim().length > 0,
     kpiAvg: dash ? Math.round(dash.averageCompleteness) : kpi[5],
     kpiAvgBar: ctx.bar(dash ? Math.round(dash.averageCompleteness) : kpi[5], '#0045A9'),
     // zkp_proof.status='REQUESTED'를 만드는 코드 경로가 아직 없어서 zkpPendingCount는
@@ -545,16 +745,30 @@ export function makerVals(ctx) {
     // 2026-08-17 강 정정: "완성도" 그래프/목록 카드는 원래대로 유지하고(제목만 "입력률"로),
     // ESPR 업데이트는 대신 KPI 카드 줄의 "평균 완성도" 자리에 넣는다(지난번엔 잘못 이해해서
     // 완성도 그래프 카드 쪽을 통째로 ESPR로 바꿔버렸었음).
-    completeness: completenessRows.map(([openId, displayId, name, done, prog, none]) => ({
+    // 2026-09-17 강 요청: 완성도 100%인 DPP는 목록에 계속 나열할 필요가 없으니
+    // 토글(기본 접힘)로 감추고, 나머지(미완료) DPP만 항상 쭉 보여준다. 강이 보낸 참고
+    // 이미지(원통형 3D 퍼센트 그래프, 좌측에서 두 번째 - 하늘색 계열) 느낌으로 막대도
+    // 다시 입체 스타일(segStyle3D/groove3d, 2026-08-19에 한 번 만들었다가 08-21에
+    // 평면으로 되돌렸던 것)로 바꾸고, 색만 그 참고 이미지의 하늘색 톤으로 맞춘다.
+    completeness: incompleteDppRows.map(([openId, displayId, name, done, prog, none]) => ({
       key: openId, id: displayId, name, pct: done,
       pctStyle: ctx.pctStyle(done),
-      // 2026-08-21 강 요청: 입체(segStyle3D/groove3d)를 걷어내고 다시 평면으로,
-      // 색은 흰색 - #007fff. 채운 만큼이 #007fff, 남은 만큼이 흰색이다.
-      // 부분 입력(prog)은 정보를 버리지 않도록 같은 계열의 옅은 파랑으로 둔다.
-      segs: [{ key: 'a', style: ctx.segStyle(done, '#007fff') }, { key: 'b', style: ctx.segStyle(prog, '#8CC8FF') }, { key: 'c', style: ctx.segStyle(none, '#FFFFFF') }],
-      trackStyle: { background: '#FFFFFF' },
+      segs: [{ key: 'a', style: ctx.segStyle(done, pctFillColor(done)) }, { key: 'b', style: ctx.segStyle(prog, '#BEE8F8') }, { key: 'c', style: ctx.segStyle(none, '#EAF6FC') }],
+      trackStyle: { background: '#EAF6FC' },
       open: () => setState({ dppOpen: true, dppId: openId })
     })),
+    completenessEmpty: incompleteDppRows.length === 0 && completedDppRows.length === 0,
+    // 완성도 100% DPP 목록 - 클릭하면 펼쳐지는 토글. 기본은 접힘.
+    completenessDoneRows: completedDppRows.map(([openId, displayId, name, done, prog, none]) => ({
+      key: openId, id: displayId, name, pct: done,
+      pctStyle: ctx.pctStyle(done),
+      segs: [{ key: 'a', style: ctx.segStyle(done, pctFillColor(done)) }, { key: 'b', style: ctx.segStyle(prog, '#BEE8F8') }, { key: 'c', style: ctx.segStyle(none, '#EAF6FC') }],
+      trackStyle: { background: '#EAF6FC' },
+      open: () => setState({ dppOpen: true, dppId: openId })
+    })),
+    completenessDoneCount: completedDppRows.length,
+    completenessDoneOpen: !!state.completenessDoneOpen,
+    toggleCompletenessDone: () => setState(s => ({ completenessDoneOpen: !s.completenessDoneOpen })),
     // KPI 카드 줄의 "평균 완성도" 자리에 들어갈 정적 규정 업데이트 안내 - 카드 폭이 좁아서
     // 문구를 짧게 줄임. 실제 EU 관보/집행위 발표 연동은 없는 정적 카드(다른 KPI 카드들처럼
     // 지금은 표시만, 나중에 실제 피드 API가 생기면 교체).
@@ -688,6 +902,58 @@ export function makerVals(ctx) {
     // 섹션 묶음(식별자 / 화학 성분 / 탄소·CBAM ...). 서버가 sections를 주면 그 순서를
     // 따르고, 안 주면 필드 등장 순서로 만든다. 21개 섹션이 전부 펼쳐지면 스크롤이
     // 수백 줄이라 첫 섹션만 열어둔다.
+    // ── 2026-09-19 배터리 조건부 검증 ──────────────────────────────────────
+    // 폼 맨 위 분류 선택 칸. 배터리가 아니면 catField 가 없어서 아예 안 그려진다.
+    classifyShow: !!catField,
+    classifyLabel: catField ? catField.labelKo : '',
+    classifyValue: catValue,
+    classifyOptions: catField ? optionsFor(catField, codeOptions) : [],
+    classifyChange: (e) => setClassifyValue('BATTERY_CATEGORY', e.target.value),
+    // 정격용량은 모든 배터리의 필수 사양이라 분류와 무관하게 늘 받는다. 산업용일 때만
+    // 여권 대상 판정(2kWh 경계)에도 쓰인다.
+    classifyCapShow: !!capField,
+    classifyCapLabel: capField ? (capField.labelKo + (capField.unit ? ' (' + capField.unit + ')' : '')) : '',
+    classifyCapValue: capValue,
+    classifyCapChange: (e) => setClassifyValue('RATED_CAPACITY_KWH', e.target.value),
+    // 이 카드는 폼의 다른 칸(빨강/초록 테두리)과 일부러 다르게 그린다 - 아래 항목 전체를
+    // 결정하는 "스위치"라서 입력값 칸이 아니라 설정 칸으로 보여야 한다(2026-09-19 강 요청:
+    // 파란 테두리·푸른 톤). 비어 있으면 연한 파랑, 채우면 진한 파랑.
+    classifyBorder: catValue ? '#0045A9' : 'rgba(0,69,169,.40)',
+    classifyCapBorder: capValue ? '#0045A9' : 'rgba(0,69,169,.40)',
+    classifyDirty, classifyReady, classifyApplied,
+    classifyApply: applyClassification,
+    classifyApplyDisabled: !classifyReady || !classifyDirty || !!state.classifyBusy,
+    classifyApplyLabel: state.classifyBusy ? '적용 중…' : (classifyApplied ? '적용됨' : '확인'),
+    classifyStatusText: '',
+    // 배터리 여권 대상/비대상 배지. 배터리가 아니면 서버가 null을 주므로 배지 자체가
+    // 안 그려진다 - 철강/섬유 화면에 "여권 비대상" 같은 말이 뜨면 안 된다.
+    trackLabel: ff && ff.complianceTrackLabel ? ff.complianceTrackLabel : '',
+    trackStyle: ff && ff.complianceTrackLabel
+      ? (ff.passportRequired === false
+          ? ctx.chip('rgba(132,148,172,.16)', '#44546F')
+          : ff.passportRequired === true
+            ? ctx.chip('rgba(0,69,169,.10)', '#0045A9')
+            : ctx.chip('rgba(227,160,8,.16)', '#96660A'))
+      : null,
+    // 여권 비대상이면 어떤 항목이 빠졌는지 한 줄로 알려준다 - 화면에서 칸이 사라진
+    // 이유를 말해주지 않으면 "필드가 왜 없지"가 된다.
+    trackNote: ff && ff.passportRequired === false
+      ? 'EU 배터리규정 제77조 여권 의무 대상이 아니어서 여권 전용 항목(동적데이터·성능내구성·공급망실사 등)은 표시하지 않습니다.'
+      : '',
+    // 발급 이후 단계에 채우는 항목 안내.
+    laterStageNote: '',
+    // 문서값 ↔ 입력값 불일치. 정리하기 전까지 발급이 막힌다.
+    crossCheckOpen: ffMismatches.length > 0,
+    crossCheckTitle: `문서에서 읽은 값과 다른 입력값 ${ffMismatches.length}건`,
+    crossCheckRows: ffMismatches.map(c => ({
+      key: c.checkId,
+      label: c.labelKo,
+      entered: c.enteredValue || '—',
+      parsed: c.parsedValue || '—',
+      docName: c.documentName || '업로드 문서',
+      keepEntered: () => resolveCrossCheckRow(c.checkId, 'KEEP_ENTERED'),
+      useParsed: () => resolveCrossCheckRow(c.checkId, 'USE_PARSED')
+    })),
     fieldSections: ff ? groupBySection(formFields, ff.sections, state.openFieldSections, setState) : [],
     // 모달 제목이 "필수 필드 충족 현황"인데 목록은 선택 항목까지 전부 보여주고 있었다.
     // 필수를 먼저, 선택을 뒤에 두고 각 줄에 필수/선택 배지를 붙여서 어느 쪽이 발급을
@@ -761,6 +1027,10 @@ export function makerVals(ctx) {
           // 있어서 헷갈렸다(2026-08-16 사용자 피드백: "제출 완료에 빨간색만 있는게 아니라").
           // 실패 상태면 실제 사유("반려됨"/"만료됨")로 라벨 자체를 바꾼다.
           const finalLabel = failed ? (DOC_STATUS_LABEL[d.status] || '반려됨') : '제출 완료';
+          // 발급 이후 단계에 제출하는 문서임을 타일에 표시한다(2026-09-19). 필수여도
+          // 지금 없다고 발급이 막히지 않으니 "미제출"만 보여주면 오해를 준다.
+          const laterStage = !inDocIssueGate(d);
+          const laterLabel = laterStage ? (LIFECYCLE_STAGE_LABEL[d.lifecycleStage] || '발급 이후') + ' 단계 제출' : '';
           // ZKP 대상 문서(Mill Sheet/CBAM/케어라벨/OEKO-TEX)는 이 일반 업로드 버튼(→
           // ctx.uploadDocument)이 아니라 전용 파서+ZKP 엔드포인트로 올려야 한다 - 서버가
           // DocumentSlotService.upload()에서 zkp 대상 docTypeCode를 이미 거부한다. 예전엔
@@ -821,6 +1091,11 @@ export function makerVals(ctx) {
           const partnerLockLabel = d.partnerLockLabel || '';
           return {
             key: d.fieldCode, label: d.labelKo, labelEn: d.labelEn || '', req: d.required ? '필수' : '선택',
+            // 발급 이후 단계에 제출하는 문서 - 필수여도 지금 없다고 발급이 막히지 않는다.
+            laterStage,
+            laterLabel,
+            laterStyle: laterStage ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : null,
+            // 미제출 타일의 빨간 테두리도 빼준다 - 아직 낼 수 없는 문서를 재촉하면 안 된다.
             partnerOwned: !!partnerLockLabel,
             partnerOwnerLabel: partnerLockLabel,
             fileName: d.fileName || '',
@@ -830,7 +1105,7 @@ export function makerVals(ctx) {
             categoryChip: d.zkpTarget ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#6B7A93'),
             criterionItems,
             criterionOpen,
-            tileBorderColor,
+            tileBorderColor: laterStage && stageIdx === 0 ? 'rgba(16,32,64,.07)' : tileBorderColor,
             toggleCriterion: () => setState((s) => ({ criteriaOpen: { ...(s.criteriaOpen || {}), [d.docTypeCode]: !(s.criteriaOpen && s.criteriaOpen[d.docTypeCode]) } })),
             detailLabel,
             // 스피너(active)는 "검증 중"(stageIdx===1) 단계에서만 돈다 - 예전엔
@@ -954,24 +1229,55 @@ export function makerVals(ctx) {
     // 때문에 실제로 협력사 초대가 필요한 DPP가 있어도 화면에 안 보이는 버그가 있었다 -
     // 이제 백엔드가 캡 없이 정확히 계산해 내려주는 d.needsPartnerInput(GET /me/dashboard,
     // DppSummaryDto)을 그대로 쓴다.
-    partnerDpps: (() => {
-      const eligible = (dash ? dash.dpps : []).filter(d => d.needsPartnerInput);
-      return [...eligible].sort((a, b) => a.dppId - b.dppId).map(d => {
+    // 2026-09-17 강 요청: "모든 협력사를 초대한 DPP"와 "더 초대할 수 있는 DPP"를
+    // 분리해서 보여준다. needsPartnerInput=true면 아직 협력사 담당 필드가 비어있는
+    // (더 초대할 수 있는) DPP, false면 협력사 담당 필드가 더 없는 DPP다 - 다만 애초에
+    // 협력사 필드가 하나도 없는 DPP(초대 자체가 무의미)까지 "모든 협력사를 초대함"으로
+    // 보여주면 오해를 주므로, invitesData에 실제로 이 DPP로 보낸 초대 이력이 있는
+    // DPP만 "모든 협력사를 초대한 DPP" 쪽에 넣는다.
+    // 2026-09-17 강 3차 피드백: 위 두 박스('더 초대할 수 있는 DPP'/'모든 협력사를
+    // 초대한 DPP')를 필터 토글이 있는 하나의 박스로 합치고, 가로 스크롤 카드 대신
+    // 세로 목록으로 바꾼다. 실제로 두 그룹으로 나누는 기준(needsPartnerInput +
+    // invitesData 이력)은 그대로 두고, state.partnerListFilter로 어느 쪽을 보여줄지만
+    // 고른다(기본값 '미초대').
+    ...(() => {
+      const buildRow = (d) => {
         const selected = state.partnersDppId === d.dppId;
         return {
           key: d.dppId, id: d.internalSku || ('DPP-' + d.dppId), name: d.displayName || d.modelName || ('DPP #' + d.dppId),
           pct: Math.round(d.completeness), selected,
-          cardStyle: {
-            display: 'flex', flexDirection: 'column', gap: 4, minWidth: 168, padding: '12px 14px',
-            border: selected ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.10)', borderRadius: 13,
+          rowStyle: {
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%',
+            padding: '13px 16px', border: selected ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.10)', borderRadius: 13,
             background: selected ? '#0045A9' : '#fff', color: selected ? '#fff' : '#0B1B33',
-            cursor: 'pointer', textAlign: 'left', flex: 'none'
+            cursor: 'pointer', textAlign: 'left'
           },
           select: () => setState({ partnersDppId: d.dppId, inviteRows: [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }] })
         };
-      });
+      };
+      const allDpps = dash ? dash.dpps : [];
+      const hasInvite = (d) => (ctx.invitesData || []).some(i => i.dppId === d.dppId);
+      const needMore = allDpps.filter(d => d.needsPartnerInput).sort((a, b) => a.dppId - b.dppId);
+      const allInvited = allDpps.filter(d => !d.needsPartnerInput && hasInvite(d)).sort((a, b) => a.dppId - b.dppId);
+      const filter = state.partnerListFilter === 'allInvited' ? 'allInvited' : 'needMore';
+      const activeStyle = { background: '#0045A9', color: '#fff' };
+      const inactiveStyle = { background: '#F2F6FC', color: '#6B7A93' };
+      const pillBase = { height: 34, padding: '0 16px', border: '0', borderRadius: 10, fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' };
+      return {
+        partnerListFilter: filter,
+        showPartnerNeedMore: () => setState({ partnerListFilter: 'needMore' }),
+        showPartnerAllInvited: () => setState({ partnerListFilter: 'allInvited' }),
+        partnerFilterNeedMoreStyle: { ...pillBase, ...(filter === 'needMore' ? activeStyle : inactiveStyle) },
+        partnerFilterAllInvitedStyle: { ...pillBase, ...(filter === 'allInvited' ? activeStyle : inactiveStyle) },
+        partnerListNeedMoreCount: needMore.length,
+        partnerListAllInvitedCount: allInvited.length,
+        partnerListRows: (filter === 'allInvited' ? allInvited : needMore).map(buildRow),
+        partnerListEmpty: (filter === 'allInvited' ? allInvited : needMore).length === 0,
+        partnerListEmptyLabel: filter === 'allInvited'
+          ? '아직 협력사 초대를 모두 마친 DPP가 없습니다.'
+          : '협력사 초대가 필요한(담당 필드가 비어있는) DPP가 없습니다.',
+      };
     })(),
-    partnerDppsEmpty: !dash || !dash.dpps.some(d => d.needsPartnerInput),
     partnersHasSelection: !!state.partnersDppId,
     partnersSelectedDppName: (() => {
       const found = dash && dash.dpps.find(d => d.dppId === state.partnersDppId);

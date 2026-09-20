@@ -20,6 +20,7 @@ export async function fetchPublicPassport(publicUuid) {
   }
 
   const res = await fetch(`/public/dpp/${publicUuid}`, {
+    cache: 'no-store',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (!res.ok) {

@@ -4,6 +4,7 @@ import { useAppLogic } from './useAppLogic.js';
 import AppView from './AppView.jsx';
 import PublicPassport from './screens/PublicPassport.jsx';
 import { DEFAULT_PATH, ROUTES } from './routes.js';
+import loadingWhaleImg from './assets/loading-whale.png';
 
 /**
  * IEUM Digital Product Passport
@@ -29,9 +30,22 @@ function Screen() {
   }
 
   if (vals.loading) {
+    // 2026-09-17 강 요청: 화면 전환/데이터 로딩 중 밋밋한 텍스트 대신
+    // 마스코트 캐릭터가 살짝 위아래로 움직이는 로딩 화면을 보여준다.
     return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: '#8494AC', fontSize: 14 }}>
-        불러오는 중…
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '16px', background: '#F7F9FD' }}>
+        <style>{`
+          @keyframes ieumLoadingBob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-12px); }
+          }
+        `}</style>
+        <img
+          src={loadingWhaleImg}
+          alt="불러오는 중"
+          style={{ width: '132px', height: '132px', objectFit: 'contain', animation: 'ieumLoadingBob 1.8s ease-in-out infinite' }}
+        />
+        <span style={{ color: '#6B7A93', fontSize: '13.5px', fontWeight: '600' }}>불러오는 중…</span>
       </div>
     );
   }
