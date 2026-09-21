@@ -127,6 +127,18 @@ public class OekotexIngestService {
 
     @Transactional
     public OekotexUploadResponse ingestOekotexLabel(Long userId, Long dppId, MultipartFile file) {
+        IngestProgress.start(userId, dppId, DOC_TYPE_CODE);
+        try {
+            OekotexUploadResponse result = doIngestOekotexLabel(userId, dppId, file);
+            IngestProgress.finish(userId, dppId, DOC_TYPE_CODE);
+            return result;
+        } catch (RuntimeException e) {
+            IngestProgress.fail(userId, dppId, DOC_TYPE_CODE, e.getMessage());
+            throw e;
+        }
+    }
+
+    private OekotexUploadResponse doIngestOekotexLabel(Long userId, Long dppId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "업로드된 파일이 없습니다.");
         }
@@ -149,6 +161,7 @@ public class OekotexIngestService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "지정한 DPP를 찾을 수 없거나 이 조직 소유가 아닙니다. (dppId=" + dppId + ")"));
 
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 10, 38, 6, "문서 파싱 중 (텍스트·표 추출)");
         Map<String, Object> parsed;
         try {
             parsed = parserClient.parse(file, REGISTRY_CODE, dpp.getDomain());
@@ -207,8 +220,10 @@ public class OekotexIngestService {
         document.setCreatedBy(userId);
         document = documentRepository.save(document);
 
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 40, 52, 5, "블록체인에 문서 해시 기록 중");
         String documentAnchorTxId = anchorDocumentHash(document, orgId);
 
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 55, 88, IngestProgress.expectedZkpSec(DOC_TYPE_CODE), "ZKP 증명 생성 중 (수십 초 소요)");
         Map<String, Object> zkpResult;
         try {
             zkpResult = zkpClient.proveOekotexCheck(zkpInput.lowX10(), zkpInput.highX10(), zkpInput.phX10());
@@ -216,6 +231,7 @@ public class OekotexIngestService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "ZKP 증명 서비스 호출에 실패했습니다: " + e.getMessage(), e);
         }
+        IngestProgress.recordZkpDuration(DOC_TYPE_CODE, zkpResult.get("proveMs"));
         boolean cryptoVerified = Boolean.TRUE.equals(zkpResult.get("verified"));
         if (!cryptoVerified) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
@@ -251,6 +267,7 @@ public class OekotexIngestService {
         zkpProof.setPublicSignals(publicSignalsJson);
         zkpProof = zkpProofRepository.save(zkpProof);
 
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 90, 99, 5, "검증 결과 블록체인에 기록 중");
         String zkpAnchorTxId = anchorZkpVerification(document, zkpProof, publicSignalsJson, specPassed, orgId);
 
         document.setReviewStatus(specPassed ? "APPROVED" : "REJECTED");

@@ -128,6 +128,18 @@ public class DocumentIngestService {
 
     @Transactional
     public SteelMillUploadResponse ingestSteelMillSheet(Long userId, Long dppId, MultipartFile file) {
+        IngestProgress.start(userId, dppId, DOC_TYPE_CODE);
+        try {
+            SteelMillUploadResponse result = doIngestSteelMillSheet(userId, dppId, file);
+            IngestProgress.finish(userId, dppId, DOC_TYPE_CODE);
+            return result;
+        } catch (RuntimeException e) {
+            IngestProgress.fail(userId, dppId, DOC_TYPE_CODE, e.getMessage());
+            throw e;
+        }
+    }
+
+    private SteelMillUploadResponse doIngestSteelMillSheet(Long userId, Long dppId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "업로드된 파일이 없습니다.");
         }
@@ -151,6 +163,7 @@ public class DocumentIngestService {
                         "지정한 DPP를 찾을 수 없거나 이 조직 소유가 아닙니다. (dppId=" + dppId + ")"));
 
         // 1) 파서 호출 - 텍스트 추출 + 필드 파싱 + 해시
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 10, 38, 6, "문서 파싱 중 (텍스트·표 추출)");
         Map<String, Object> parsed;
         try {
             parsed = parserClient.parse(file, REGISTRY_CODE, dpp.getDomain());
@@ -228,9 +241,11 @@ public class DocumentIngestService {
         persistChemicalComposition(dpp.getDppId(), document.getDocumentId(), steelMillValues);
 
         // 5) [블록체인] 문서 해시 앵커링 - dpp-ledger-chaincode.recordDocumentHash
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 40, 52, 5, "블록체인에 문서 해시 기록 중");
         String documentAnchorTxId = anchorDocumentHash(document, orgId);
 
         // 6) zkp 서버 호출 - 실제 zk-SNARK 증명 생성(수십 초 소요, RestClient 타임아웃 4분)
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 55, 88, IngestProgress.expectedZkpSec(DOC_TYPE_CODE), "ZKP 증명 생성 중 (수십 초 소요)");
         Map<String, Object> zkpResult;
         try {
             zkpResult = zkpClient.proveSteelMillCheck(zkpInput.limits(), zkpInput.measured());
@@ -245,6 +260,7 @@ public class DocumentIngestService {
         // 여부"는 verdicts(12개 항목 각각의 Bool)를 전부 확인해야 안다. 예전엔 이
         // cryptoVerified를 review_status/FE 표시에 그대로 써서, 규격 미달 성적서도 거의
         // 항상 "검증 통과"로 뜨는 잠재 버그가 있었다(2026-08-15, 강이 지적해서 발견).
+        IngestProgress.recordZkpDuration(DOC_TYPE_CODE, zkpResult.get("proveMs"));
         boolean cryptoVerified = Boolean.TRUE.equals(zkpResult.get("verified"));
         if (!cryptoVerified) {
             // 크립토 증명 자체가 깨진 건 정상적인 "규격 미달" 케이스가 아니라 서비스
@@ -305,6 +321,7 @@ public class DocumentIngestService {
         zkpProof = zkpProofRepository.save(zkpProof);
 
         // 8) [블록체인] ZKP 검증결과 앵커링 - dpp-ledger-chaincode.recordZkpVerification
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 90, 99, 5, "검증 결과 블록체인에 기록 중");
         String zkpAnchorTxId = anchorZkpVerification(document, zkpProof, publicSignalsJson, specPassed, orgId);
 
         // 9) document_link 연결 + review_status 확정 + 완성도 재계산 - 이 세 줄이 지금까지

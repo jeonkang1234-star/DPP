@@ -213,6 +213,7 @@ public class AdminDashboardService {
             case "RAW_SUPPLIER" -> "협력사";
             case "CUSTOMS" -> "세관";
             case "EU_AUTHORITY" -> "시장감독기관";
+            case "INDIVIDUAL", "PERSONAL", "CONSUMER" -> "개인";
             default -> "미지정";
         };
     }

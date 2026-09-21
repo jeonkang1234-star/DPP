@@ -10,6 +10,7 @@ import com.dpp.document.service.BatteryCarbonIngestService;
 import com.dpp.document.service.CareLabelIngestService;
 import com.dpp.document.service.CbamIngestService;
 import com.dpp.document.service.DocumentIngestService;
+import com.dpp.document.service.IngestProgress;
 import com.dpp.document.service.OekotexIngestService;
 import com.dpp.document.service.RecyclingIngestService;
 import org.springframework.http.HttpStatus;
@@ -104,6 +105,12 @@ public class DocumentController {
             Authentication authentication) {
         Long userId = parseUserId(authentication);
         return ResponseEntity.ok(recyclingIngestService.ingestRecyclingReport(userId, dppId, file));
+    }
+
+    /** 업로드 -> 파싱 -> 앵커 -> ZKP 검증 진행률. FE가 주기적으로 조회한다. */
+    @org.springframework.web.bind.annotation.GetMapping("/document/progress")
+    public ResponseEntity<java.util.List<IngestProgress.Entry>> progress(Authentication authentication) {
+        return ResponseEntity.ok(IngestProgress.listFor(parseUserId(authentication)));
     }
 
     private Long parseUserId(Authentication authentication) {
