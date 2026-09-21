@@ -27,9 +27,14 @@ jobs:
           aws-region: us-east-1
 
       - name: Open SSH for this runner
+        env:
+          SG_ID: ${{ secrets.EC2_SG_ID }}
+          RUNNER_IP: ${{ steps.ip.outputs.ip }}
         run: |
-          aws ec2 authorize-security-group-ingress --group-id ${{ secrets.EC2_SG_ID }} \
-            --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ip }}/32
+          echo "runner ip: ${RUNNER_IP}"
+          test -n "${RUNNER_IP}" || { echo "runner IP를 못 가져옴"; exit 1; }
+          test -n "${SG_ID}" || { echo "EC2_SG_ID secret이 비어 있음"; exit 1; }
+          aws ec2 authorize-security-group-ingress --group-id "${SG_ID}" --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=${RUNNER_IP}/32,Description=github-cd-runner}]"
           sleep 5
 
       - name: Deploy to EC2 via SSH
@@ -104,6 +109,9 @@ jobs:
 
       - name: Close SSH
         if: always()
+        env:
+          SG_ID: ${{ secrets.EC2_SG_ID }}
+          RUNNER_IP: ${{ steps.ip.outputs.ip }}
         run: |
-          aws ec2 revoke-security-group-ingress --group-id ${{ secrets.EC2_SG_ID }} \
-            --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ip }}/32
+          test -n "${RUNNER_IP}" || exit 0
+          aws ec2 revoke-security-group-ingress --group-id "${SG_ID}" --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=${RUNNER_IP}/32}]"
