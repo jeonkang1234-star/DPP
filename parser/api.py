@@ -2,6 +2,8 @@
 """FastAPI로 감싼 문서 파싱 서비스.
 Spring Boot BE(document 패키지)가 이 서비스를 HTTP로 호출해서 단일 업로드 문서를 파싱한다.
 main.py(CLI, 목데이터 배치 테스트용)와는 별개 경로 - 여기는 "실제 업로드된 문서 1건" 처리 전용."""
+import os
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 import fitz
 
@@ -10,6 +12,8 @@ import extractor
 import qr
 import hasher
 import biz_reg
+import spec_extractor
+import structured_text
 
 app = FastAPI(title="DPP Document Parser", version="0.1.0")
 
@@ -86,17 +90,31 @@ async def parse_document(
             qr_payloads.extend(qr.decode_qr_on_page(page))
         raw_text = "\n".join(pages_text)
         page_count = doc.page_count
+        parse_engine = "text"
+        # 스캔본(텍스트 레이어 없음)은 OCR로 읽는다 - 예전엔 여기서 바로 422였다.
+        if not raw_text.strip() and os.environ.get("PARSER_OCR_FALLBACK", "1") != "0":
+            raw_text = structured_text.ocr_text(doc)
+            if raw_text.strip():
+                parse_engine = "ocr"
+        # 표 안의 '라벨 | 값'은 줄 단위 추출이 놓치므로 별도로 펼쳐 둔다(아래에서 후보로만 사용).
+        table_text = "\n".join(structured_text.table_lines(doc)) if raw_text.strip() else ""
     finally:
         doc.close()
 
     if not raw_text.strip():
         raise HTTPException(
             status_code=422,
-            detail="텍스트를 추출하지 못했습니다 (스캔본/이미지 PDF일 수 있음 - 현재 OCR 미지원)",
+            detail="텍스트를 추출하지 못했습니다 (스캔본 OCR도 실패 - 해상도가 낮거나 손상된 PDF일 수 있음)",
         )
 
     common = extractor.extract_common_fields(raw_text)
     extended = extractor.extract_extended_fields(entry["code"], raw_text, domain)
+    # 표에서만 뽑히는 필드를 보충한다. 원문에서 이미 뽑힌 필드는 덮어쓰지 않고(원문 우선),
+    # 표 값도 spec_extractor의 어휘/형태/타입 관문을 그대로 통과한 것만 채운다.
+    if table_text and isinstance(extended.get("spec_fields"), dict):
+        for code, value in spec_extractor.extract_spec_fields(table_text, domain).items():
+            extended["spec_fields"].setdefault(code, value)
+        parse_engine += "+tables"
     text_sha256 = hasher.sha256_of_text(raw_text)
 
     record = {
@@ -112,6 +130,7 @@ async def parse_document(
         **extended,
         "qr_payloads": qr_payloads,
         "text_sha256": text_sha256,
+        "parse_engine": parse_engine,
     }
     if include_raw_text:
         record["raw_text"] = raw_text

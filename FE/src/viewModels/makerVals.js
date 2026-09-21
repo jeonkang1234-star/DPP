@@ -289,6 +289,11 @@ export function orgAutofillValues(org) {
   return out;
 }
 
+const DOC_TYPE_LABEL = {
+  MILL_SHEET: '제강 성적서', CBAM_REPORT: 'CBAM 탄소보고서', CARE_LABEL: '섬유 케어라벨', OEKOTEX_LABEL: 'OEKO-TEX 인증서',
+  BATTERY_CARBON_REPORT: '배터리 탄소발자국 선언서', RECYCLING_REPORT: '재활용 처리 결과 보고서',
+};
+
 export function makerVals(ctx) {
   const { state, setState, props, data } = ctx;
   /**
@@ -819,6 +824,61 @@ export function makerVals(ctx) {
     dppTitle: state.dppNameInput != null ? state.dppNameInput : ((ff && ff.displayName) || ''),
     onDppTitle: (e) => setState({ dppNameInput: e.target.value }),
     dppTitlePlaceholder: '예) 3월 유럽향 열연코일 1차',
+    // 제품 사진(2026-09-21 강 요청) - DPP 이름 칸 오른쪽 버튼. DPP가 아직 저장 전이면 사진을
+    // 들고 있다가 첫 임시저장으로 dppId가 생길 때 useAppLogic effect가 올린다.
+    productPhotoSrc: state.pendingPhotoPreview
+      || (state.productPhotoDppId && state.productPhotoDppId === state.fieldFormDppId ? state.productPhotoUrl : '')
+      || '',
+    productPhotoInputId: 'dpp-product-photo-upload',
+    onProductPhotoChange: async (e) => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { ctx.say('JPG, PNG, WEBP 사진만 등록할 수 있습니다.'); return; }
+      if (file.size > 5 * 1024 * 1024) { ctx.say('사진은 5MB 이하만 등록할 수 있습니다.'); return; }
+      if (!state.fieldFormDppId) {
+        setState({ pendingPhoto: file, pendingPhotoPreview: URL.createObjectURL(file) });
+        ctx.say('제품 사진을 선택했습니다. 임시저장하면 함께 등록됩니다.');
+        return;
+      }
+      try {
+        await ctx.uploadProductPhoto(state.fieldFormDppId, file);
+        setState((s) => ({ photoVersion: (s.photoVersion || 0) + 1 }));
+        ctx.say('제품 사진을 등록했습니다.');
+      } catch (err) {
+        ctx.say(err.message || '제품 사진 등록에 실패했습니다.');
+      }
+    },
+    removeProductPhoto: async () => {
+      if (!state.fieldFormDppId) { setState({ pendingPhoto: null, pendingPhotoPreview: null }); return; }
+      try {
+        await ctx.deleteProductPhoto(state.fieldFormDppId);
+        setState((s) => ({ photoVersion: (s.photoVersion || 0) + 1, productPhotoUrl: null }));
+        ctx.say('제품 사진을 삭제했습니다.');
+      } catch (err) {
+        ctx.say(err.message || '제품 사진 삭제에 실패했습니다.');
+      }
+    },
+    // "작업 현황"(2026-09-21 강 요청) - 어느 DPP의 어느 문서가 검증 몇 %인지. 다른 화면에 가 있어도 볼 수 있게 챗봇 위 버튼으로 연다.
+    workStatusOpen: !!state.workStatusOpen,
+    toggleWorkStatus: () => setState((s) => ({ workStatusOpen: !s.workStatusOpen })),
+    workStatusRunningCount: (ctx.ingestProgress || []).filter((e) => e.status === 'RUNNING').length,
+    workStatusEmpty: (ctx.ingestProgress || []).length === 0,
+    workStatusItems: (ctx.ingestProgress || []).map((e) => {
+      const found = dash && dash.dpps.find((d) => d.dppId === e.dppId);
+      const running = e.status === 'RUNNING';
+      const failed = e.status === 'FAILED';
+      return {
+        key: e.dppId + ':' + e.docTypeCode,
+        dppName: found ? (found.displayName || found.modelName || ('DPP #' + found.dppId)) : ('DPP #' + e.dppId),
+        docLabel: DOC_TYPE_LABEL[e.docTypeCode] || e.docTypeCode,
+        percent: e.percent,
+        stage: failed ? ('실패 · ' + (e.message || '')) : e.stage,
+        running, failed,
+        barColor: failed ? '#E03B3B' : running ? '#E3A008' : '#12A150',
+        stateLabel: failed ? '실패' : running ? '검증 중' : '완료',
+      };
+    }),
     saveDraft: async () => {
       if (!ff) { ctx.say('임시저장했습니다.'); return; }
       try {
@@ -1012,6 +1072,7 @@ export function makerVals(ctx) {
           return b.required - a.required;
         }).map(d => {
           const uploading = (state.uploadingDocTypes || []).includes(d.docTypeCode);
+          const docProgress = (ctx.ingestProgress || []).find((e) => e.status === 'RUNNING' && e.dppId === state.fieldFormDppId && e.docTypeCode === d.docTypeCode);
           const failed = !uploading && (d.status === 'REJECTED' || d.status === 'EXPIRED');
           const stageIdx = uploading || d.status === 'PENDING' ? 1
             : (d.status === 'APPROVED' || d.status === 'REJECTED' || d.status === 'EXPIRED') ? 2
@@ -1099,7 +1160,11 @@ export function makerVals(ctx) {
             partnerOwned: !!partnerLockLabel,
             partnerOwnerLabel: partnerLockLabel,
             fileName: d.fileName || '',
-            statusLabel: uploading ? '검증 중' : (DOC_STATUS_LABEL[d.status] || d.status),
+            // 검증 중이면 서버가 알려주는 진행률(GET /document/progress)을 % 로 함께 보여준다.
+            statusLabel: uploading ? ('검증 중' + (docProgress ? ' ' + docProgress.percent + '%' : '')) : (DOC_STATUS_LABEL[d.status] || d.status),
+            progressVisible: uploading,
+            progressPct: docProgress ? docProgress.percent : 0,
+            progressStage: docProgress ? docProgress.stage : '업로드 중',
             dot: ctx.pillDot(uploading ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
             categoryLabel: d.zkpTarget ? '데이터 검증' : '형식 확인',
             categoryChip: d.zkpTarget ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#6B7A93'),

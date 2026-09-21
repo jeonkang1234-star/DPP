@@ -114,6 +114,18 @@ public class CbamIngestService {
 
     @Transactional
     public CbamUploadResponse ingestCbamReport(Long userId, Long dppId, MultipartFile file) {
+        IngestProgress.start(userId, dppId, DOC_TYPE_CODE);
+        try {
+            CbamUploadResponse result = doIngestCbamReport(userId, dppId, file);
+            IngestProgress.finish(userId, dppId, DOC_TYPE_CODE);
+            return result;
+        } catch (RuntimeException e) {
+            IngestProgress.fail(userId, dppId, DOC_TYPE_CODE, e.getMessage());
+            throw e;
+        }
+    }
+
+    private CbamUploadResponse doIngestCbamReport(Long userId, Long dppId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "업로드된 파일이 없습니다.");
         }
@@ -137,6 +149,7 @@ public class CbamIngestService {
                         "지정한 DPP를 찾을 수 없거나 이 조직 소유가 아닙니다. (dppId=" + dppId + ")"));
 
         // 1) 파서 호출
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 10, 38, 6, "문서 파싱 중 (텍스트·표 추출)");
         Map<String, Object> parsed;
         try {
             parsed = parserClient.parse(file, REGISTRY_CODE, dpp.getDomain());
@@ -199,10 +212,12 @@ public class CbamIngestService {
         document = documentRepository.save(document);
 
         // 4) [블록체인] 문서 해시 앵커링
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 40, 52, 5, "블록체인에 문서 해시 기록 중");
         String documentAnchorTxId = anchorDocumentHash(document, orgId);
 
         // 5) zkp 서버 호출 - cbam-check(de minimis 초과 여부)
         long qtyX10 = Math.round(importQuantityT * 10);
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 55, 88, IngestProgress.expectedZkpSec(DOC_TYPE_CODE), "ZKP 증명 생성 중 (수십 초 소요)");
         Map<String, Object> zkpResult;
         try {
             zkpResult = zkpClient.proveCbamCheck(DE_MINIMIS_X10, qtyX10);
@@ -210,6 +225,7 @@ public class CbamIngestService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "ZKP 증명 서비스 호출에 실패했습니다: " + e.getMessage(), e);
         }
+        IngestProgress.recordZkpDuration(DOC_TYPE_CODE, zkpResult.get("proveMs"));
         boolean cryptoVerified = Boolean.TRUE.equals(zkpResult.get("verified"));
         if (!cryptoVerified) {
             // 크립토 증명 자체가 깨진 건 정상적인 "미달" 케이스가 아니라 서비스 이상이다.
@@ -249,6 +265,7 @@ public class CbamIngestService {
         zkpProof = zkpProofRepository.save(zkpProof);
 
         // 7) [블록체인] 검증결과 앵커링
+        IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 90, 99, 5, "검증 결과 블록체인에 기록 중");
         String zkpAnchorTxId = anchorZkpVerification(document, zkpProof, publicSignalsJson, orgId);
 
         // 8) document_link 연결 + 완성도 재계산
