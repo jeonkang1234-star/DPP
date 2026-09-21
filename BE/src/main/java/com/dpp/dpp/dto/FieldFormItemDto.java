@@ -50,6 +50,17 @@ public record FieldFormItemDto(
          * 있다. 소유 조직 화면에서만 채워진다 - 협력사 본인에게는 항상 null이다
          * (자기 칸이 자기 때문에 잠겼다고 나오면 안 된다). PartnerAssignmentService 참고.
          */
-        String partnerLockLabel
+        String partnerLockLabel,
+        /**
+         * 이 항목이 채워지는 생애주기 단계(1~12, V36 requirement_field.lifecycle_stage).
+         * null 이면 제조 단계. 2026-09-19 추가.
+         */
+        Integer lifecycleStage,
+        /**
+         * 발급 전에 채워져야 하는 항목인가(단계 1~8). false 면 발급 이후 단계에서 채운다 -
+         * 재활용 처리 결과·BMS 동적데이터처럼 지금은 존재할 수 없는 항목이 여기 해당한다.
+         * 화면은 이 칸을 "추후 제출"로 따로 묶어 보여주고, 완성도 분모에서도 빠진다.
+         */
+        boolean issueGate
 ) {
 }

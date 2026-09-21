@@ -19,6 +19,10 @@ public record AdminMemberDto(
         long issuedDppCount,
         String contactName,
         String contactPhone,
-        String contactEmail
+        String contactEmail,
+        /** organization.org_type 원본(MANUFACTURER/RAW_SUPPLIER/CUSTOMS/EU_AUTHORITY), 없으면 null. */
+        String orgType,
+        /** 회원가입 역할군 이름(제조사/협력사/세관/시장감독기관/미지정) - 회원 관리 필터용. */
+        String roleLabel
 ) {
 }

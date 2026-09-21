@@ -69,6 +69,24 @@ public class DocumentSlotService {
     }
 
     /**
+     * 발급 게이트의 마지막 단계. V36 fn_issue_gate_max_stage() 와 같은 값이어야 한다 -
+     * 판정 자체는 DB 뷰가 하고, 여기 상수는 화면 표시용이다.
+     */
+    private static final int ISSUE_GATE_MAX_STAGE = 8;
+
+    /** requirement_field.lifecycle_stage 가 비었을 때의 기본 단계(제조). V36 뷰의 COALESCE 와 동일. */
+    private static final int DEFAULT_LIFECYCLE_STAGE = 4;
+
+    private static Integer stageOf(RequirementField f) {
+        return f.getLifecycleStage() == null ? null : Integer.valueOf(f.getLifecycleStage().intValue());
+    }
+
+    private static boolean isIssueGate(RequirementField f) {
+        int stage = f.getLifecycleStage() == null ? DEFAULT_LIFECYCLE_STAGE : f.getLifecycleStage().intValue();
+        return stage <= ISSUE_GATE_MAX_STAGE;
+    }
+
+    /**
      * parser(FastAPI)의 registry_code(23종 문서 레지스트리)와 우리 document_type 9종의
      * 대응표. 정확히 일치하는 문서가 없는 2종(PCF_REPORT, COO)은 이름이 가장 가까운
      * 코드로 best-effort 매핑했다 - common_fields/sustainability_metrics는 registry_code와
@@ -113,6 +131,7 @@ public class DocumentSlotService {
     private final SpecFieldAutoFillService specFieldAutoFillService;
     private final DocumentIntegrationProperties properties;
     private final PartnerAssignmentService partnerAssignmentService;
+    private final DppComplianceService complianceService;
 
     public DocumentSlotService(UserAccountRepository userAccountRepository,
                                 DppQueryRepository dppRepository,
@@ -126,7 +145,8 @@ public class DocumentSlotService {
                                 ParticipantSubmitStatusService participantSubmitStatusService,
                                 SpecFieldAutoFillService specFieldAutoFillService,
                                 DocumentIntegrationProperties properties,
-                                PartnerAssignmentService partnerAssignmentService) {
+                                PartnerAssignmentService partnerAssignmentService,
+                                DppComplianceService complianceService) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.participantRepository = participantRepository;
@@ -140,6 +160,7 @@ public class DocumentSlotService {
         this.specFieldAutoFillService = specFieldAutoFillService;
         this.properties = properties;
         this.partnerAssignmentService = partnerAssignmentService;
+        this.complianceService = complianceService;
     }
 
     @Transactional(readOnly = true)
@@ -168,7 +189,8 @@ public class DocumentSlotService {
                             f.isRequired(), "NOT_UPLOADED", null, null,
                             Boolean.TRUE.equals(draftZkpTargetByDocType.get(f.getLinkedDocType())),
                             // 아직 dpp 행이 없으니 붙은 협력사도 없다 - 잠글 것도 없다.
-                            f.getResponsibleRole(), null))
+                            f.getResponsibleRole(), null,
+                            stageOf(f), isIssueGate(f)))
                     .toList();
             return new DocumentFormResponse(null, draftSlots);
         }
@@ -189,7 +211,14 @@ public class DocumentSlotService {
                 .collect(Collectors.toMap(Document::getDocTypeCode, d -> d,
                         (a, b) -> a.getDocumentId() > b.getDocumentId() ? a : b));
 
-        List<RequirementField> fields = fieldsFor(domains, access.participantRoleCode());
+        // 필드 입력 폼과 같은 기준으로 거른다(2026-09-19). 배터리 여권 비대상이면
+        // 탄소발자국 선언·공급망 실사 보고서는 제출 대상이 아니다 - 여기서 안 거르면
+        // 화면엔 "필수 문서"로 남아서 영원히 발급이 막힌다(FE requiredDocsOk).
+        // null 이면 거르지 않는다(판정 보류 또는 조회 실패).
+        Set<String> applicable = complianceService.applicableFieldCodes(dppId);
+        List<RequirementField> fields = fieldsFor(domains, access.participantRoleCode()).stream()
+                .filter(f -> applicable == null || applicable.contains(f.getFieldCode()))
+                .toList();
         Map<String, Boolean> zkpTargetByDocType = zkpTargetByDocType(fields);
         // 수락한 협력사가 있는 역할만 잠근다(2026-08-23). 협력사 본인 화면에는 자기 담당
         // 문서만 내려가므로 잠글 대상이 없다 - 소유 조직 화면에서만 계산한다.
@@ -206,7 +235,8 @@ public class DocumentSlotService {
                             f.isRequired(), status, doc == null ? null : doc.getDocumentId(),
                             doc == null ? null : doc.getFileName(), zkpTarget,
                             f.getResponsibleRole(),
-                            partnerAssignmentService.lockLabelFor(lockedRoles, f.getResponsibleRole()));
+                            partnerAssignmentService.lockLabelFor(lockedRoles, f.getResponsibleRole()),
+                            stageOf(f), isIssueGate(f));
                 })
                 .toList();
 
@@ -350,7 +380,7 @@ public class DocumentSlotService {
         // 판정이 있어야만 채우므로 여기서는 건드리지 않는다(SpecFieldAutoFillService 주석).
         specFieldAutoFillService.apply(dppId, domain, orgId, userId, specFields, documentId, null);
 
-        fillIfEmpty(dppId, orgId, userId, "GTIN", asTrimmedString(parsed.get("gtin")));
+        fillIfEmpty(dppId, orgId, userId, "GTIN", asTrimmedString(parsed.get("gtin")), documentId);
 
         @SuppressWarnings("unchecked")
         Map<String, Object> sustainability = (Map<String, Object>) parsed.get("sustainability_metrics");
@@ -376,22 +406,22 @@ public class DocumentSlotService {
 
         switch (docTypeCode) {
             case "PCF_REPORT" -> {
-                fillIfEmpty(dppId, orgId, userId, "PCF_VALUE", carbonFootprint);
-                fillIfEmpty(dppId, orgId, userId, "PCF_METHOD", pcfMethodText);
+                fillIfEmpty(dppId, orgId, userId, "PCF_VALUE", carbonFootprint, documentId);
+                fillIfEmpty(dppId, orgId, userId, "PCF_METHOD", pcfMethodText, documentId);
             }
             case "LCA_EPD" -> {
-                fillIfEmpty(dppId, orgId, userId, "PCF_VALUE", carbonFootprint);
-                fillIfEmpty(dppId, orgId, userId, "PCF_METHOD", pcfMethodText);
+                fillIfEmpty(dppId, orgId, userId, "PCF_VALUE", carbonFootprint, documentId);
+                fillIfEmpty(dppId, orgId, userId, "PCF_METHOD", pcfMethodText, documentId);
                 if (recyclability != null) {
-                    fillIfEmpty(dppId, orgId, userId, "RECYCLABILITY_NOTE", recyclability + "%");
+                    fillIfEmpty(dppId, orgId, userId, "RECYCLABILITY_NOTE", recyclability + "%", documentId);
                 }
             }
-            case "SCRAP_PROOF" -> fillIfEmpty(dppId, orgId, userId, "RECYCLED_SCRAP_RATE", recycledContent);
+            case "SCRAP_PROOF" -> fillIfEmpty(dppId, orgId, userId, "RECYCLED_SCRAP_RATE", recycledContent, documentId);
             // EORI는 이미 common 필드(parsed.get("eori"))로 최상위에서 뽑히지만, "제조자 고유
             // 운영자 식별자"라는 의미상 EU 적합성선언서(EU_DOC)에 실제로 찍혀 있는 값만
             // 신뢰해서 채운다(다른 문서 유형에 우연히 EORI 형식 문자열이 있어도 오채움 방지).
-            case "EU_DOC" -> fillIfEmpty(dppId, orgId, userId, "UOI_MANUFACTURER", asTrimmedString(parsed.get("eori")));
-            case "COO" -> fillIfEmpty(dppId, orgId, userId, "ORIGIN_COUNTRY", originCountryCode);
+            case "EU_DOC" -> fillIfEmpty(dppId, orgId, userId, "UOI_MANUFACTURER", asTrimmedString(parsed.get("eori")), documentId);
+            case "COO" -> fillIfEmpty(dppId, orgId, userId, "ORIGIN_COUNTRY", originCountryCode, documentId);
             // 2026-08-18 강 요청("섬유도 파싱할 수 있는 데이터 다 파싱") - GRS/RCS 거래증명서의
             // "Recycled Cotton 5% / Recycled Polyamide 15%" 인증 소재 구성을 합산한
             // grs_boxes.total_recycled_percent를 재생 섬유 함유율로 채운다. 섬유 케어라벨
@@ -401,7 +431,7 @@ public class DocumentSlotService {
                 Map<String, Object> grsBoxes = (Map<String, Object>) parsed.get("grs_boxes");
                 Object totalRecycled = grsBoxes == null ? null : grsBoxes.get("total_recycled_percent");
                 if (totalRecycled instanceof Number n) {
-                    fillIfEmpty(dppId, orgId, userId, "RECYCLED_FIBER_RATE", String.valueOf(n.doubleValue()));
+                    fillIfEmpty(dppId, orgId, userId, "RECYCLED_FIBER_RATE", String.valueOf(n.doubleValue()), documentId);
                 }
             }
             default -> {
@@ -420,12 +450,23 @@ public class DocumentSlotService {
         return s.isEmpty() ? null : s;
     }
 
+    /**
+     * 2026-09-19: 이름은 그대로 두되 동작이 하나 늘었다. 이미 값이 있으면 여전히
+     * 덮어쓰지 않지만, 그냥 버리는 대신 문서값과 비교해서 결과를 남긴다
+     * (dpp_field_cross_check). 다르면 MISMATCH 로 남고 발급이 막힌다 - 문서와 입력값이
+     * 어긋난 채로 발급된 여권은 검증을 통과할 수 없다(강 요청 3번).
+     */
     private void fillIfEmpty(Long dppId, Long orgId, Long userId, String fieldCode, String value) {
+        fillIfEmpty(dppId, orgId, userId, fieldCode, value, null);
+    }
+
+    private void fillIfEmpty(Long dppId, Long orgId, Long userId, String fieldCode, String value, Long documentId) {
         if (value == null) {
             return;
         }
         Optional<DppFieldValue> existing = dppFieldValueRepository.findByDppIdAndFieldCode(dppId, fieldCode);
         if (existing.isPresent() && existing.get().getValueText() != null && !existing.get().getValueText().isBlank()) {
+            complianceService.recordCrossCheck(dppId, fieldCode, existing.get().getValueText(), value, documentId);
             return;
         }
         DppFieldValue row = existing.orElseGet(() -> {

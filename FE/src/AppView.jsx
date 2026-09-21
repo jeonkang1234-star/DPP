@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import AppHeader from './components/AppHeader.jsx';
 import MyPage from './screens/MyPage.jsx';
 import './hover.css';
+import loginSlidePassport from './assets/icons/login-slide-passport.png';
+import loginSlideDocextract from './assets/icons/login-slide-docextract.png';
+import loginSlideBlockchain from './assets/icons/login-slide-blockchain.png';
+import loginSlideZkp from './assets/icons/login-slide-zkp.png';
 
 /**
  * Presentational layer for the whole IEUM DPP prototype.
@@ -22,6 +26,9 @@ export default function AppView(v) {
     adminPendingBadge,
     adminRefreshedAtLabel,
     membersEmpty,
+    membersEmptyLabel,
+    adminMemberSearchQuery,
+    setAdminMemberSearchQuery,
     apTabs,
     apEmpty,
     approvals,
@@ -59,6 +66,11 @@ export default function AppView(v) {
     closeNotif,
     commitProfileEdit,
     completeness,
+    completenessEmpty,
+    completenessDoneRows,
+    completenessDoneCount,
+    completenessDoneOpen,
+    toggleCompletenessDone,
     confirmBody,
     confirmCancel,
     confirmLabel,
@@ -70,6 +82,11 @@ export default function AppView(v) {
     doLogin,
     fieldFormOpen,
     toggleFieldForm,
+    trackLabel, trackStyle, trackNote, laterStageNote,
+    classifyShow, classifyLabel, classifyValue, classifyOptions, classifyChange, classifyBorder,
+    classifyCapShow, classifyCapLabel, classifyCapValue, classifyCapChange, classifyCapBorder,
+    classifyDirty, classifyApplied, classifyApply, classifyApplyDisabled, classifyApplyLabel, classifyStatusText,
+    crossCheckOpen, crossCheckTitle, crossCheckRows,
     docPreviewChip,
     docPreviewMeta,
     docPreviewName,
@@ -83,6 +100,7 @@ export default function AppView(v) {
     dppName,
     dppOpen,
     dppPct,
+    dppIssued,
     dppSpec,
     dppStatusChip,
     ecoCarbon,
@@ -111,7 +129,9 @@ export default function AppView(v) {
     partnerDocumentSlots,
     formTitle,
     dppTitle, onDppTitle, dppTitlePlaceholder,
-    goApprove,
+    goApprove, goApproveDomain, adminPendingDomainBadge,
+    adminMemberDomainFilter, adminMemberRoleFilter, setAdminMemberDomainFilter, setAdminMemberRoleFilter,
+    adminMemberDomainOptions, adminMemberRoleOptions,
     goInput,
     goLogin,
     goSignup,
@@ -129,8 +149,16 @@ export default function AppView(v) {
     inviteRejected,
     inviteTotal,
     invites,
-    partnerDpps,
-    partnerDppsEmpty,
+    partnerListFilter,
+    showPartnerNeedMore,
+    showPartnerAllInvited,
+    partnerFilterNeedMoreStyle,
+    partnerFilterAllInvitedStyle,
+    partnerListNeedMoreCount,
+    partnerListAllInvitedCount,
+    partnerListRows,
+    partnerListEmpty,
+    partnerListEmptyLabel,
     partnersHasSelection,
     partnersSelectedDppName,
     participations,
@@ -143,6 +171,14 @@ export default function AppView(v) {
     partnerFieldTotalCount,
     partnerSaveDraft,
     scPartnerAssigned,
+    isMaker,
+    inquiryCategories, inqOpen, inqCategory, inqMessages, inqDraft, inqSending, inqError,
+    openInqWidget, closeInqWidget, selectInqCategory, setInqDraft, sendInqDraft,
+    adminInqOpen, adminInqError, adminInqSending,
+    openAdminInqInbox, closeAdminInqInbox, backToAdminInqList,
+    adminInqSelectedId, adminInqDraft, setAdminInqDraft, sendAdminInqReply,
+    adminInqListEmpty, adminInqRows, adminInqThreadTitle, adminInqThreadMessages,
+    adminInqSearchQuery, setAdminInqSearchQuery, adminInqStatusTabs, adminInqDomainTabs, adminInqFilteredEmpty,
     isApp,
     isBatch,
     batchIssueEnabled,
@@ -159,6 +195,13 @@ export default function AppView(v) {
     kpiActionBadgeStyle,
     kpiTotal,
     kpiWaiting,
+    openDppTotalList,
+    openDppIncompleteList,
+    closeDppList,
+    dppListOpen,
+    dppListTitle,
+    dppListRows,
+    dppListEmpty,
     lifecycle,
     loginCompanyTab,
     loginEmail,
@@ -325,6 +368,11 @@ export default function AppView(v) {
     scClearance,
     scInput,
     scMakerDash,
+    dashSearchQuery,
+    setDashSearchQuery,
+    dashSearchOpen,
+    dashSearchResults,
+    closeDashSearch,
     scMy,
     scPartners,
     scPassport,
@@ -443,33 +491,86 @@ export default function AppView(v) {
     dppTitleOpen, toggleDppTitle, dppTitleUnset
   } = v;
 
+  const LOGIN_SLIDE_COUNT = 4;
+  const [loginSlide, setLoginSlide] = useState(0);
+  useEffect(() => {
+    if (!isLogin) return;
+    const t = setInterval(() => setLoginSlide((i) => (i + 1) % LOGIN_SLIDE_COUNT), 5000);
+    return () => clearInterval(t);
+  }, [isLogin]);
+
   return (
     <>
 
 
-      <div style={{ width: '1440px', margin: '0 auto', position: 'relative', minHeight: '900px', background: '#FFFFFF' }}>
+      <div style={{ width: '1440px', margin: '0 auto', position: 'relative', minHeight: '100vh', background: '#FFFFFF' }}>
 
       {isLogin ? (<>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', minHeight: '900px' }}>
-        <div style={{ padding: '64px 72px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', background: '#0045A9', color: '#fff' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '46px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              <div style={{ background: '#fff', borderRadius: '10px', padding: '9px 13px', display: 'flex' }}><img src="/logo-ieum.png" alt="IEUM" style={{ height: '20px', display: 'block' }} /></div>
-              <span style={{ fontSize: '13px', letterSpacing: '.16em', color: 'rgba(255,255,255,.72)', fontWeight: '600' }}>DIGITAL PRODUCT PASSPORT SERVICE</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <h1 style={{ margin: '0', fontSize: '46px', lineHeight: '1.24', fontWeight: '700', letterSpacing: '-.03em', textWrap: 'pretty' }}>제품의 전 생애주기를<br />하나의 여권으로 잇습니다</h1>
-              <p style={{ margin: '0', maxWidth: '430px', fontSize: '16px', lineHeight: '1.7', color: 'rgba(255,255,255,.78)', textWrap: 'pretty' }}>EU ESPR 규정에 대응하는 디지털 제품 여권 발급·검증 플랫폼. <br />원자재부터 재활용까지의 데이터를 블록체인에 앵커링하고, <br />영업기밀은 ZKP로 보호합니다.</p>
-            </div>
+      {/* 2026-09-17 강 2차 피드백: 배경이 1440px 스테이지 폭에 갇혀서 화면 가생이에
+          흰 틈이 보였다 - position:fixed + inset:0으로 브라우저 창 전체를 덮는 별도
+          레이어를 깔아서 창 폭/높이와 무관하게 항상 꽉 차게 한다. */}
+      <div style={{ position: 'fixed', inset: '0', background: 'linear-gradient(180deg,#EEF3FB 0%,#E3E9F5 100%)', zIndex: '0' }}></div>
+      <div style={{ position: 'relative', zIndex: '1', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px' }}>
+      {/* 2026-09-17 강 2차 피드백: 슬라이드마다 문구 길이가 달라 카드 전체 높이가
+          바뀌어 보였다(1번째 vs 4번째 슬라이드) - minHeight 대신 고정 height로 카드
+          크기를 슬라이드와 무관하게 통일한다. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', width: '100%', maxWidth: '1180px', height: '640px', borderRadius: '28px', overflow: 'hidden', boxShadow: '0 50px 100px rgba(6,17,36,.30), 0 18px 40px rgba(6,17,36,.14)', position: 'relative' }}>
+        {/* 여권을 편 듯한 가운데 접힘선(2026-09-17 강 요청 - "왼쪽/오른쪽이 좀 더 입체적으로
+            분리된 느낌", "가능하다면 여권을 편 듯한 느낌으로"). transform 없이 순수 그림자만으로
+            양쪽 패널이 책처럼 맞닿은 골(gutter) 효과를 낸다 - 아래 두 패널의 inset boxShadow와
+            짝을 이룬다. */}
+        <div style={{ position: 'absolute', top: '0', bottom: '0', left: '50%', width: '1px', transform: 'translateX(-50%)', backgroundImage: 'repeating-linear-gradient(180deg, rgba(255,255,255,.55) 0 6px, transparent 6px 14px)', zIndex: '2', pointerEvents: 'none' }}></div>
+        <div style={{ padding: '64px 72px', display: 'flex', flexDirection: 'column', background: 'linear-gradient(155deg,#0B57C4 0%,#0045A9 55%,#00327A 100%)', color: '#fff', boxShadow: 'inset -16px 0 26px -20px rgba(0,0,0,.65)', position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ background: '#fff', borderRadius: '10px', padding: '9px 13px', display: 'flex' }}><img src="/logo-ieum.png" alt="IEUM" style={{ height: '20px', display: 'block' }} /></div>
+            <span style={{ fontSize: '13px', letterSpacing: '.16em', color: 'rgba(255,255,255,.72)', fontWeight: '600' }}>DIGITAL PRODUCT PASSPORT SERVICE</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'auto auto max-content', gap: '1px', background: 'rgba(255,255,255,.16)', borderRadius: '14px', overflow: 'hidden', width: 'fit-content' }}>
-            <div style={{ background: 'rgba(255,255,255,.06)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ height: '28px', display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '22px', fontWeight: '700', lineHeight: '1' }}>48,392</span><span style={{ fontSize: '12px', color: 'rgba(255,255,255,.66)', lineHeight: '1' }}>발급된 DPP</span></div>
-            <div style={{ background: 'rgba(255,255,255,.06)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ height: '28px', display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '22px', fontWeight: '700', lineHeight: '1' }}>1,284</span><span style={{ fontSize: '12px', color: 'rgba(255,255,255,.66)', lineHeight: '1' }}>참여 기업</span></div>
-            <div style={{ background: 'rgba(255,255,255,.06)', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ height: '28px', display: 'flex', alignItems: 'center', fontSize: '16px', fontWeight: '700', lineHeight: '1', whiteSpace: 'nowrap' }}>철강 · 배터리 · 섬유·패션</span><span style={{ fontSize: '12px', color: 'rgba(255,255,255,.66)', lineHeight: '1' }}>대응 도메인</span></div>
+
+          <div style={{ flex: '1', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '0' }}>
+          {/* 2026-09-17 강 3차 피드백: 카드 높이를 고정한 뒤로 1번째 슬라이드가 3줄로
+              꽉 차 보여 부담스럽다는 지적 - 이미지·폰트를 전반적으로 줄이고 슬라이드 간
+              폰트 크기 편차도 좁힌다. */}
+          <div key={loginSlide} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ width: 'auto', height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'center' }}>
+                <img
+                  src={loginSlide === 0 ? loginSlidePassport : loginSlide === 1 ? loginSlideDocextract : loginSlide === 2 ? loginSlideBlockchain : loginSlideZkp}
+                  alt=""
+                  style={{ height: '150px', maxWidth: '320px', width: 'auto', objectFit: 'contain', display: 'block' }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '13px' }}>
+                {loginSlide === 0 ? (<>
+                  <h1 style={{ margin: '0', fontSize: '32px', lineHeight: '1.32', fontWeight: '700', letterSpacing: '-.03em', textWrap: 'pretty' }}>제품의 전 생애주기를<br />하나의 여권으로 잇습니다</h1>
+                  <p style={{ margin: '0', maxWidth: '400px', fontSize: '14.5px', lineHeight: '1.65', color: 'rgba(255,255,255,.78)', textWrap: 'pretty' }}>EU ESPR 규정에 대응하는 디지털 제품 여권 발급·검증 플랫폼. <br />원자재부터 재활용까지의 데이터를 블록체인에 앵커링하고, <br />영업기밀은 ZKP로 보호합니다.</p><span style={{ display: 'block', marginTop: '2px', fontSize: '11px', lineHeight: '1.6', color: 'rgba(255,255,255,.5)' }}>ESPR(Ecodesign for Sustainable Products Regulation)<br />제품의 전 생애주기 환경정보 공개를 의무화하는 EU 에코디자인 지속가능제품 규정입니다.</span>
+                </>) : loginSlide === 1 ? (<>
+                  {/* 2026-09-17 강 4차 피드백: 한 줄로 우겨넣느라 글씨가 너무 작았다 -
+                      "문서 업로드만으로,"에서 줄바꿈하고 다음 줄에 "필요 데이터 자동
+                      추출", 크기도 다른 슬라이드(30px)와 맞춘다. 부제문도 "복잡한 수기
+                      입력 대신,"에서 줄바꿈. */}
+                  <h1 style={{ margin: '0', fontSize: '30px', lineHeight: '1.32', fontWeight: '700', letterSpacing: '-.03em', textWrap: 'pretty' }}>문서 업로드만으로,<br />필요 데이터 자동 추출</h1>
+                  <p style={{ margin: '0', maxWidth: '400px', fontSize: '14.5px', lineHeight: '1.65', color: 'rgba(255,255,255,.78)', textWrap: 'pretty' }}>복잡한 수기 입력 대신,<br />문서를 파싱해 필요한 데이터만 간단하게 추출합니다.</p>
+                </>) : loginSlide === 2 ? (<>
+                  <h1 style={{ margin: '0', fontSize: '30px', lineHeight: '1.32', fontWeight: '700', letterSpacing: '-.03em', textWrap: 'pretty' }}>블록체인으로 남기는<br />위변조 없는 이력</h1>
+                  {/* 강 요청: "원자재 입고부터 재활용까지" 구간 표현 삭제. */}
+                  <p style={{ margin: '0', maxWidth: '400px', fontSize: '14.5px', lineHeight: '1.65', color: 'rgba(255,255,255,.78)', textWrap: 'pretty' }}>모든 이력을 블록체인에 앵커링해 조작을 막습니다.</p>
+                </>) : (<>
+                  <h1 style={{ margin: '0', fontSize: '30px', lineHeight: '1.32', fontWeight: '700', letterSpacing: '-.03em', textWrap: 'pretty' }}>영지식증명(ZKP)으로<br />지키는 영업비밀</h1>
+                  <p style={{ margin: '0', maxWidth: '400px', fontSize: '14.5px', lineHeight: '1.65', color: 'rgba(255,255,255,.78)', textWrap: 'pretty' }}>규격을 충족했다는 사실만 증명하고, <br />민감한 실측값 자체는 기록에도 남기지 않습니다.</p>
+                </>)}
+              </div>
+          </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {Array.from({ length: LOGIN_SLIDE_COUNT }).map((_, i) => (
+              <span
+                key={i}
+                onClick={() => setLoginSlide(i)}
+                style={{ width: i === loginSlide ? '20px' : '7px', height: '7px', borderRadius: '4px', background: i === loginSlide ? '#fff' : 'rgba(255,255,255,.32)', cursor: 'pointer', transition: 'all .25s' }}
+              />
+            ))}
           </div>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 72px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '64px 72px', background: '#fff', boxShadow: 'inset 16px 0 26px -20px rgba(0,0,0,.16)' }}>
           <div style={{ width: '100%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '26px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <h2 style={{ margin: '0', fontSize: '26px', fontWeight: '700', letterSpacing: '-.02em' }}>로그인</h2>
@@ -506,6 +607,7 @@ export default function AppView(v) {
             </div>
           </div>
         </div>
+      </div>
       </div>
       </>) : null}
 
@@ -710,7 +812,7 @@ export default function AppView(v) {
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>운영 대시보드</h1>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', maxWidth: '560px', height: '52px', padding: '0 8px 0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
               <span style={{ width: '14px', height: '14px', border: '1.8px solid #9AA8BE', borderRadius: '8px', flex: 'none' }}></span>
-              <input placeholder="회사명으로 회원 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
+              <input placeholder="회사명으로 회원 검색" value={adminMemberSearchQuery} onChange={(e) => setAdminMemberSearchQuery(e.target.value)} style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
               <span style={{ height: '36px', padding: '0 16px', display: 'grid', placeItems: 'center', borderRadius: '11px', background: '#F2F6FC', color: '#6B7A93', fontSize: '12.5px', fontWeight: '600' }}>검색</span>
             </div>
             <span style={{ marginLeft: 'auto', fontSize: '12.5px', color: '#8494AC' }}>{adminRefreshedAtLabel}</span>
@@ -742,13 +844,18 @@ export default function AppView(v) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '16px', alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '16px', alignItems: 'stretch' }}>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>운영현황</span><span style={{ fontSize: '12px', color: '#8494AC' }}>{adminPendingCountLabel}</span></div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <button onClick={goApprove} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: '14px', padding: '16px 18px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv8">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: '1' }}>
+                <button onClick={goApprove} style={{ flex: '1', display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: '14px', padding: '16px 18px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv8">
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>가입 승인 대기</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>증빙서류 검토 후 승인 필요</span></span>
                   <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '22px', fontWeight: '700', color: '#0045A9' }}>{adminPendingBadge}</span>
+                  <span style={{ fontSize: '12px', color: '#8494AC' }}>→</span>
+                </button>
+                <button onClick={goApproveDomain} style={{ flex: '1', display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: '14px', padding: '16px 18px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv8">
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>도메인 확장 대기</span><span style={{ fontSize: '12px', color: '#6B7A93' }}>추가 도메인 증빙서류 검토 후 승인 필요</span></span>
+                  <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '22px', fontWeight: '700', color: '#0045A9' }}>{adminPendingDomainBadge}</span>
                   <span style={{ fontSize: '12px', color: '#8494AC' }}>→</span>
                 </button>
               </div>
@@ -757,16 +864,20 @@ export default function AppView(v) {
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>유형별 문의</span></div>
-                <span style={{ height: '32px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>{inquiryTotalLabel}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ height: '32px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>{inquiryTotalLabel}</span>
+                  <button onClick={openAdminInqInbox} style={{ height: '32px', padding: '0 12px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '10px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }} className="hv34">문의함 열기</button>
+                </div>
               </div>
               {inquiriesEmpty ? (
               <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>접수된 문의가 없습니다.</div>
               ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', height: '176px', padding: '2px 2px 0' }}>
                 {(inquiries || []).map((q, $index) => (<React.Fragment key={$index}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}><span style={{ fontSize: '13px', fontWeight: '500', color: '#44546F' }}>{q.label}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', fontWeight: '600', color: '#0B1B33' }}>{q.count}건 · {q.pct}%</span></div>
-                  <div style={{ height: '9px', borderRadius: '6px', background: '#EEF2F8', overflow: 'hidden' }}><span style={q.style}></span></div>
+                <div title={`${q.label} · ${q.count}건 (${q.pct}%)`} style={{ flex: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', height: '100%', minWidth: '0' }}>
+                  <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '700', color: '#0B1B33', whiteSpace: 'nowrap' }}>{q.count}</span>
+                  <div style={{ width: '100%', maxWidth: '38px', height: '120px', display: 'flex', alignItems: 'flex-end', background: '#EEF2F8', borderRadius: '4px', overflow: 'hidden' }}><span style={q.barStyle}></span></div>
+                  <span style={{ fontSize: '11px', fontWeight: '500', color: '#6B7A93', textAlign: 'center', lineHeight: '1.3', wordBreak: 'keep-all' }}>{q.label}</span>
                 </div>
                 </React.Fragment>))}
               </div>
@@ -778,13 +889,17 @@ export default function AppView(v) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
               <span style={{ fontSize: '15px', fontWeight: '600' }}>회원 관리</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '9px', width: '280px', height: '40px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px' }}><span style={{ width: '12px', height: '12px', border: '1.8px solid #9AA8BE', borderRadius: '7px', flex: 'none' }}></span><input placeholder="회사명 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '13.5px' }} /></div>
-                <button style={{ height: '40px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv11">도메인 전체</button>
-                <button style={{ height: '40px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv12">국가 전체</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px', width: '280px', height: '40px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px' }}><span style={{ width: '12px', height: '12px', border: '1.8px solid #9AA8BE', borderRadius: '7px', flex: 'none' }}></span><input placeholder="회사명 검색" value={adminMemberSearchQuery} onChange={(e) => setAdminMemberSearchQuery(e.target.value)} style={{ flex: '1', border: '0', background: 'transparent', fontSize: '13.5px' }} /></div>
+                <select value={adminMemberDomainFilter} onChange={(e) => setAdminMemberDomainFilter(e.target.value)} style={{ height: '40px', padding: '0 12px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: adminMemberDomainFilter === 'ALL' ? '#fff' : 'rgba(0,69,169,.08)', fontSize: '13px', fontWeight: '600', color: adminMemberDomainFilter === 'ALL' ? '#44546F' : '#0045A9', cursor: 'pointer' }}>
+                  {(adminMemberDomainOptions || []).map(([k, label]) => (<option key={k} value={k}>{label}</option>))}
+                </select>
+                <select value={adminMemberRoleFilter} onChange={(e) => setAdminMemberRoleFilter(e.target.value)} style={{ height: '40px', padding: '0 12px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: adminMemberRoleFilter === 'ALL' ? '#fff' : 'rgba(0,69,169,.08)', fontSize: '13px', fontWeight: '600', color: adminMemberRoleFilter === 'ALL' ? '#44546F' : '#0045A9', cursor: 'pointer' }}>
+                  {(adminMemberRoleOptions || []).map(([k, label]) => (<option key={k} value={k}>{label}</option>))}
+                </select>
               </div>
             </div>
             {membersEmpty ? (<>
-            <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>승인된 회원이 없습니다.</div>
+            <div style={{ padding: '30px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>{membersEmptyLabel}</div>
             </>) : (<>
             <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr .8fr 1fr .9fr .9fr 64px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
               <span>회사명</span><span>가입시기</span><span>국가</span><span>도메인</span><span style={{ textAlign: 'right' }}>보유 DPP</span><span style={{ textAlign: 'right' }}>발행 DPP</span><span></span>
@@ -900,22 +1015,43 @@ export default function AppView(v) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>DPP 현황</h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', maxWidth: '520px', height: '52px', padding: '0 8px 0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', maxWidth: '520px', height: '52px', padding: '0 8px 0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', position: 'relative' }}>
               <span style={{ width: '14px', height: '14px', border: '1.8px solid #9AA8BE', borderRadius: '8px', flex: 'none' }}></span>
-              <input placeholder="제품명 · DPP 식별자 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
+              {/* 2026-09-17 강 3차 피드백: 장식용이던 검색창을 실제로 동작하게 - 제품명·DPP
+                  식별자로 입력하면 네이버 검색창처럼 일치 항목을 드롭다운으로 보여주고,
+                  클릭하면 제품 조회의 해당 DPP 상세로 바로 이동한다(dashSearchResults,
+                  makerVals.js). onBlur는 클릭이 먼저 처리되도록 살짝 지연 후 닫는다. */}
+              <input value={dashSearchQuery} onChange={(e) => setDashSearchQuery(e.target.value)} onFocus={() => { if (dashSearchQuery) setDashSearchQuery(dashSearchQuery); }} onBlur={() => setTimeout(closeDashSearch, 150)} placeholder="제품명 · DPP 식별자 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
               <span style={{ height: '36px', padding: '0 16px', display: 'grid', placeItems: 'center', borderRadius: '11px', background: '#F2F6FC', color: '#6B7A93', fontSize: '12.5px', fontWeight: '600' }}>검색</span>
+              {dashSearchOpen ? (<>
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: '0', right: '0', background: '#fff', border: '1px solid rgba(16,32,64,.10)', borderRadius: '14px', boxShadow: '0 12px 28px rgba(16,32,64,.14)', overflow: 'hidden', zIndex: '40' }}>
+                {(dashSearchResults || []).length === 0 ? (<>
+                <div style={{ padding: '16px', textAlign: 'center', fontSize: '12.5px', color: '#8494AC' }}>일치하는 DPP가 없습니다.</div>
+                </>) : (dashSearchResults || []).map((r, $index) => (<React.Fragment key={$index}>
+                <div onMouseDown={r.select} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '11px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(16,32,64,.06)' }} className="hv8">
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: '600' }}>{r.productName}</span>
+                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC' }}>{r.serial}</span>
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#6B7A93', flex: 'none' }}>{r.statusLabel}</span>
+                </div>
+                </React.Fragment>))}
+              </div>
+              </>) : null}
             </div>
-            <button onClick={goInput} style={{ marginLeft: 'auto', height: '52px', padding: '0 22px', border: '0', borderRadius: '15px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 20px rgba(0,69,169,.26)' }}>+ 새 DPP 생성</button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '16px' }}>
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></div>
+            {/* 2026-09-17 강 요청: "등록 DPP 수"는 작성 완료(완성도 100%) 기준으로 세고,
+                클릭하면 그 DPP들을 팝업 목록으로 보여준다. */}
+            <div onClick={openDppTotalList} title="등록 DPP 목록 보기" style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px', cursor: 'pointer' }} className="hv8">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em' }}>{kpiTotal}</span><span style={{ ...kpiNewBadgeStyle, fontSize: '13px' }}>+{kpiNew}</span></div>
-              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>이번 달 신규 {kpiNew}건</span>
+              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>작성 완료 기준 · 이번 달 신규 {kpiNew}건</span>
             </div>
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>작성중인 DPP 수</span></div>
+            {/* "작성중인 DPP 수"도 같은 방식으로 미완료 DPP 목록 팝업을 연다. */}
+            <div onClick={openDppIncompleteList} title="작성중인 DPP 목록 보기" style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px', cursor: 'pointer' }} className="hv8">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>작성중인 DPP 수</span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em', color: '#C22B2B' }}>{kpiIncomplete}</span><span style={{ ...kpiActionBadgeStyle, fontSize: '12.5px' }}>조치 필요</span></div>
               <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>필드 누락 {kpiMissing}건 · 서류 대기 {kpiWaiting}건</span>
             </div>
@@ -924,13 +1060,10 @@ export default function AppView(v) {
               <p style={{ margin: '0', fontSize: '12px', lineHeight: '1.55', color: '#6B7A93' }}>{esprUpdate.summary}</p>
               <button onClick={esprUpdate.openDetail} style={{ marginTop: 'auto', alignSelf: 'flex-start', height: '28px', padding: '0 10px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '11.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>자세히 보기</button>
             </div>
-            <div style={{ background: '#0B1B33', borderRadius: '18px', padding: '20px 22px', color: '#fff', display: 'flex', flexDirection: 'column', gap: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ width: '8px', height: '8px', borderRadius: '5px', background: '#4ADE80', boxShadow: '0 0 0 4px rgba(74,222,128,.20)' }}></span><span style={{ fontSize: '14px', fontWeight: '600' }}>ZKP 증명 상태</span></div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '20px', fontWeight: '700' }}>{zkpPendingCount}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>제출 요구 대기</span></div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '20px', fontWeight: '700', color: '#FCA5A5' }}>{zkpRejectedCount}</span><span style={{ fontSize: '11.5px', color: 'rgba(255,255,255,.6)' }}>조건 미달 반려</span></div>
-              </div>
-              <button onClick={openNotif} style={{ height: '34px', border: '0', borderRadius: '10px', background: 'rgba(255,255,255,.14)', color: '#fff', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }}>알림센터에서 확인</button>
+            <div style={{ background: '#0B1B33', borderRadius: '18px', padding: '20px 22px', color: '#fff', display: 'flex', flexDirection: 'column', gap: '13px', justifyContent: 'center' }}>
+              <span style={{ fontSize: '14px', fontWeight: '600' }}>새 DPP 등록</span>
+              <p style={{ margin: '0', fontSize: '12px', lineHeight: '1.55', color: 'rgba(255,255,255,.6)' }}>제품 정보를 입력해 새 디지털 제품 여권을 생성합니다.</p>
+              <button onClick={goInput} style={{ height: '44px', border: '0', borderRadius: '12px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 20px rgba(0,69,169,.26)' }}>+ 새 DPP 생성</button>
             </div>
           </div>
 
@@ -944,8 +1077,8 @@ export default function AppView(v) {
                 {(recentDpps || []).map((w, $index) => (<React.Fragment key={$index}>
                 <button onClick={w.open} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'center', padding: '14px 15px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv20">
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '700', color: '#2A3A55' }}>{w.serial}</span>
-                    <span style={{ fontSize: '13.5px', fontWeight: '600', lineHeight: '1.35' }}>{w.productName}</span>
+                    <span style={{ fontSize: '13.5px', fontWeight: '700', color: '#0B1B33', lineHeight: '1.35' }}>{w.productName}</span>
+                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#8494AC' }}>{w.serial}</span>
                   </span>
                   <span style={w.statusChip}>{w.statusLabel}</span>
                 </button>
@@ -958,26 +1091,58 @@ export default function AppView(v) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
                 <span style={{ fontSize: '15px', fontWeight: '600' }}>DPP 입력률</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#6B7A93' }}><span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#12A150' }}></span>완성</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#6B7A93' }}><span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#E3A008' }}></span>진행중</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#6B7A93' }}><span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#E03B3B' }}></span>미입력</span>
+                  {/* 2026-09-17 강 2차 피드백: 고정 색 대신 입력률에 따라 옅음->브랜드
+                      블루로 짙어지는 그라데이션이라, 범례도 하나의 그라데이션 바로 보여준다. */}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#6B7A93' }}><span style={{ width: '30px', height: '9px', borderRadius: '5px', background: 'linear-gradient(90deg,#CFE3FA,#0045A9)' }}></span>입력률 낮음 → 높음</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#6B7A93' }}><span style={{ width: '9px', height: '9px', borderRadius: '3px', background: '#EAF6FC', border: '1px solid rgba(16,32,64,.14)' }}></span>미입력</span>
                 </div>
               </div>
+              {completenessEmpty ? (<>
+              <div style={{ padding: '20px 4px', fontSize: '13px', color: '#8494AC' }}>등록된 DPP가 없습니다.</div>
+              </>) : (<>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '13px' }}>
+                {(completeness || []).length === 0 ? (<>
+                <div style={{ padding: '4px 4px 2px', fontSize: '12.5px', color: '#8494AC' }}>미완료 DPP가 없습니다 - 모든 DPP가 작성 완료되었습니다.</div>
+                </>) : null}
                 {(completeness || []).map((c, $index) => (<React.Fragment key={$index}>
                 <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr 52px', gap: '14px', alignItems: 'center' }}>
                   <button onClick={c.open} style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start', textAlign: 'left', border: '0', background: 'transparent', padding: '0', cursor: 'pointer' }}>
-                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', fontWeight: '600', color: '#0045A9', textDecoration: 'underline', textUnderlineOffset: '3px' }}>{c.id}</span>
-                    <span style={{ fontSize: '12.5px', color: '#44546F', lineHeight: '1.35' }}>{c.name}</span>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#0B1B33', lineHeight: '1.3' }}>{c.name}</span>
+                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#8494AC' }}>{c.id}</span>
                   </button>
-                  {/* 트랙이 흰색이 되면서 카드 배경(흰색)과 경계가 사라져 막대 길이를 못 읽는다 - 얇은 테두리를 준다. */}
-                  <div style={{ display: 'flex', height: '22px', borderRadius: '7px', overflow: 'hidden', border: '1px solid rgba(16,32,64,.14)', boxSizing: 'border-box', ...c.trackStyle }}>
+                  {/* 참고 이미지 느낌의 원통형 3D 막대(2026-09-17 강 요청) - 트랙을 필셔
+                      더 둥글게(pill) 만들고 segStyle3D/groove3d로 광택·홈 효과를 준다. */}
+                  <div style={{ display: 'flex', height: '24px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(16,32,64,.14)', boxSizing: 'border-box', ...c.trackStyle }}>
                     {(c.segs || []).map((g, $index) => (<React.Fragment key={$index}><span style={g.style}></span></React.Fragment>))}
                   </div>
                   <span style={c.pctStyle}>{c.pct}%</span>
                 </div>
                 </React.Fragment>))}
               </div>
+              {/* 2026-09-17 강 요청: 완성도 100% DPP는 쭉 나열하지 않고 토글로 접어둔다. */}
+              {completenessDoneCount > 0 ? (<>
+              <button onClick={toggleCompletenessDone} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', height: '38px', padding: '0 2px', border: '0', borderTop: '1px dashed rgba(16,32,64,.12)', background: 'transparent', cursor: 'pointer', fontSize: '12.5px', fontWeight: '600', color: '#0045A9' }}>
+                <span>완성도 100% DPP {completenessDoneCount}건</span>
+                <span style={{ display: 'inline-block', fontSize: '10px', transform: completenessDoneOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
+              </button>
+              </>) : null}
+              {completenessDoneOpen ? (<>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '13px' }}>
+                {(completenessDoneRows || []).map((c, $index) => (<React.Fragment key={$index}>
+                <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr 52px', gap: '14px', alignItems: 'center' }}>
+                  <button onClick={c.open} style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start', textAlign: 'left', border: '0', background: 'transparent', padding: '0', cursor: 'pointer' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#0B1B33', lineHeight: '1.3' }}>{c.name}</span>
+                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#8494AC' }}>{c.id}</span>
+                  </button>
+                  <div style={{ display: 'flex', height: '24px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(16,32,64,.14)', boxSizing: 'border-box', ...c.trackStyle }}>
+                    {(c.segs || []).map((g, $index) => (<React.Fragment key={$index}><span style={g.style}></span></React.Fragment>))}
+                  </div>
+                  <span style={c.pctStyle}>{c.pct}%</span>
+                </div>
+                </React.Fragment>))}
+              </div>
+              </>) : null}
+              </>)}
               <span style={{ fontSize: '12px', color: '#8494AC' }}>식별자를 클릭하면 생애주기 진행상태와 미충족 필드·책임주체를 확인할 수 있습니다.</span>
             </div>
           </div>
@@ -1068,8 +1233,12 @@ export default function AppView(v) {
                           <input id={d.inputId} type="file" onChange={d.onFileChange} style={{ display: 'none' }} />
                           </>)}
                     </div>
-                    <span style={d.categoryChip}>{d.categoryLabel}</span>
-                    <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{d.fileName || '아직 업로드되지 않았습니다'}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={d.categoryChip}>{d.categoryLabel}</span>
+                      {/* 발급 이후 단계에 제출하는 문서(재활용 처리 결과 등) - 2026-09-19. */}
+                      {d.laterStage ? (<span style={d.laterStyle}>{d.laterLabel}</span>) : null}
+                    </span>
+                    <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{d.laterStage && !d.fileName ? '발급 이후 단계에서 제출합니다' : (d.fileName || '아직 업로드되지 않았습니다')}</span>
                     {d.criterionItems && d.criterionItems.length ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <button type="button" onClick={d.toggleCriterion} style={{ display: 'flex', alignItems: 'center', gap: '4px', border: 'none', background: 'none', padding: '0', cursor: 'pointer', fontSize: '11px', color: '#0045A9', fontWeight: '600' }}>
@@ -1120,9 +1289,70 @@ export default function AppView(v) {
                     <span style={{ fontSize: '15px', fontWeight: '600' }}>{formTitle}</span>
                     <span style={{ display: 'inline-block', fontSize: '11px', color: '#8494AC', transform: fieldFormOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
                   </button>
+                  {trackLabel ? (<span style={{ ...trackStyle, flex: 'none' }}>{trackLabel}</span>) : null}
                   <button onClick={openFieldCheck} style={{ height: '28px', padding: '0 10px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '9px', background: '#FBFCFE', fontSize: '12px', color: '#44546F', fontWeight: '600', cursor: 'pointer', flex: 'none' }}>필수 {fieldFilledCount}/{fieldTotalCount}{fieldOptionalTotalCount ? ` · 선택 ${fieldOptionalFilledCount}/${fieldOptionalTotalCount}` : ''} 입력됨</button>
                 </div>
                 {fieldFormOpen ? (<>
+                {/*
+                  2026-09-19 강 요청 - 배터리 분류를 폼 맨 위에서 먼저 고른다. 이 두 값이
+                  아래에 어떤 항목이 남을지를 전부 결정하므로(여권 대상이면 전체, 비대상이면
+                  축약 세트) 섹션 목록 안쪽이 아니라 여기 있어야 순서가 맞다. 배터리가
+                  아니면 classifyShow가 false라 아예 안 그려진다.
+                */}
+                {classifyShow ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '18px 20px', borderRadius: '16px', background: 'linear-gradient(180deg,#F5F9FF 0%,#EAF2FF 100%)', border: '2px solid #0045A9', boxShadow: '0 6px 18px rgba(0,69,169,.12)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <span style={{ width: '26px', height: '26px', flex: 'none', display: 'grid', placeItems: 'center', borderRadius: '8px', background: '#0045A9', color: '#fff', fontSize: '13px', fontWeight: '800' }}>1</span>
+                    <span style={{ fontSize: '14.5px', fontWeight: '700', color: '#0A2F6B' }}>배터리 분류 · 정격용량</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '7px', flex: '1.2 1 220px', minWidth: '0' }}>
+                      <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0A2F6B' }}>{classifyLabel}<span style={{ color: '#C22B2B' }}>*</span></span>
+                      <select value={classifyValue} onChange={classifyChange} style={{ height: '48px', padding: '0 12px', border: '1.5px solid ' + classifyBorder, borderRadius: '12px', fontSize: '14px', background: '#fff', color: classifyValue ? '#0B1B33' : '#6F86AE', width: '100%', boxSizing: 'border-box', cursor: 'pointer' }}>
+                        <option value="">선택하세요</option>
+                        {(classifyOptions || []).map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                      </select>
+                    </label>
+                    {classifyCapShow ? (
+                    <label style={{ display: 'flex', flexDirection: 'column', gap: '7px', flex: '1 1 180px', minWidth: '0' }}>
+                      <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0A2F6B' }}>{classifyCapLabel}<span style={{ color: '#C22B2B' }}>*</span></span>
+                      <input type="number" step="any" min="0" value={classifyCapValue} onChange={classifyCapChange} style={{ height: '48px', padding: '0 14px', border: '1.5px solid ' + classifyCapBorder, borderRadius: '12px', fontSize: '14px', background: '#fff', color: '#0B1B33', width: '100%', boxSizing: 'border-box' }} />
+                    </label>
+                    ) : null}
+                    <button type="button" onClick={classifyApply} disabled={classifyApplyDisabled} style={{ height: '48px', padding: '0 26px', border: '0', borderRadius: '12px', background: classifyApplyDisabled ? '#A9BEE0' : '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: classifyApplyDisabled ? 'not-allowed' : 'pointer', flex: 'none', boxShadow: classifyApplyDisabled ? 'none' : '0 4px 10px rgba(0,69,169,.28)' }}>{classifyApplyLabel}</button>
+                  </div>
+                </div>
+                ) : null}
+                {/*
+                  2026-09-19 강 요청 - 배터리 유형별 조건부 검증. 화면에서 칸이 사라지거나
+                  필수 개수가 줄어드는 이유를 한 줄로 말해준다. 배터리가 아니면 서버가
+                  빈 값을 주므로 이 줄들은 아예 그려지지 않는다.
+                */}
+                {trackNote ? (
+                <div style={{ padding: '10px 13px', borderRadius: '11px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)', fontSize: '12.5px', lineHeight: '1.6', color: '#44546F' }}>{trackNote}</div>
+                ) : null}
+                {laterStageNote ? (
+                <div style={{ padding: '10px 13px', borderRadius: '11px', background: 'rgba(0,69,169,.05)', border: '1px solid rgba(0,69,169,.12)', fontSize: '12.5px', lineHeight: '1.6', color: '#0045A9' }}>{laterStageNote}</div>
+                ) : null}
+                {/*
+                  문서 파싱값과 입력값이 어긋난 항목(dpp_field_cross_check). 한 건이라도
+                  남아 있으면 발급이 막히므로, 폼 맨 위에서 먼저 보이게 한다.
+                */}
+                {crossCheckOpen ? (
+                <div style={{ padding: '14px 16px', borderRadius: '13px', background: 'rgba(224,59,59,.05)', border: '1px solid rgba(224,59,59,.20)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <span style={{ fontSize: '13.5px', fontWeight: '700', color: '#C22B2B' }}>{crossCheckTitle}</span>
+                  {(crossCheckRows || []).map((c) => (<React.Fragment key={c.key}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', padding: '11px 13px', borderRadius: '11px', background: '#fff', border: '1px solid rgba(16,32,64,.08)' }}>
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: '1', minWidth: '200px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: '#0B1B33' }}>{c.label}</span>
+                      <span style={{ fontSize: '12px', color: '#6B7A93' }}>입력값 <b style={{ color: '#44546F' }}>{c.entered}</b> · {c.docName} <b style={{ color: '#44546F' }}>{c.parsed}</b></span>
+                    </span>
+                    <button onClick={c.keepEntered} style={{ height: '32px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '10px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer', flex: 'none' }}>입력값 유지</button>
+                    <button onClick={c.useParsed} style={{ height: '32px', padding: '0 12px', border: '0', borderRadius: '10px', background: '#0045A9', fontSize: '12px', fontWeight: '600', color: '#fff', cursor: 'pointer', flex: 'none' }}>문서값 채택</button>
+                  </div>
+                  </React.Fragment>))}
+                </div>
+                ) : null}
                 {(() => {
                   // 2026-08-19: 필드가 80 -> 361개가 되면서 화면 구조를 두 단계로 바꿨다.
                   //   1단계 섹션(식별자 / 화학 성분 / 탄소·CBAM ...) - 접었다 펼 수 있고,
@@ -1184,6 +1414,8 @@ export default function AppView(v) {
                           {f.label}{f.req === '필수' ? (<span style={{ color: '#C22B2B' }}>*</span>) : null}
                           {f.tierLabel ? (<span title={f.basisTip} style={{ ...f.tierStyle, fontSize: '10px', cursor: f.basisTip ? 'help' : 'default' }}>{f.tierLabel}</span>) : null}
                           {f.disclosureLabel ? (<span style={{ fontSize: '10px', color: '#8494AC' }}>· {f.disclosureLabel}</span>) : null}
+                          {/* 발급 이후 단계에 채우는 항목 - 필수여도 발급을 막지 않는다(2026-09-19). */}
+                          {f.laterStage ? (<span style={{ ...f.laterStyle, fontSize: '10px' }}>{f.laterLabel}</span>) : null}
                         </span>
                         {/* 협력사가 수락해서 잠긴 칸은 '수정'으로 풀 수 없다 - 대신 누구를
                             기다리는 중인지 보여준다(2026-08-23). */}
@@ -1271,73 +1503,89 @@ export default function AppView(v) {
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>협력사 관리</h1>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <span style={{ fontSize: '15px', fontWeight: '600' }}>초대할 DPP 선택</span>
-            {partnerDppsEmpty ? (<>
-            <div style={{ padding: '18px 4px', fontSize: '13px', color: '#8494AC' }}>협력사 초대가 필요한(담당 필드가 비어있는) DPP가 없습니다.</div>
-            </>) : null}
-            <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '2px' }}>
-              {(partnerDpps || []).map((d, $index) => (<React.Fragment key={$index}>
-              <button onClick={d.select} style={d.cardStyle}>
-                <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: d.selected ? 'rgba(255,255,255,.8)' : '#8494AC' }}>{d.id}</span>
-                <span style={{ fontSize: '13.5px', fontWeight: '600' }}>{d.name}</span>
-                <span style={{ fontSize: '11.5px', color: d.selected ? 'rgba(255,255,255,.7)' : '#8494AC' }}>완성도 {d.pct}%</span>
-              </button>
-              </React.Fragment>))}
-            </div>
-          </div>
-
-          {partnersHasSelection ? (<>
+          {/* 2026-09-17 강 3차 피드백: "더 초대할 수 있는 DPP"/"모든 협력사를 초대한 DPP"
+              두 박스를 필터 토글이 있는 하나의 세로 목록 박스로 합치고, 오른쪽에는 "새 초대
+              보내기" 패널을 DPP를 고르기 전에도 항상 보이는 2단 레이아웃으로 바꾼다(선택
+              전에는 안내 문구만 보여줌). */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '16px', alignItems: 'start' }}>
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <span style={{ fontSize: '15px', fontWeight: '600' }}>새 초대 보내기 · {partnersSelectedDppName}</span>
-              {(inviteRows || []).map((row, $index) => (<React.Fragment key={$index}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px', border: '1px solid rgba(16,32,64,.08)', borderRadius: '13px', background: '#FBFCFE' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#8494AC' }}>협력사 {$index + 1}</span>
-                  {row.canRemove ? (<button onClick={row.remove} style={{ border: '0', background: 'transparent', color: '#8494AC', fontSize: '12px', cursor: 'pointer' }}>삭제</button>) : null}
-                </div>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" value={row.orgName} onChange={row.onOrgName} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" value={row.email} onChange={row.onEmail} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>역할(제출 항목)</span>
-                  <select value={row.roleCode} onChange={row.onRoleCode} style={{ height: '44px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '13.5px', background: '#fff' }}>
-                    {(inviteRoleOptions || []).map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                  </select>
-                </label>
+            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button onClick={showPartnerNeedMore} style={partnerFilterNeedMoreStyle}>협력사 미초대 · {partnerListNeedMoreCount}</button>
+                <button onClick={showPartnerAllInvited} style={partnerFilterAllInvitedStyle}>협력사 초대 완료 · {partnerListAllInvitedCount}</button>
               </div>
-              </React.Fragment>))}
-              <button onClick={addInviteRow} style={{ height: '40px', border: '1px dashed rgba(0,69,169,.34)', borderRadius: '11px', background: 'rgba(0,69,169,.035)', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>+ 협력사 추가</button>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>메시지</span><textarea rows="3" placeholder="협력사에 전달할 안내 문구를 입력하세요." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical' }}></textarea></label>
-              <button onClick={sendInvite} style={{ height: '50px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>{inviteSendLabel}</button>
+              {partnerListEmpty ? (<>
+              <div style={{ padding: '18px 4px', fontSize: '13px', color: '#8494AC' }}>{partnerListEmptyLabel}</div>
+              </>) : null}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '560px', overflowY: 'auto' }}>
+                {(partnerListRows || []).map((d, $index) => (<React.Fragment key={$index}>
+                <button onClick={d.select} style={d.rowStyle}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
+                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: d.selected ? 'rgba(255,255,255,.8)' : '#8494AC' }}>{d.id}</span>
+                    <span style={{ fontSize: '13.5px', fontWeight: '600' }}>{d.name}</span>
+                  </span>
+                  <span style={{ fontSize: '11.5px', color: d.selected ? 'rgba(255,255,255,.7)' : '#8494AC', flex: 'none' }}>완성도 {d.pct}%</span>
+                </button>
+                </React.Fragment>))}
+              </div>
             </div>
 
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '15px', fontWeight: '600' }}>초대 이력 · {partnersSelectedDppName}</span>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#0B1B33', color: '#fff', fontSize: '12px', fontWeight: '600' }}>전체 {inviteTotal}</span>
-                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>대기 {invitePending}</span>
-                  <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>거절 {inviteRejected}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {partnersHasSelection ? (<>
+              <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <span style={{ fontSize: '15px', fontWeight: '600' }}>새 초대 보내기 · {partnersSelectedDppName}</span>
+                {(inviteRows || []).map((row, $index) => (<React.Fragment key={$index}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px', border: '1px solid rgba(16,32,64,.08)', borderRadius: '13px', background: '#FBFCFE' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#8494AC' }}>협력사 {$index + 1}</span>
+                    {row.canRemove ? (<button onClick={row.remove} style={{ border: '0', background: 'transparent', color: '#8494AC', fontSize: '12px', cursor: 'pointer' }}>삭제</button>) : null}
+                  </div>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" value={row.orgName} onChange={row.onOrgName} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" value={row.email} onChange={row.onEmail} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>역할(제출 항목)</span>
+                    <select value={row.roleCode} onChange={row.onRoleCode} style={{ height: '44px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '13.5px', background: '#fff' }}>
+                      {(inviteRoleOptions || []).map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                    </select>
+                  </label>
                 </div>
+                </React.Fragment>))}
+                <button onClick={addInviteRow} style={{ height: '40px', border: '1px dashed rgba(0,69,169,.34)', borderRadius: '11px', background: 'rgba(0,69,169,.035)', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>+ 협력사 추가</button>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>메시지</span><textarea rows="3" placeholder="협력사에 전달할 안내 문구를 입력하세요." style={{ padding: '12px 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px', lineHeight: '1.6', resize: 'vertical' }}></textarea></label>
+                <button onClick={sendInvite} style={{ height: '50px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>{inviteSendLabel}</button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.6fr .95fr .85fr .85fr 70px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-                <span>협력사 / 이메일</span><span>역할</span><span>발송일</span><span>상태</span><span></span>
+
+              <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '15px', fontWeight: '600' }}>초대 이력 · {partnersSelectedDppName}</span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#0B1B33', color: '#fff', fontSize: '12px', fontWeight: '600' }}>전체 {inviteTotal}</span>
+                    <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>대기 {invitePending}</span>
+                    <span style={{ height: '30px', padding: '0 12px', display: 'grid', placeItems: 'center', borderRadius: '10px', background: '#F2F6FC', color: '#44546F', fontSize: '12px', fontWeight: '600' }}>거절 {inviteRejected}</span>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.6fr .95fr .85fr .85fr 70px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
+                  <span>협력사 / 이메일</span><span>역할</span><span>발송일</span><span>상태</span><span></span>
+                </div>
+                {invitesEmpty ? (<>
+                <div style={{ padding: '30px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>이 DPP에 보낸 초대가 없습니다.</div>
+                </>) : null}
+                {(invites || []).map((i, $index) => (<React.Fragment key={$index}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.6fr .95fr .85fr .85fr 70px', gap: '12px', padding: '0 14px', height: '58px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{i.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{i.email}</span></span>
+                  <span style={{ fontSize: '12px', color: '#44546F' }}>{i.roleLabel}</span>
+                  <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{i.at}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', width: 'fit-content', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={i.statusDot}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>{i.status}</span></span>
+                  <button onClick={i.resend} style={i.resendStyle}>재발송</button>
+                </div>
+                </React.Fragment>))}
               </div>
-              {invitesEmpty ? (<>
-              <div style={{ padding: '30px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>이 DPP에 보낸 초대가 없습니다.</div>
-              </>) : null}
-              {(invites || []).map((i, $index) => (<React.Fragment key={$index}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.6fr .95fr .85fr .85fr 70px', gap: '12px', padding: '0 14px', height: '58px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
-                <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{i.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{i.email}</span></span>
-                <span style={{ fontSize: '12px', color: '#44546F' }}>{i.roleLabel}</span>
-                <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{i.at}</span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', width: 'fit-content', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={i.statusDot}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>{i.status}</span></span>
-                <button onClick={i.resend} style={i.resendStyle}>재발송</button>
+              </>) : (<>
+              <div style={{ background: '#fff', border: '1px dashed rgba(16,32,64,.16)', borderRadius: '18px', padding: '40px 26px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', textAlign: 'center' }}>
+                <span style={{ fontSize: '14.5px', fontWeight: '600', color: '#44546F' }}>왼쪽 목록에서 DPP를 선택하세요</span>
+                <span style={{ fontSize: '12.5px', color: '#8494AC', lineHeight: '1.6' }}>DPP를 선택하면 여기에서 새 초대를 보내고, 그 DPP의 초대 이력을 확인할 수 있습니다.</span>
               </div>
-              </React.Fragment>))}
+              </>)}
             </div>
           </div>
-          </>) : null}
         </div>
         </>) : null}
 
@@ -1356,20 +1604,25 @@ export default function AppView(v) {
             </div>
           </div>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 1fr 1fr .9fr 1fr 116px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-              <span>DPP 식별자</span><span>제품명 / 규격</span><span>Lot · Heat</span><span>발급일</span><span style={{ textAlign: 'right' }}>완성도</span><span>상태</span><span></span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr 1fr 1fr .9fr 1fr 184px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
+              <span>제품명 / 규격</span><span>DPP 식별자</span><span>Lot · Heat</span><span>발급일</span><span style={{ textAlign: 'right' }}>완성도</span><span>상태</span><span></span>
             </div>
             {(products || []).map((p, $index) => (<React.Fragment key={$index}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.6fr 1fr 1fr .9fr 1fr 116px', gap: '12px', padding: '0 14px', height: '60px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
-              <button onClick={p.resume} title="이어서 작성" style={{ border: '0', background: 'transparent', padding: '0', textAlign: 'left', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '3px' }}>{p.id}</button>
-              <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{p.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{p.spec}</span></span>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr 1fr 1fr .9fr 1fr 184px', gap: '12px', padding: '0 14px', height: '60px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
+              <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '14.5px', fontWeight: '700', color: '#0B1B33' }}>{p.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{p.spec}</span></span>
+              <button onClick={p.resume} title="이어서 작성" style={{ border: '0', background: 'transparent', padding: '0', textAlign: 'left', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', fontWeight: '600', color: '#6B7A93', cursor: 'pointer' }}>{p.id}</button>
               <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{p.lot}</span>
               <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{p.at}</span>
               <span style={p.pctStyle}>{p.pct}%</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', width: 'fit-content', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={p.statusDot}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>{p.status}</span></span>
               <span style={{ display: 'flex', gap: '7px', justifyContent: 'flex-end' }}>
-                <button onClick={p.open} style={{ height: '32px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv22">상세</button>
-                <button onClick={p.remove} title="DPP 삭제" style={{ width: '32px', height: '32px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', color: '#8494AC', cursor: 'pointer' }} className="hv23"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
+                <button onClick={p.open} style={{ height: '32px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }} className="hv22">상세</button>
+                {/* 2026-09-17 강 요청: 제품 조회에서 바로 DPP 데이터를 수정할 수 있게
+                    - p.resume은 이미 존재하던 "DPP 식별자 클릭 -> 이어서 작성" 동작과
+                    동일한 핸들러라 그대로 재사용한다(steel은 입력 화면으로, 실 입력
+                    화면이 아직 없는 도메인은 상세 패널로 폴백). */}
+                <button onClick={p.resume} title="DPP 데이터 수정" style={{ height: '32px', padding: '0 14px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '9px', background: 'rgba(0,69,169,.06)', fontSize: '12px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }} className="hv22b">수정</button>
+                <button onClick={p.remove} title="DPP 삭제" style={{ width: '32px', height: '32px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', color: '#8494AC', cursor: 'pointer', flex: 'none' }} className="hv23"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
               </span>
             </div>
             </React.Fragment>))}
@@ -1928,11 +2181,11 @@ export default function AppView(v) {
               {dppDetailQrImg ? (
                 <img src={dppDetailQrImg} alt="DPP QR" style={{ width: '96px', height: '96px', borderRadius: '10px', border: '1px solid rgba(16,32,64,.08)', flex: 'none' }} />
               ) : (
-                <div style={{ width: '96px', height: '96px', borderRadius: '10px', background: '#EEF2F8', flex: 'none', display: 'grid', placeItems: 'center', fontSize: '11px', color: '#8494AC', textAlign: 'center', padding: '6px' }}>{dppDetailQrPending ? '생성 중…' : (dppPct === 100 ? 'QR 없음' : '발급 전')}</div>
+                <div style={{ width: '96px', height: '96px', borderRadius: '10px', background: '#EEF2F8', flex: 'none', display: 'grid', placeItems: 'center', fontSize: '11px', color: '#8494AC', textAlign: 'center', padding: '6px' }}>{dppDetailQrPending ? '생성 중…' : (dppIssued ? 'QR 없음' : '발급 전')}</div>
               )}
               <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span style={{ fontSize: '13px', fontWeight: '700' }}>이 DPP의 QR 코드</span>
-                <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>{dppPct === 100 ? 'QR을 스캔하면 이 DPP의 조회 화면으로 바로 연결됩니다.' : '발급 완료(완성도 100%) 후 QR이 자동으로 생성됩니다.'}</span>
+                <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>{dppIssued ? 'QR을 스캔하면 이 DPP의 조회 화면으로 바로 연결됩니다.' : '발급 버튼을 누르면 QR이 자동으로 생성됩니다.'}</span>
               </span>
             </div>
 
@@ -1952,19 +2205,21 @@ export default function AppView(v) {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '14px', fontWeight: '700' }}>미충족 필드 및 책임주체</span><span style={{ fontSize: '12px', color: '#8494AC' }}>{dppMissingCount}건</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '14px', fontWeight: '700' }}>미충족 필드 책임주체</span><span style={{ fontSize: '12px', color: '#8494AC' }}>{dppMissingCount}건</span></div>
               {(missingFields || []).map((f, $index) => (<React.Fragment key={$index}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'center', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE' }}>
                 <span style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><span style={f.sevDot}></span><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{f.field}</span></span>
                   <span style={{ fontSize: '12px', color: '#6B7A93' }}>책임주체 · {f.owner} · {f.role}</span>
                 </span>
-                <button onClick={f.nudge} style={{ height: '36px', padding: '0 14px', border: '0', borderRadius: '11px', background: 'rgba(0,69,169,.10)', color: '#0045A9', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }} className="hv34">독촉 알림 전송</button>
+                {/* 2026-09-17 강 요청: 이 DPP에 협력사를 초대한 적이 없으면 "독촉"할 대상이
+                    없으므로 버튼을 비활성화한다. */}
+                <button onClick={f.nudge} disabled={f.nudgeDisabled} title={f.nudgeDisabled ? '협력사를 먼저 초대해야 독촉 알림을 보낼 수 있습니다.' : ''} style={{ height: '36px', padding: '0 14px', border: '0', borderRadius: '11px', background: f.nudgeDisabled ? 'rgba(16,32,64,.06)' : 'rgba(0,69,169,.10)', color: f.nudgeDisabled ? '#9AA8BE' : '#0045A9', fontSize: '12.5px', fontWeight: '700', cursor: f.nudgeDisabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }} className={f.nudgeDisabled ? '' : 'hv34'}>독촉 알림 전송</button>
               </div>
               </React.Fragment>))}
               {/* 예전 문구는 "메일과 알림센터로 동시 발송된다"였는데 실제로는 토스트만
                   띄웠다. 지금 동작(협력사 관리로 이동)에 맞춰 고친다(2026-08-21). */}
-              <p style={{ margin: '0', fontSize: '12px', lineHeight: '1.6', color: '#8494AC' }}>책임주체를 클릭하면 이 DPP의 협력사 관리 화면으로 이동해 초대·재발송을 보낼 수 있습니다.</p>
+              <p style={{ margin: '0', fontSize: '12px', lineHeight: '1.6', color: '#8494AC' }}>책임주체를 클릭하면 이 DPP의 협력사 관리 화면으로 이동해 초대·재발송을 보낼 수 있습니다. 협력사를 초대한 DPP만 독촉 알림 버튼이 활성화됩니다.</p>
             </div>
           </div>
         </div>
@@ -2162,6 +2417,34 @@ export default function AppView(v) {
       </div>
       </>) : null}
 
+      {/* "등록 DPP 수"/"작성중인 DPP 수" 카드 클릭 시 목록 팝업(2026-09-17 강 요청). */}
+      {dppListOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '90', display: 'grid', placeItems: 'center', padding: '40px' }}>
+        <div onClick={closeDppList} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.55)' }}></div>
+        <div style={{ position: 'relative', width: '480px', maxHeight: '78vh', overflowY: 'auto', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', padding: '26px 28px', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+            <span style={{ fontSize: '19px', fontWeight: '700' }}>{dppListTitle}</span>
+            <button onClick={closeDppList} style={{ width: '34px', height: '34px', flex: 'none', border: '1px solid rgba(16,32,64,.10)', borderRadius: '11px', background: '#fff', fontSize: '13px', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
+          </div>
+          {dppListEmpty ? (<>
+          <div style={{ padding: '30px 4px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>표시할 DPP가 없습니다.</div>
+          </>) : (<>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+            {(dppListRows || []).map((w, $index) => (<React.Fragment key={$index}>
+            <button onClick={w.open} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px', alignItems: 'center', padding: '14px 15px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv20">
+              <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '700', color: '#2A3A55' }}>{w.serial}</span>
+                <span style={{ fontSize: '13.5px', fontWeight: '600', lineHeight: '1.35' }}>{w.productName}</span>
+              </span>
+              <span style={w.statusChip}>{w.statusLabel}</span>
+            </button>
+            </React.Fragment>))}
+          </div>
+          </>)}
+        </div>
+      </div>
+      </>) : null}
+
       {memberModalOpen ? (<>
       <div style={{ position: 'fixed', inset: '0', zIndex: '90', display: 'grid', placeItems: 'center', padding: '40px' }}>
         <div onClick={closeMemberModal} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.55)' }}></div>
@@ -2179,6 +2462,81 @@ export default function AppView(v) {
             ))}
           </div>
           <button onClick={closeMemberModal} style={{ height: '44px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
+        </div>
+      </div>
+      </>) : null}
+
+      {/* 관리자 문의함(2026-09-17 강 요청 "관리자 역시 유형별 문의에 대해서 확인할 수
+          있도록") - "유형별 문의" 카드의 "문의함 열기"에서 연다. 목록/스레드 두 화면을
+          같은 모달 안에서 전환한다(memberModal과 같은 오버레이 관례, z-index만 비어있는
+          94를 새로 씀 - 90/92/93은 이미 다른 모달이 쓰고 있어서). */}
+      {adminInqOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '94', display: 'grid', placeItems: 'center', padding: '32px' }}>
+        <div onClick={closeAdminInqInbox} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.52)' }}></div>
+        <div style={{ position: 'relative', width: '560px', maxWidth: '100%', height: '620px', maxHeight: '100%', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(16,32,64,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {adminInqSelectedId ? (
+              <button onClick={backToAdminInqList} style={{ width: '30px', height: '30px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '9px', background: '#fff', color: '#44546F', cursor: 'pointer' }}>←</button>
+              ) : null}
+              <span style={{ fontSize: '17px', fontWeight: '700' }}>{adminInqSelectedId ? adminInqThreadTitle : '문의함'}</span>
+            </div>
+            <button onClick={closeAdminInqInbox} style={{ width: '32px', height: '32px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '10px', background: '#fff', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
+          </div>
+
+          {!adminInqSelectedId ? (<>
+          <div style={{ padding: '12px 14px 8px', display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: '1px solid rgba(16,32,64,.08)', flex: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '38px', padding: '0 12px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '11px' }}>
+              <span style={{ width: '12px', height: '12px', border: '1.8px solid #9AA8BE', borderRadius: '7px', flex: 'none' }}></span>
+              <input value={adminInqSearchQuery} onChange={(e) => setAdminInqSearchQuery(e.target.value)} placeholder="회사명 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '13px' }} />
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {(adminInqStatusTabs || []).map((t, $index) => (<React.Fragment key={$index}><button onClick={t.go} style={t.style}>{t.label}</button></React.Fragment>))}
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {(adminInqDomainTabs || []).map((t, $index) => (<React.Fragment key={$index}><button onClick={t.go} style={t.style}>{t.label}</button></React.Fragment>))}
+            </div>
+          </div>
+          <div style={{ flex: '1', overflowY: 'auto', padding: '10px 14px' }}>
+            {adminInqListEmpty ? (
+            <div style={{ padding: '60px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>접수된 문의가 없습니다.</div>
+            ) : adminInqFilteredEmpty ? (
+            <div style={{ padding: '60px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>조건에 맞는 문의가 없습니다.</div>
+            ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {(adminInqRows || []).map((row, $index) => (<React.Fragment key={$index}>
+              <button onClick={row.open} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', gap: '10px', padding: '14px 10px', border: '0', borderBottom: '1px solid rgba(16,32,64,.06)', background: 'transparent', textAlign: 'left', cursor: 'pointer' }} className="hv8">
+                <span style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '0' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: '700' }}>{row.orgName}</span>
+                    <span style={{ fontSize: '11px', fontWeight: '600', color: '#0045A9', background: 'rgba(0,69,169,.08)', padding: '2px 8px', borderRadius: '999px', flex: 'none' }}>{row.categoryLabel}</span>
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#8494AC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.preview}</span>
+                </span>
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flex: 'none' }}>
+                  <span style={{ fontSize: '10.5px', color: '#9AA8BE' }}>{row.timeLabel}</span>
+                  <span style={{ fontSize: '10.5px', fontWeight: '700', color: row.statusOpen ? '#C77700' : '#0E7A3D' }}>{row.statusLabel}</span>
+                </span>
+              </button>
+              </React.Fragment>))}
+            </div>
+            )}
+          </div>
+          </>) : (<>
+          <div style={{ flex: '1', overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {(adminInqThreadMessages || []).map((m, $index) => (<React.Fragment key={$index}>
+            <div style={{ alignSelf: m.fromAdmin ? 'flex-end' : 'flex-start', maxWidth: '80%', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: m.fromAdmin ? 'flex-end' : 'flex-start' }}>
+              <span style={{ background: m.fromAdmin ? '#0045A9' : '#F2F6FC', color: m.fromAdmin ? '#fff' : '#0B1B33', padding: '10px 13px', borderRadius: m.fromAdmin ? '14px 14px 4px 14px' : '14px 14px 14px 4px', fontSize: '13px', lineHeight: '1.5', overflowWrap: 'anywhere' }}>{m.body}</span>
+              <span style={{ fontSize: '10px', color: '#9AA8BE' }}>{m.fromAdmin ? '관리자' : '제조사'} · {m.timeLabel}</span>
+            </div>
+            </React.Fragment>))}
+          </div>
+          {adminInqError ? (<div style={{ padding: '0 16px', fontSize: '11.5px', color: '#C22B2B', flex: 'none' }}>{adminInqError}</div>) : null}
+          <div style={{ display: 'flex', gap: '8px', padding: '14px 16px', borderTop: '1px solid rgba(16,32,64,.08)', flex: 'none' }}>
+            <input value={adminInqDraft} onChange={(e) => setAdminInqDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendAdminInqReply(); }} placeholder="답장을 입력하세요" disabled={adminInqSending} style={{ flex: '1', height: '42px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '13.5px' }} />
+            <button onClick={sendAdminInqReply} disabled={!adminInqDraft.trim() || adminInqSending} style={{ height: '42px', padding: '0 18px', border: '0', borderRadius: '12px', background: adminInqDraft.trim() && !adminInqSending ? '#0045A9' : '#B7C2D6', color: '#fff', fontSize: '13.5px', fontWeight: '600', cursor: adminInqDraft.trim() && !adminInqSending ? 'pointer' : 'not-allowed', flex: 'none' }}>답장</button>
+          </div>
+          </>)}
         </div>
       </div>
       </>) : null}
@@ -2480,6 +2838,49 @@ export default function AppView(v) {
 
       {toast ? (<>
       <div style={{ position: 'fixed', left: '50%', bottom: '92px', transform: 'translateX(-50%)', zIndex: '90', display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 20px', borderRadius: '13px', background: '#0B1B33', color: '#fff', fontSize: '13.5px', fontWeight: '500', boxShadow: '0 12px 30px rgba(11,27,51,.32)', animation: 'ieumUp .18s ease-out' }}><span style={{ width: '7px', height: '7px', borderRadius: '4px', background: '#4ADE80' }}></span>{toast}</div>
+      </>) : null}
+
+      {isApp && isMaker && !inqOpen ? (<>
+      <button onClick={openInqWidget} title="관리자에게 문의" style={{ position: 'fixed', right: '28px', bottom: '28px', zIndex: '95', width: '56px', height: '56px', borderRadius: '999px', border: '0', background: '#0045A9', color: '#fff', boxShadow: '0 12px 28px rgba(0,69,169,.35)', cursor: 'pointer', display: 'grid', placeItems: 'center' }} className="hv34">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4.4 3.3A1 1 0 0 1 3 19.5V5a1 1 0 0 1 1-1Zm2 4v1.6h12V8H6Zm0 3.6v1.6h8v-1.6H6Z" /></svg>
+      </button>
+      </>) : null}
+
+      {isApp && isMaker && inqOpen ? (<>
+      <div style={{ position: 'fixed', right: '28px', bottom: '28px', zIndex: '96', width: '340px', maxWidth: 'calc(100vw - 40px)', height: '480px', maxHeight: 'calc(100vh - 56px)', background: '#fff', borderRadius: '20px', boxShadow: '0 24px 60px rgba(6,17,36,.28)', border: '1px solid rgba(16,32,64,.08)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 18px', background: '#0B1B33', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flex: 'none' }}>
+          <span style={{ fontSize: '14.5px', fontWeight: '700' }}>관리자에게 문의</span>
+          <button onClick={closeInqWidget} style={{ width: '28px', height: '28px', border: '0', borderRadius: '9px', background: 'rgba(255,255,255,.14)', color: '#fff', cursor: 'pointer', fontSize: '13px' }}>✕</button>
+        </div>
+        <div style={{ flex: '1', overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ alignSelf: 'flex-start', maxWidth: '88%', background: '#F2F6FC', color: '#0B1B33', padding: '10px 13px', borderRadius: '14px 14px 14px 4px', fontSize: '13px', lineHeight: '1.5' }}>안녕하세요! 어떤 문의이신가요? 먼저 유형을 선택해 주세요.</div>
+          {!inqCategory ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {(inquiryCategories || []).map((c) => (
+              <button key={c.code} onClick={() => selectInqCategory(c.code)} disabled={inqSending} style={{ height: '38px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '11px', background: 'rgba(0,69,169,.06)', color: '#0045A9', fontSize: '12.5px', fontWeight: '600', cursor: inqSending ? 'not-allowed' : 'pointer' }}>{c.label}</button>
+            ))}
+          </div>
+          ) : (<>
+          {inqMessages.length === 0 ? (
+          <div style={{ alignSelf: 'flex-start', maxWidth: '88%', background: '#F2F6FC', color: '#0B1B33', padding: '10px 13px', borderRadius: '14px 14px 14px 4px', fontSize: '13px', lineHeight: '1.5' }}>{`"${inqCategory.label}" 문의를 접수할게요. 궁금하신 내용을 자유롭게 입력해 주세요.`}</div>
+          ) : null}
+          {inqMessages.map((m, $index) => (<React.Fragment key={$index}>
+          <div style={{ alignSelf: m.senderType === 'MAKER' ? 'flex-end' : 'flex-start', maxWidth: '88%', display: 'flex', flexDirection: 'column', gap: '3px', alignItems: m.senderType === 'MAKER' ? 'flex-end' : 'flex-start' }}>
+            <span style={{ background: m.senderType === 'MAKER' ? '#0045A9' : '#F2F6FC', color: m.senderType === 'MAKER' ? '#fff' : '#0B1B33', padding: '10px 13px', borderRadius: m.senderType === 'MAKER' ? '14px 14px 4px 14px' : '14px 14px 14px 4px', fontSize: '13px', lineHeight: '1.5', overflowWrap: 'anywhere' }}>{m.body}</span>
+            <span style={{ fontSize: '10px', color: '#9AA8BE' }}>{m.senderType === 'MAKER' ? '나' : '관리자'} · {new Date(m.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+          </React.Fragment>))}
+          </>)}
+        </div>
+        {inqError ? (<div style={{ padding: '0 14px', fontSize: '11.5px', color: '#C22B2B', flex: 'none' }}>{inqError}</div>) : null}
+        {inqCategory ? (<>
+        <div style={{ display: 'flex', gap: '8px', padding: '12px 14px', borderTop: '1px solid rgba(16,32,64,.08)', flex: 'none' }}>
+          <input value={inqDraft} onChange={(e) => setInqDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendInqDraft(); }} placeholder="메시지를 입력하세요" disabled={inqSending} style={{ flex: '1', height: '40px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '13px' }} />
+          <button onClick={sendInqDraft} disabled={!inqDraft.trim() || inqSending} style={{ height: '40px', padding: '0 16px', border: '0', borderRadius: '11px', background: inqDraft.trim() && !inqSending ? '#0045A9' : '#B7C2D6', color: '#fff', fontSize: '13px', fontWeight: '600', cursor: inqDraft.trim() && !inqSending ? 'pointer' : 'not-allowed', flex: 'none' }}>전송</button>
+        </div>
+        </>) : null}
+        <div style={{ padding: '7px 14px 12px', fontSize: '10.5px', color: '#9AA8BE', textAlign: 'center', flex: 'none' }}>관리자에게 실제로 전달됩니다. 답장은 몇 초 안에 자동으로 반영돼요.</div>
+      </div>
       </>) : null}
 
       </div>

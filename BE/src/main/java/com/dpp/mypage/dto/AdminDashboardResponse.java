@@ -19,6 +19,8 @@ public record AdminDashboardResponse(
         Long batteryDpps,
         Long textileDpps,
         Long pendingApprovalCount,
+        /** 도메인 확장 신청 중 아직 심사 안 된(PENDING) 건수 - 2026-09-19 강 요청, 운영현황 카드. */
+        Long pendingDomainGrantCount,
         Long lastAnchoredMinutesAgo,
         Long lastAnchorBlockNo,
         Double anchorSuccessRate30d,

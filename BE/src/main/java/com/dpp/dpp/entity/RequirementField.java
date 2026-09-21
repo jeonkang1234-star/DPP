@@ -139,4 +139,16 @@ public class RequirementField {
 
     @Column(name = "is_active", nullable = false)
     private boolean active;
+
+    /**
+     * 이 항목이 어느 생애주기 단계에서 채워지는가(lifecycle_stage_def.stage_no, V36).
+     * null 이면 제조 단계(4)로 본다 - 기존 철강/섬유 항목은 전부 null 이다.
+     *
+     * 왜 필요한가: 배터리는 재활용 처리 결과처럼 "발급 시점에는 존재할 수 없는" 항목이
+     * 필수로 잡혀 있었다. 그건 발급을 막을 항목이 아니라 수명종료 단계에 받는 항목이다
+     * (2026-09-19 강 요청). 실제 판정은 DB 뷰가 하고, 이 컬럼은 화면에 "이 칸은 사용
+     * 단계에서 채웁니다"를 표시하기 위해 같이 읽는다.
+     */
+    @Column(name = "lifecycle_stage")
+    private Short lifecycleStage;
 }

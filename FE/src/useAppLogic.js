@@ -4,7 +4,7 @@ import { publicPassportUrl, qrUrlWarning } from './publicUrl.js';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   pill, roleCard, pillDot, domainCard, tabStyle,
-  chip, domainChipFor, avatarStyle, bar, pctStyle, segStyle, dot,
+  chip, domainChipFor, avatarStyle, bar, barV, pctStyle, segStyle, dot,
   badgeText3d, segStyle3D, groove3d,
 } from './uiStyles.js';
 import { fetchAppData } from './api/mockApi.js';
@@ -15,10 +15,13 @@ import {
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
 import { fetchMe, fetchScans, deleteScan, searchProducts, recordScan, fetchNotificationCategories, fetchNotifications,
-  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, acceptParticipation, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
+  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, resolveCrossCheck, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, acceptParticipation, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
   // 도메인 확장(2026-08-22) - 마이페이지 신청 / 관리자 심사 / DPP 생성 도메인 선택기.
   fetchMyDomains, requestDomainGrant, fetchDomainGrants, approveDomainGrant, rejectDomainGrant,
-  fetchDomainGrantEvidenceBlob } from './api/meApi.js';
+  fetchDomainGrantEvidenceBlob,
+  // "관리자에게 문의" 챗봇 위젯 + 관리자 문의함(2026-09-17 강 요청) - 폴링 기반 양방향 채팅.
+  createInquiry, fetchMyInquiries, fetchInquiryMessages, sendInquiryMessage,
+  fetchAdminInquiries, fetchAdminInquiryMessages, sendAdminInquiryReply } from './api/meApi.js';
 
 /** "기본 정보 입력" 화면의 role -> requirement_field.domain 매핑. 시딩된 도메인만 실데이터로
  * 불러온다(STEEL/TEXTILE/BATTERY). */
@@ -28,8 +31,21 @@ function domainForRole(role) {
   if (role === 'battery') return 'BATTERY';
   return null;
 }
+
+/**
+ * "관리자에게 문의" 챗봇 위젯의 카테고리 taxonomy(2026-09-17 강 요청) - 관리자
+ * 대시보드 "유형별 문의"(AdminDashboardService.inquiryLabel, notification.sub_type)와
+ * 동일한 코드/라벨을 그대로 재사용한다. TIER는 관리자 내부 집계 전용이라 제외.
+ * 2026-09-19 강 요청: 계정·인증 / DPP 등록 / 데이터 검증 / 기타 네 가지만 남긴다.
+ */
+const INQUIRY_CATEGORIES = [
+  { code: 'ACCOUNT', label: '계정·인증' },
+  { code: 'DPP', label: 'DPP 등록' },
+  { code: 'DATA', label: '데이터 검증' },
+  { code: 'ETC', label: '기타' },
+];
 import { pathFor, stateFromPath } from './routes.js';
-import { makerVals } from './viewModels/makerVals.js';
+import { makerVals, orgAutofillValues } from './viewModels/makerVals.js';
 import { partnerVals } from './viewModels/partnerVals.js';
 import { passportVals } from './viewModels/passportVals.js';
 import { approvalVals } from './viewModels/approvalVals.js';
@@ -152,6 +168,30 @@ export function useAppLogic(userProps) {
   const [adminDashboardError, setAdminDashboardError] = useState(null);
   // 관리자 "회원 관리" 표(GET /admin/members) - 마찬가지로 ADMIN 전용, 그 외엔 null 유지.
   const [adminMembersData, setAdminMembersData] = useState(null);
+
+  // "관리자에게 문의" 챗봇 위젯(제조사 전용, 2026-09-17 강 요청 - com.dpp.inquiry).
+  // inqOpen=팝업 열림, inqInquiryId=현재 스레드(카테고리 선택 전엔 null),
+  // inqMessages=폴링으로 받아오는 실제 스레드 메시지 목록.
+  const [inqOpen, setInqOpen] = useState(false);
+  const [inqCategory, setInqCategoryState] = useState(null);
+  const [inqInquiryId, setInqInquiryId] = useState(null);
+  const [inqMessages, setInqMessages] = useState([]);
+  const [inqDraft, setInqDraftState] = useState('');
+  const [inqSending, setInqSending] = useState(false);
+  const [inqError, setInqError] = useState('');
+
+  // 관리자 문의함(ADMIN 전용) - 목록 모달 + 선택된 스레드.
+  const [adminInqOpen, setAdminInqOpen] = useState(false);
+  const [adminInqList, setAdminInqList] = useState([]);
+  const [adminInqSelectedId, setAdminInqSelectedId] = useState(null);
+  const [adminInqMessages, setAdminInqMessages] = useState([]);
+  const [adminInqDraft, setAdminInqDraftState] = useState('');
+  // 관리자 문의함 필터(2026-09-18 강 요청) - 답변상태/도메인/회사명 검색.
+  const [adminInqStatusFilter, setAdminInqStatusFilter] = useState('ALL');
+  const [adminInqDomainFilter, setAdminInqDomainFilter] = useState('ALL');
+  const [adminInqSearchQuery, setAdminInqSearchQuery] = useState('');
+  const [adminInqSending, setAdminInqSending] = useState(false);
+  const [adminInqError, setAdminInqError] = useState('');
   // 세관 통관 큐(GET /customs/queue) - org_type=CUSTOMS 계정이 아니면 403으로 null 유지.
   // 심사 대기(PENDING) 목록만 담는다 - "세관마다 확인해야 할 DPP가 달라야 함"(2026-08-19
   // 강 요청)이 실제로 동작하는지 눈에 보이는 자리.
@@ -374,6 +414,52 @@ export function useAppLogic(userProps) {
   }, [state.view]);
 
   /**
+   * "관리자에게 문의" 위젯 폴링(2026-09-17 강 요청 - "동기화까지 고려해서 카톡처럼").
+   * WebSocket 대신 폴링을 선택함(강 확인) - 패널이 열려 있고 스레드가 확정된 동안에만
+   * 돈다. 패널을 닫으면 인터벌도 같이 정리된다.
+   */
+  useEffect(() => {
+    if (!inqOpen || !inqInquiryId) return undefined;
+    let alive = true;
+    const poll = () => {
+      fetchInquiryMessages(inqInquiryId)
+        .then((res) => { if (alive) setInqMessages(res || []); })
+        .catch((err) => { if (alive) setInqError(err?.message || '메시지를 불러오지 못했습니다.'); });
+    };
+    poll();
+    const t = setInterval(poll, 4000);
+    return () => { alive = false; clearInterval(t); };
+  }, [inqOpen, inqInquiryId]);
+
+  /** 관리자 문의함 목록 폴링 - 인박스 모달이 열려 있는 동안만. */
+  useEffect(() => {
+    if (!adminInqOpen) return undefined;
+    let alive = true;
+    const poll = () => {
+      fetchAdminInquiries()
+        .then((res) => { if (alive) setAdminInqList(Array.isArray(res) ? res : []); })
+        .catch((err) => { if (alive) setAdminInqError(err?.message || '문의 목록을 불러오지 못했습니다.'); });
+    };
+    poll();
+    const t = setInterval(poll, 5000);
+    return () => { alive = false; clearInterval(t); };
+  }, [adminInqOpen]);
+
+  /** 관리자가 스레드 하나를 펼쳐 보는 동안 그 메시지만 더 촘촘히 폴링. */
+  useEffect(() => {
+    if (!adminInqSelectedId) return undefined;
+    let alive = true;
+    const poll = () => {
+      fetchAdminInquiryMessages(adminInqSelectedId)
+        .then((res) => { if (alive) setAdminInqMessages(Array.isArray(res) ? res : []); })
+        .catch((err) => { if (alive) setAdminInqError(err?.message || '메시지를 불러오지 못했습니다.'); });
+    };
+    poll();
+    const t = setInterval(poll, 4000);
+    return () => { alive = false; clearInterval(t); };
+  }, [adminInqSelectedId]);
+
+  /**
    * 저장된 세션의 role이 실제 조직 유형과 어긋나 있으면 바로잡는다.
    *
    * 2026-08-22 강 리포트 "세관계정으로 가입했는데 로그인하니까 철강제조사가 되어있다" -
@@ -537,6 +623,30 @@ export function useAppLogic(userProps) {
     saveDraftInputs(state.role, session.email, dppId, fieldFormInputs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldFormInputs]);
+
+  /**
+   * 회사 프로필(orgData)에 이미 등록된 제조사명·연락 이메일·웹사이트로 비어 있는 칸을 미리
+   * 채운다(2026-09-19 강 요청). 이미 값이 있는 칸은 절대 덮어쓰지 않고, 협력사 화면(협력사는
+   * 제조사 정보를 대신 적을 수 없다)에서는 돌리지 않는다. 폼을 새로 불러올 때마다
+   * (fieldFormData가 바뀔 때마다) 빈 칸만 다시 채운다 - 입력하는 도중에는 돌지 않는다.
+   */
+  useEffect(() => {
+    if (state.view !== 'app' || state.role === 'partner') return;
+    if (!fieldFormData || !orgData) return;
+    const wanted = orgAutofillValues(orgData);
+    const present = new Set((fieldFormData.fields || []).map((f) => f.fieldCode));
+    setFieldFormInputs((prev) => {
+      let next = null;
+      Object.keys(wanted).forEach((code) => {
+        if (present.has(code) && !prev[code]) {
+          if (!next) next = { ...prev };
+          next[code] = wanted[code];
+        }
+      });
+      return next || prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldFormData, orgData, state.view, state.role]);
 
   /**
    * Mill Sheet 업로드처럼 fieldFormData 바깥(별도 엔드포인트)에서 완성도가 바뀌는 경우,
@@ -937,6 +1047,73 @@ export function useAppLogic(userProps) {
     return [['dash', '대시보드'], ['input', 'DPP 생성'], ['partners', '협력사 관리'], ['products', '제품 조회'], ['my', '마이페이지']];
   }
 
+  // "관리자에게 문의" 위젯 핸들러(2026-09-17 강 요청) - 위 inqOpen 등 전용 useState를
+  // 직접 조작한다. state/setState 병합 객체 밖에 둔 이유는 adminDashboardData 등 다른
+  // "실 API로 채워지는 값"과 같은 자리에 두기 위해서다(폴링으로 자주 바뀌어도 거대한
+  // state 객체 전체를 매번 새로 만들 필요가 없다).
+  function openInqWidget() {
+    setInqOpen(true);
+  }
+  function closeInqWidget() {
+    setInqOpen(false);
+  }
+  function selectInqCategory(code) {
+    const cat = INQUIRY_CATEGORIES.find((c) => c.code === code);
+    if (!cat) return;
+    setInqCategoryState(cat);
+    setInqError('');
+    setInqSending(true);
+    createInquiry(code)
+      .then((res) => setInqInquiryId(res.inquiryId))
+      .catch((err) => setInqError(err?.message || '문의를 시작하지 못했습니다.'))
+      .finally(() => setInqSending(false));
+  }
+  function setInqDraft(v) {
+    setInqDraftState(v);
+  }
+  function sendInqDraft() {
+    const text = (inqDraft || '').trim();
+    if (!text || !inqInquiryId || inqSending) return;
+    setInqSending(true);
+    setInqError('');
+    sendInquiryMessage(inqInquiryId, text)
+      .then((msg) => { setInqMessages((prev) => [...prev, msg]); setInqDraftState(''); })
+      .catch((err) => setInqError(err?.message || '메시지를 보내지 못했습니다.'))
+      .finally(() => setInqSending(false));
+  }
+
+  // 관리자 문의함 핸들러 - ADMIN 대시보드 "유형별 문의" 카드에서 연다.
+  function openAdminInqInbox() {
+    setAdminInqOpen(true);
+  }
+  function closeAdminInqInbox() {
+    setAdminInqOpen(false);
+    setAdminInqSelectedId(null);
+    setAdminInqMessages([]);
+  }
+  function openAdminInqThread(inquiryId) {
+    setAdminInqSelectedId(inquiryId);
+    setAdminInqMessages([]);
+    setAdminInqError('');
+  }
+  function backToAdminInqList() {
+    setAdminInqSelectedId(null);
+    setAdminInqMessages([]);
+  }
+  function setAdminInqDraft(v) {
+    setAdminInqDraftState(v);
+  }
+  function sendAdminInqReply() {
+    const text = (adminInqDraft || '').trim();
+    if (!text || !adminInqSelectedId || adminInqSending) return;
+    setAdminInqSending(true);
+    setAdminInqError('');
+    sendAdminInquiryReply(adminInqSelectedId, text)
+      .then((msg) => { setAdminInqMessages((prev) => [...prev, msg]); setAdminInqDraftState(''); })
+      .catch((err) => setAdminInqError(err?.message || '답장을 보내지 못했습니다.'))
+      .finally(() => setAdminInqSending(false));
+  }
+
   function renderVals() {
     const s = state;
     const p = profile();
@@ -954,6 +1131,28 @@ export function useAppLogic(userProps) {
     // 지어내지 않는 게 이 코드베이스 원칙이다. Tier 심사 유형은 BE 쿼리에서 제외된다.
     const inqData = (admin && admin.inquiriesByType) || [];
     const adminMembersList = adminMembersData || [];
+    // 2026-09-19 강 요청: 회원 관리 필터 - 도메인별 / 역할군별(회원가입 때 고르는 제조사·협력사·세관·
+    // 시장감독기관 기준). 회사명 검색과 AND로 함께 적용한다.
+    const adminMemberDomainFilter = state.adminMemberDomainFilter || 'ALL';
+    const adminMemberRoleFilter = state.adminMemberRoleFilter || 'ALL';
+    const adminMemberQuery = (state.adminMemberSearchQuery || '').trim().toLowerCase();
+    const adminMembersFiltered = adminMembersList.filter((m) => {
+      if (adminMemberQuery && !(m.orgName || '').toLowerCase().includes(adminMemberQuery)) return false;
+      if (adminMemberDomainFilter !== 'ALL' && m.domainLabel !== adminMemberDomainFilter) return false;
+      if (adminMemberRoleFilter !== 'ALL' && m.roleLabel !== adminMemberRoleFilter) return false;
+      return true;
+    });
+    const adminMemberFilterActive = !!adminMemberQuery || adminMemberDomainFilter !== 'ALL' || adminMemberRoleFilter !== 'ALL';
+    // 관리자 문의함 필터용 - 문의(orgId)엔 도메인 컬럼이 없어서, 이미 불러온 회원
+    // 목록(도메인 포함)으로 orgId→도메인 역매핑을 만들어 쓴다.
+    const orgDomainByOrgId = new Map(adminMembersList.map((m) => [m.orgId, m.domainLabel]));
+    const adminInqFilteredList = adminInqList.filter((i) => {
+      if (adminInqStatusFilter !== 'ALL' && i.status !== adminInqStatusFilter) return false;
+      if (adminInqDomainFilter !== 'ALL' && orgDomainByOrgId.get(i.orgId) !== adminInqDomainFilter) return false;
+      const q = (adminInqSearchQuery || '').trim().toLowerCase();
+      if (q && !(i.orgName || '').toLowerCase().includes(q)) return false;
+      return true;
+    });
     // 지표 하나가 실패하면 BE가 그 값만 null로 내려준다(AdminDashboardService.safe) -
     // 여기서 null을 '—'로 바꿔서, 나머지 지표는 정상 표시되게 한다.
     const num = (v) => (v == null ? '—' : Number(v).toLocaleString());
@@ -1024,6 +1223,10 @@ export function useAppLogic(userProps) {
         markNotificationsRead().then(reload).catch(reload);
       },
       isMaker,
+      // "관리자에게 문의" 챗봇 위젯 - isMaker 화면에서만 렌더링(2026-09-17 강 요청).
+      inquiryCategories: INQUIRY_CATEGORIES,
+      inqOpen, inqCategory, inqMessages, inqDraft, inqSending, inqError,
+      openInqWidget, closeInqWidget, selectInqCategory, setInqDraft, sendInqDraft,
       scAdminDash: s.role === 'admin' && s.tab === 'dash',
       scApprove: s.role === 'admin' && s.tab === 'approve',
       scMakerDash: isMaker && s.tab === 'dash',
@@ -1117,30 +1320,98 @@ export function useAppLogic(userProps) {
       adminUserBreakdownLabel: admin ? `기업 ${num(admin.businessUsers)} · 개인 ${num(admin.personalUsers)}` : '',
       adminTotalDppsLabel: admin ? num(admin.totalDpps) : '—',
       adminDppBreakdownLabel: admin ? `철강 ${num(admin.steelDpps)} · 배터리 ${num(admin.batteryDpps)} · 섬유 ${num(admin.textileDpps)}` : '',
-      adminPendingCountLabel: admin ? `처리 대기 ${num(admin.pendingApprovalCount)}건` : '처리 대기 —',
+      adminPendingCountLabel: admin ? `처리 대기 ${num((admin.pendingApprovalCount || 0) + (admin.pendingDomainGrantCount || 0))}건` : '처리 대기 —',
       adminPendingBadge: admin ? num(admin.pendingApprovalCount) : '—',
+      adminPendingDomainBadge: admin ? num(admin.pendingDomainGrantCount) : '—',
+      goApproveDomain: () => setState({ tab: 'approve', apSection: 'domain' }),
       adminRefreshedAtLabel: adminDashboardFetchedAt ? `최근 갱신 ${fmtDateTime(adminDashboardFetchedAt.toISOString())}` : '',
       // 막대 길이는 최다 유형을 100%로 놓고 상대 비교한다. 예전 mock 시절엔 pct*2.6이라는
       // 고정 배율이었는데(최대값이 34%인 걸 전제로 눈대중으로 맞춘 수), 실데이터에서
       // 한 유형이 100%면 폭이 260%가 되어 막대가 트랙 밖으로 잘려 나간다.
+      // 2026-09-17 강 요청으로 가로 진행바 목록 → 세로 막대 그래프로 교체.
+      // 최다 유형을 트랙 높이의 100%로 놓고 상대 비교하는 건 기존과 동일하다.
       inquiries: (() => {
         const max = inqData.reduce((m, q) => Math.max(m, q.count), 0);
         return inqData.map((q) => ({ key: q.key, label: q.label, count: q.count, pct: q.pct,
-          style: bar(max > 0 ? Math.round(q.count * 100 / max) : 0, '#0045A9') }));
+          barStyle: barV(max > 0 ? Math.round(q.count * 100 / max) : 0, '#0045A9') }));
       })(),
       inquiriesEmpty: inqData.length === 0,
       inquiryTotalLabel: admin ? `최근 30일 · ${num(admin.inquiryTotal30d)}건` : '최근 30일 · —',
       adminLoadErrorLabel: adminDashboardError || '',
-      members: adminMembersList.map((m) => ({
-        key: m.orgId, name: m.orgName, biz: m.bizRegNo, joined: m.joinedDate, country: m.countryCode,
-        domain: m.domainLabel, held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),
-        avatar: avatarStyle(avatarColorFor(m.orgName)), domainChip: domainChipFor(m.domainLabel),
-        domainDot: { width: 8, height: 8, flex: 'none', borderRadius: 999, background: m.domainLabel === '철강' ? '#0045A9' : m.domainLabel === '배터리' ? '#12A150' : '#E3A008' },
-        // 예전엔 토스트 한 줄만 띄우고 끝이었다("...회원 상세 정보를 조회했습니다").
-        // 2026-08-20 강 요청으로 실제 상세 모달을 띄운다.
-        view: () => setState({ memberModal: m })
+      // 관리자 문의함(2026-09-17 강 요청 "관리자 역시 유형별 문의에 대해서 확인할 수
+      // 있도록") - "유형별 문의" 카드에서 열어 제조사와 실제로 답장을 주고받는다.
+      adminInqOpen, adminInqError, adminInqSending,
+      openAdminInqInbox, closeAdminInqInbox, backToAdminInqList,
+      adminInqSelectedId,
+      adminInqDraft, setAdminInqDraft, sendAdminInqReply,
+      adminInqStatusFilter, setAdminInqStatusFilter,
+      adminInqDomainFilter, setAdminInqDomainFilter,
+      adminInqSearchQuery, setAdminInqSearchQuery,
+      adminInqStatusTabs: [['ALL', '전체'], ['OPEN', '미답변'], ['ANSWERED', '답변완료']].map(([k, label]) => ({
+        key: k, label,
+        style: {
+          height: 32, padding: '0 12px', border: '1px solid ' + (adminInqStatusFilter === k ? '#0045A9' : 'rgba(16,32,64,.12)'),
+          borderRadius: 10, background: adminInqStatusFilter === k ? 'rgba(0,69,169,.08)' : '#fff',
+          color: adminInqStatusFilter === k ? '#0045A9' : '#44546F', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+        },
+        go: () => setAdminInqStatusFilter(k)
       })),
-      membersEmpty: adminMembersList.length === 0,
+      adminInqDomainTabs: ['ALL', ...Array.from(new Set(adminMembersList.map((m) => m.domainLabel).filter(Boolean)))].map((k) => ({
+        key: k, label: k === 'ALL' ? '전체' : k,
+        style: {
+          height: 32, padding: '0 12px', border: '1px solid ' + (adminInqDomainFilter === k ? '#0045A9' : 'rgba(16,32,64,.12)'),
+          borderRadius: 10, background: adminInqDomainFilter === k ? 'rgba(0,69,169,.08)' : '#fff',
+          color: adminInqDomainFilter === k ? '#0045A9' : '#44546F', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+        },
+        go: () => setAdminInqDomainFilter(k)
+      })),
+      adminInqListEmpty: adminInqList.length === 0,
+      adminInqFilteredEmpty: adminInqFilteredList.length === 0,
+      adminInqRows: adminInqFilteredList.map((i) => ({
+        key: i.inquiryId,
+        inquiryId: i.inquiryId,
+        orgName: i.orgName || '—',
+        categoryLabel: i.categoryLabel,
+        statusLabel: i.status === 'ANSWERED' ? '답변완료' : '대기중',
+        statusOpen: i.status !== 'ANSWERED',
+        preview: i.lastMessagePreview || '(메시지 없음)',
+        timeLabel: fmtDateTime(i.lastMessageAt || i.updatedAt || i.createdAt),
+        open: () => openAdminInqThread(i.inquiryId),
+      })),
+      adminInqThreadTitle: (() => {
+        const cur = adminInqList.find((i) => i.inquiryId === adminInqSelectedId);
+        return cur ? `${cur.orgName || '—'} · ${cur.categoryLabel}` : '';
+      })(),
+      adminInqThreadMessages: adminInqMessages.map((m) => ({
+        key: m.messageId,
+        fromAdmin: m.senderType === 'ADMIN',
+        body: m.body,
+        timeLabel: fmtDateTime(m.createdAt),
+      })),
+      // 2026-09-17 강 요청: 운영 대시보드 상단 + 회원 관리 검색창 둘 다 회사명 기준으로
+      // adminMembersList를 실시간 필터링한다(기존엔 장식용 input이었다).
+      adminMemberSearchQuery: state.adminMemberSearchQuery || '',
+      setAdminMemberSearchQuery: (v) => setState({ adminMemberSearchQuery: v }),
+      adminMemberDomainFilter, adminMemberRoleFilter,
+      setAdminMemberDomainFilter: (v) => setState({ adminMemberDomainFilter: v }),
+      setAdminMemberRoleFilter: (v) => setState({ adminMemberRoleFilter: v }),
+      adminMemberDomainOptions: [['ALL', '도메인 전체'], ['철강', '철강'], ['배터리', '배터리'], ['섬유·패션', '섬유·패션']],
+      adminMemberRoleOptions: [['ALL', '역할군 전체'], ['제조사', '제조사'], ['협력사', '협력사'], ['세관', '세관'], ['시장감독기관', '시장감독기관']],
+      members: (() => {
+        return adminMembersFiltered.map((m) => ({
+          key: m.orgId, name: m.orgName, biz: m.bizRegNo, joined: m.joinedDate, country: m.countryCode,
+          domain: m.domainLabel, held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),
+          avatar: avatarStyle(avatarColorFor(m.orgName)), domainChip: domainChipFor(m.domainLabel),
+          domainDot: { width: 8, height: 8, flex: 'none', borderRadius: 999, background: m.domainLabel === '철강' ? '#0045A9' : m.domainLabel === '배터리' ? '#12A150' : '#E3A008' },
+          // 예전엔 토스트 한 줄만 띄우고 끝이었다("...회원 상세 정보를 조회했습니다").
+          // 2026-08-20 강 요청으로 실제 상세 모달을 띄운다.
+          view: () => setState({ memberModal: m })
+        }));
+      })(),
+      membersEmpty: adminMembersFiltered.length === 0,
+      membersEmptyLabel: adminMemberFilterActive
+        ? '조건에 맞는 회원이 없습니다.'
+        : '승인된 회원이 없습니다.',
       memberModalOpen: !!s.memberModal,
       memberModalName: s.memberModal ? s.memberModal.orgName : '',
       memberModalRows: s.memberModal ? [
@@ -1467,7 +1738,7 @@ export function useAppLogic(userProps) {
     myDomainsData, refetchMyDomains, requestDomainGrant,
     domainGrantsData, refetchDomainGrants, approveDomainGrant, rejectDomainGrant, fetchDomainGrantEvidenceBlob,
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
-    saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp,
+    saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp, resolveCrossCheck,
     documentFormData, setDocumentFormData, uploadDocument,
     millSheetResult, setMillSheetResult, uploadSteelMillSheet, refreshFieldForm, refreshDocumentForm, refreshDashboard,
     cbamResult, setCbamResult, uploadCbamReport,

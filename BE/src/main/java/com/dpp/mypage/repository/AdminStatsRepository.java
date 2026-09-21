@@ -29,6 +29,10 @@ public interface AdminStatsRepository extends Repository<Organization, Long> {
             nativeQuery = true)
     long countPendingApprovals();
 
+    /** 도메인 확장 신청 중 심사 대기(PENDING) 건수 - 운영현황 카드. */
+    @Query(value = "SELECT COUNT(*) FROM org_domain_grant WHERE status = 'PENDING'", nativeQuery = true)
+    long countPendingDomainGrants();
+
     /**
      * 가장 최근 앵커링 기록 - 행이 있으면 크기 1인 리스트, 없으면 빈 리스트.
      * 각 행은 Object[]: [anchored_at 또는 created_at, block_no].
@@ -94,12 +98,12 @@ public interface AdminStatsRepository extends Repository<Organization, Long> {
     @Query(value = "SELECT o.org_id, o.org_name, o.biz_reg_no, o.created_at, o.country_code, o.domain, "
             + "COUNT(d.dpp_id) FILTER (WHERE d.deleted_at IS NULL) AS held, "
             + "COUNT(d.dpp_id) FILTER (WHERE d.deleted_at IS NULL AND d.status = 'ACTIVE') AS issued, "
-            + "o.contact_name, o.contact_phone, o.contact_email "
+            + "o.contact_name, o.contact_phone, o.contact_email, o.org_type "
             + "FROM organization o "
             + "LEFT JOIN dpp d ON d.owner_org_id = o.org_id "
             + "WHERE o.deleted_at IS NULL AND o.approval_status = 'ACTIVE' "
             + "GROUP BY o.org_id, o.org_name, o.biz_reg_no, o.created_at, o.country_code, o.domain, "
-            + "o.contact_name, o.contact_phone, o.contact_email "
+            + "o.contact_name, o.contact_phone, o.contact_email, o.org_type "
             + "ORDER BY o.created_at DESC", nativeQuery = true)
     List<Object[]> findMembersWithDppCounts();
 }

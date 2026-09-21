@@ -68,6 +68,10 @@ export function avatarStyle(hue) {
 
 export function bar(pct, color) { return { display: 'block', height: '100%', width: pct + '%', borderRadius: 6, background: color }; }
 
+// 2026-09-17 강 요청: 관리자 대시보드 "유형별 문의"를 세로 막대 그래프로 표시.
+// 바닥(baseline)에 붙고 위쪽(데이터 끝)만 둥글게 - dataviz 가이드의 마크 스펙을 따른다.
+export function barV(pct, color) { return { display: 'block', width: '100%', height: Math.max(pct, 2) + '%', borderRadius: '4px 4px 0 0', background: color }; }
+
 export function pctStyle(pct) {
   const c = pct === 0 ? '#C22B2B' : pct >= 100 ? '#0E7A3D' : '#96660A';
   return { fontFamily: "'JetBrains Mono',monospace", fontSize: 12.5, fontWeight: 700, color: c, textAlign: 'right' };

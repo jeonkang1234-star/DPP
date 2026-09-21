@@ -65,11 +65,14 @@ public class SpecFieldAutoFillService {
 
     private final RequirementFieldRepository requirementFieldRepository;
     private final DppFieldValueRepository fieldValueRepository;
+    private final DppComplianceService complianceService;
 
     public SpecFieldAutoFillService(RequirementFieldRepository requirementFieldRepository,
-                                     DppFieldValueRepository fieldValueRepository) {
+                                     DppFieldValueRepository fieldValueRepository,
+                                     DppComplianceService complianceService) {
         this.requirementFieldRepository = requirementFieldRepository;
         this.fieldValueRepository = fieldValueRepository;
+        this.complianceService = complianceService;
     }
 
     /**
@@ -114,6 +117,7 @@ public class SpecFieldAutoFillService {
         }
 
         List<String> filled = new ArrayList<>();
+        List<String> crossChecked = new ArrayList<>();
         for (String fieldCode : writable) {
             Object raw = specFields.get(fieldCode);
             String text = raw == null ? null : String.valueOf(raw).trim();
@@ -133,7 +137,19 @@ public class SpecFieldAutoFillService {
             if (existing.isPresent()) {
                 String current = existing.get().getValueText();
                 if (current != null && !current.isBlank()) {
-                    continue;   // 규칙 1 - 사용자가 넣은 값을 뒤집지 않는다
+                    // 규칙 1 - 사용자가 넣은 값을 뒤집지 않는다. 다만 2026-09-19부터
+                    // 그냥 버리지 않고 두 값을 비교해서 결과를 남긴다(강 요청 3번,
+                    // dpp_field_cross_check). 다르면 MISMATCH 로 남고 발급이 막힌다.
+                    //
+                    // 영업비밀 필드는 제외한다 - 여기 text 는 실측값이 아니라 이미
+                    // "충족"/"미충족" 판정 토큰으로 바뀐 뒤라, 비교해봐야 판정끼리
+                    // 비교하는 셈이고 실측값을 다시 DB 근처로 가져오는 것도 이 코드베이스
+                    // 원칙에 어긋난다.
+                    if (!tradeSecret.contains(fieldCode)) {
+                        complianceService.recordCrossCheck(dppId, fieldCode, current, text, sourceDocumentId);
+                        crossChecked.add(fieldCode);
+                    }
+                    continue;
                 }
             }
             DppFieldValue value = existing.orElseGet(() -> {
@@ -153,6 +169,10 @@ public class SpecFieldAutoFillService {
         if (!filled.isEmpty()) {
             log.info("dppId={} 문서 파싱으로 {}개 필드 자동 채움(영업비밀 {}개는 판정만 기록): {}",
                     dppId, filled.size(), filled.stream().filter(tradeSecret::contains).count(), filled);
+        }
+        if (!crossChecked.isEmpty()) {
+            log.info("dppId={} 이미 값이 있던 {}개 필드는 문서값과 교차검증만 기록: {}",
+                    dppId, crossChecked.size(), crossChecked);
         }
         return filled;
     }

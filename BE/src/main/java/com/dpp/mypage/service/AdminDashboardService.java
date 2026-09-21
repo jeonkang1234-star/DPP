@@ -80,6 +80,8 @@ public class AdminDashboardService {
 
         Long pending = safeOrNull("가입 승인 대기 건수",
                 () -> Long.valueOf(adminStatsRepository.countPendingApprovals()));
+        Long pendingDomainGrants = safeOrNull("도메인 확장 대기 건수",
+                () -> Long.valueOf(adminStatsRepository.countPendingDomainGrants()));
 
         // "몇 분 전"은 SQL이 이미 계산해서 숫자로 내려준다(AdminStatsRepository.findLatestAnchor
         // 주석 참고) - 여기서 timestamptz를 다시 자바 타입으로 변환하지 않는다.
@@ -119,7 +121,7 @@ public class AdminDashboardService {
                 .toList();
 
         return new AdminDashboardResponse(totalUsers, business, personal, totalDpps, steel, battery, textile,
-                pending, lastAnchoredMinutesAgo, lastAnchorBlockNo, successRate, sparkline,
+                pending, pendingDomainGrants, lastAnchoredMinutesAgo, lastAnchorBlockNo, successRate, sparkline,
                 inquiryTotal, inquiries);
     }
 
@@ -173,8 +175,6 @@ public class AdminDashboardService {
             case "ACCOUNT" -> "계정·인증";
             case "DPP" -> "DPP 등록";
             case "DATA" -> "데이터 검증";
-            case "CUSTOMS" -> "통관";
-            case "ZKP" -> "영지식증명";
             case "ETC" -> "기타";
             default -> subType;
         };
@@ -200,7 +200,21 @@ public class AdminDashboardService {
                 joinedDate, countryCode, domainLabel(domain), held, issued,
                 dash(row.length > 8 ? row[8] : null),
                 dash(row.length > 9 ? row[9] : null),
-                dash(row.length > 10 ? row[10] : null));
+                dash(row.length > 10 ? row[10] : null),
+                row.length > 11 && row[11] != null ? String.valueOf(row[11]) : null,
+                roleLabel(row.length > 11 ? row[11] : null));
+    }
+
+    /** 회원가입 때 고르는 역할군(제조사/협력사/세관/시장감독기관)과 같은 이름으로 보여준다. */
+    private String roleLabel(Object orgType) {
+        if (orgType == null) return "미지정";
+        return switch (String.valueOf(orgType)) {
+            case "MANUFACTURER" -> "제조사";
+            case "RAW_SUPPLIER" -> "협력사";
+            case "CUSTOMS" -> "세관";
+            case "EU_AUTHORITY" -> "시장감독기관";
+            default -> "미지정";
+        };
     }
 
     /** 빈 값은 화면에서 빈칸이 아니라 '—'로 보이게 한다 - 조회는 됐는데 값이 없다는 뜻. */

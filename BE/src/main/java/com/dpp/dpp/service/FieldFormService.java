@@ -9,6 +9,8 @@ import com.dpp.blockchain.repository.BlockchainAnchorRepository;
 import com.dpp.customs.service.CustomsClearanceService;
 import com.dpp.mypage.service.DomainGrantService;
 import com.dpp.dpp.dto.CodeOptionDto;
+import com.dpp.dpp.dto.CrossCheckDto;
+import com.dpp.dpp.dto.LifecycleStageDto;
 import com.dpp.dpp.dto.FieldFormItemDto;
 import com.dpp.dpp.dto.FieldFormSectionDto;
 import com.dpp.dpp.dto.FieldFormResponse;
@@ -75,6 +77,19 @@ public class FieldFormService {
 
     /** dppId도 request.domain()도 없을 때만 쓰는 최후 기본값 - 기존 철강 FE 호출과의 하위 호환용. */
     private static final String DEFAULT_DOMAIN = "STEEL";
+
+    /**
+     * 발급 게이트의 마지막 생애주기 단계. V36 의 fn_issue_gate_max_stage() 와 같은 값이어야
+     * 한다 - 이 숫자가 어긋나면 화면은 "추후 제출"이라는데 완성도는 그 항목을 분모에 넣는
+     * 상태가 된다. 판정 자체는 항상 DB 뷰가 하고, 여기 상수는 화면 표시에만 쓴다.
+     */
+    private static final int ISSUE_GATE_MAX_STAGE = 8;
+
+    /** requirement_field.lifecycle_stage 가 비었을 때의 기본 단계(제조). V36 뷰의 COALESCE 와 동일. */
+    private static final int DEFAULT_LIFECYCLE_STAGE = 4;
+
+    /** 개별 배터리 고유 식별자 필드(V37). 모델 식별자 BATTERY_MODEL_NO 와 다른 항목이다. */
+    private static final String BATTERY_UNIQUE_ID_FIELD = "BATTERY_UNIQUE_ID";
     // "기본 정보 입력" 화면이 다루는 requirement_field.domain 범위. 원래 STEEL 하드코딩이었는데
     // fn_recalc_completeness/v_dpp_missing_field(V2__functions.sql)는 처음부터
     // "rf.domain IN ('COMMON', d.domain)"으로 완성도를 매겨왔다 - 즉 COMMON 필드가 항상
@@ -104,6 +119,7 @@ public class FieldFormService {
     private final AuditLogService auditLogService;
     private final DomainGrantService domainGrantService;
     private final PartnerAssignmentService partnerAssignmentService;
+    private final DppComplianceService complianceService;
 
     public FieldFormService(UserAccountRepository userAccountRepository,
                              ProductModelRepository productModelRepository,
@@ -118,7 +134,8 @@ public class FieldFormService {
                              CustomsClearanceService customsClearanceService,
                              AuditLogService auditLogService,
                              DomainGrantService domainGrantService,
-                             PartnerAssignmentService partnerAssignmentService) {
+                             PartnerAssignmentService partnerAssignmentService,
+                             DppComplianceService complianceService) {
         this.userAccountRepository = userAccountRepository;
         this.productModelRepository = productModelRepository;
         this.dppRepository = dppRepository;
@@ -133,6 +150,7 @@ public class FieldFormService {
         this.auditLogService = auditLogService;
         this.domainGrantService = domainGrantService;
         this.partnerAssignmentService = partnerAssignmentService;
+        this.complianceService = complianceService;
     }
 
     @Transactional(readOnly = true)
@@ -153,8 +171,13 @@ public class FieldFormService {
             List<FieldFormItemDto> allFields = fieldsFor(fieldDomains(domain), null).stream()
                     .map(f -> toItem(f, null))
                     .toList();
+            // 아직 dpp 행이 없으니 배터리 여권 대상 판정도 할 수 없다(분류를 아직 안 골랐다).
+            // 판정 보류 상태에서는 전체 항목을 그대로 보여준다 - 조건을 모르는 채로 항목을
+            // 숨기면 "필요한 칸이 화면에 아예 없다"가 된다.
             return new FieldFormResponse(null, null, null, domain, "DRAFT", 0.0, 0, 0, allFields,
-                    sectionsOf(allFields), codeOptionsOf(allFields));
+                    sectionsOf(allFields), codeOptionsOf(allFields),
+                    null, complianceService.trackLabel(domain, null),
+                    List.of(), List.of(), List.of());
         }
 
         Dpp dpp = dppRepository.findById(dppId)
@@ -173,7 +196,14 @@ public class FieldFormService {
                 ? partnerAssignmentService.lockedRoleLabels(dpp.getDppId())
                 : Map.of();
 
+        // 배터리 여권 비대상(SLI/휴대용/산업용 2kWh 이하)이면 여권 전용 항목을 화면에서
+        // 뺀다. 무엇이 빠지는지는 Java 가 아니라 DB(V36 v_dpp_requirement_status.is_applicable)가
+        // 정한다 - 완성도·미충족 목록이 이미 그 뷰를 쓰고 있어서, 여기서 따로 판정하면
+        // 두 곳이 어긋나는 순간 "화면엔 없는 칸 때문에 완성도가 안 오른다"가 된다.
+        // null 이면 거르지 않는다(판정 보류 또는 조회 실패).
+        Set<String> applicable = complianceService.applicableFieldCodes(dpp.getDppId());
         List<FieldFormItemDto> fields = fieldsFor(fieldDomains(domain), access.participantRoleCode()).stream()
+                .filter(f -> applicable == null || applicable.contains(f.getFieldCode()))
                 .map(f -> toItem(f, existingValues.get(f.getFieldCode()),
                         partnerAssignmentService.lockLabelFor(lockedRoles, f.getResponsibleRole())))
                 .toList();
@@ -210,8 +240,16 @@ public class FieldFormService {
             completeness = myRequired > 0 ? (myFilled * 100.0 / myRequired) : 0.0;
         }
 
+        // 협력사에게는 발급 게이트/교차검증/생애주기를 내려주지 않는다 - 발급 여부를
+        // 결정하는 건 소유 조직이고, 협력사 화면은 자기 담당 칸만 보는 자리다.
+        Boolean passport = complianceService.passportRequired(dpp.getDppId());
+        List<String> blockers = access.owner() ? complianceService.issueBlockerLabels(dpp.getDppId()) : List.of();
+        List<CrossCheckDto> checks = access.owner() ? complianceService.crossChecks(dpp.getDppId()) : List.of();
+        List<LifecycleStageDto> stages = access.owner() ? complianceService.lifecycle(dpp.getDppId()) : List.of();
+
         return new FieldFormResponse(dpp.getDppId(), dpp.getPublicUuid(), dpp.getDisplayName(), domain, status, completeness, filled, required,
-                fields, sectionsOf(fields), codeOptionsOf(fields));
+                fields, sectionsOf(fields), codeOptionsOf(fields),
+                passport, complianceService.trackLabel(domain, passport), blockers, checks, stages);
     }
 
     @Transactional
@@ -239,6 +277,7 @@ public class FieldFormService {
         upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode(),
                 access.owner() ? partnerAssignmentService.lockedRoleLabels(dpp.getDppId()).keySet() : Set.of());
         syncModelName(dpp);
+        syncBatteryUniqueId(dpp);
         recalc(dpp.getDppId());
         if (!access.owner()) {
             participantSubmitStatusService.refresh(dpp, orgId, access.participantRoleCode());
@@ -251,6 +290,57 @@ public class FieldFormService {
         return s.length() > max ? s.substring(0, max) : s;
     }
 
+    /**
+     * 교차검증 불일치를 정리한다(2026-09-19 강 요청 3번의 마무리). 이게 없으면 불일치가
+     * 한 번 생긴 DPP 는 화면에서 빠져나갈 길 없이 영원히 발급이 막힌다.
+     *
+     * USE_PARSED 를 고르면 문서에서 읽은 값을 실제 입력값으로 바꿔 넣는다 - 그래야
+     * "문서값을 채택했다"가 여권 내용에도 반영된다. KEEP_ENTERED 는 값을 건드리지 않고
+     * "확인했고 입력값이 맞다"만 기록한다.
+     */
+    @Transactional
+    public FieldFormResponse resolveCrossCheck(Long userId, Long dppId, Long checkId, String resolution) {
+        Long orgId = resolveOrgId(userId);
+        Dpp dpp = dppRepository.findById(dppId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DPP를 찾을 수 없습니다."));
+        if (!orgId.equals(dpp.getOwnerOrgId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP를 수정할 권한이 없습니다.");
+        }
+        var resolved = complianceService.resolve(checkId, resolution, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "처리할 수 없는 교차검증 항목입니다."));
+        // 다른 DPP 의 행을 checkId 만 바꿔 호출하는 걸 막는다 - 권한 검사는 dppId 로 했다.
+        if (!dppId.equals(resolved.getDppId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이 DPP의 교차검증 항목이 아닙니다.");
+        }
+        if ("USE_PARSED".equals(resolution) && resolved.getParsedValue() != null) {
+            upsertResolvedValue(dppId, resolved.getFieldCode(), resolved.getParsedValue(), orgId, userId,
+                    resolved.getDocumentId());
+        }
+        syncModelName(dpp);
+        syncBatteryUniqueId(dpp);
+        recalc(dppId);
+        return getForm(userId, dppId);
+    }
+
+    /** 교차검증에서 문서값을 채택했을 때만 쓰는 덮어쓰기 - 사용자가 명시적으로 고른 경우다. */
+    private void upsertResolvedValue(Long dppId, String fieldCode, String value, Long orgId, Long userId,
+                                      Long documentId) {
+        DppFieldValue row = fieldValueRepository.findByDppIdAndFieldCode(dppId, fieldCode)
+                .orElseGet(() -> {
+                    DppFieldValue v = new DppFieldValue();
+                    v.setDppId(dppId);
+                    v.setFieldCode(fieldCode);
+                    return v;
+                });
+        row.setValueText(value);
+        row.setSubmittedByOrg(orgId);
+        row.setSubmittedByUser(userId);
+        row.setSourceDocumentId(documentId);
+        row.setUpdatedAt(OffsetDateTime.now());
+        fieldValueRepository.save(row);
+    }
+
     @Transactional
     public FieldFormResponse issue(Long userId, Long dppId) {
         Long orgId = resolveOrgId(userId);
@@ -260,6 +350,31 @@ public class FieldFormService {
         // 최종 발급 여부는 소유 조직이 결정한다.
         if (!orgId.equals(dpp.getOwnerOrgId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP를 발급할 권한이 없습니다.");
+        }
+
+        // ── 발급 게이트(2026-09-19 강 요청) ────────────────────────────────
+        // 지금까지는 완성도와 무관하게 발급 버튼이 통했다. "모든 필드 입력 완료 = 발급"도
+        // 아니고 아예 검증이 없었던 셈이다.
+        //
+        // 필수 항목 검사는 배터리에만 건다. 철강/섬유는 이미 발급된 DPP 와 진행 중인 데모가
+        // 있어서, 여기서 전면 적용하면 어제까지 되던 흐름이 오늘 막힌다 - 도메인별로 필수
+        // 항목을 정리한 다음에 확대할 일이다.
+        //
+        // 교차검증 불일치는 도메인을 가리지 않고 막는다. 이 표(dpp_field_cross_check)는
+        // V36 에서 처음 생겨서 기존 DPP 에는 행이 하나도 없다 - 기존 흐름을 건드리지 않으면서
+        // 앞으로 생기는 불일치만 잡는다.
+        List<CrossCheckDto> mismatches = complianceService.openMismatches(dpp.getDppId());
+        if (!mismatches.isEmpty()) {
+            String names = mismatches.stream().limit(5).map(CrossCheckDto::labelKo)
+                    .collect(Collectors.joining(", "));
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "문서에서 읽은 값과 입력값이 다릅니다. 먼저 확인해 주세요: " + names);
+        }
+        if ("BATTERY".equals(dpp.getDomain())) {
+            String blocked = complianceService.blockerMessage(complianceService.issueBlockerLabels(dpp.getDppId()));
+            if (blocked != null) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, blocked);
+            }
         }
         // 발급 완료 = ACTIVE. 전에는 PENDING으로 뒀는데, 그 상태를 ACTIVE로 올리는 코드가
         // 어디에도 없어서 DPP가 영원히 PENDING에 머물렀다. 그 결과 "발급 완료(ACTIVE)된 DPP만
@@ -384,12 +499,18 @@ public class FieldFormService {
     }
 
     private FieldFormItemDto toItem(RequirementField f, String value, String partnerLockLabel) {
+        // lifecycle_stage 가 비어 있는 기존 필드(철강/섬유 전부)는 제조 단계로 본다 -
+        // V36 의 v_dpp_requirement_status 가 COALESCE(...,4) 로 판정하는 것과 같은 기본값을
+        // 여기서도 써야 화면과 완성도가 어긋나지 않는다.
+        int stage = f.getLifecycleStage() == null ? DEFAULT_LIFECYCLE_STAGE : f.getLifecycleStage().intValue();
         return new FieldFormItemDto(
                 f.getFieldCode(), f.getSection(), f.getLabelKo(), f.getLabelEn(), f.getUnit(),
                 f.getHelpText(), f.isRequired(), value,
                 f.getDataType(), f.getCodeGroup(), f.getDataSource(), f.getTier(),
                 f.getDisclosureScope(), f.getLegalBasis(), f.getT1Condition(),
-                f.getResponsibleRole(), partnerLockLabel);
+                f.getResponsibleRole(), partnerLockLabel,
+                f.getLifecycleStage() == null ? null : Integer.valueOf(stage),
+                stage <= ISSUE_GATE_MAX_STAGE);
     }
 
     /**
@@ -559,7 +680,79 @@ public class FieldFormService {
         dpp.setOwnerOrgId(orgId);
         dpp.setDomain(domain);
         dpp.setStatus("DRAFT");
-        return dppRepository.save(dpp);
+        // 개별 배터리 고유 식별자(강 요청 1번) - 모델 식별자(BATTERY_MODEL_NO)와 분리된,
+        // 배터리 한 대를 가리키는 값. 사용자가 이미 자기 일련번호를 넣었으면 그 값을 쓰고,
+        // 아니면 여기서 만든다. dpp.serial_number 에도 같은 값을 넣어 ux_dpp_serial 유니크
+        // 인덱스로 중복을 막는다.
+        if ("BATTERY".equals(domain)) {
+            String supplied = values == null ? null : values.get(BATTERY_UNIQUE_ID_FIELD);
+            dpp.setSerialNumber(supplied != null && !supplied.isBlank()
+                    ? trimTo(supplied.trim(), 100)
+                    : generateBatteryUniqueId(orgId));
+        }
+        Dpp saved = dppRepository.save(dpp);
+        if ("BATTERY".equals(domain) && saved.getSerialNumber() != null) {
+            upsertSystemValue(saved.getDppId(), BATTERY_UNIQUE_ID_FIELD, saved.getSerialNumber(), orgId);
+        }
+        return saved;
+    }
+
+    /**
+     * 개별 배터리 식별자 생성 - "BAT-{조직}-{시각}-{난수 4자리}".
+     *
+     * GS1 SGTIN 같은 표준 체계를 쓰는 게 맞지만 이 조직들이 아직 GS1 발급을 받지 않았다
+     * (product_model.gtin 이 비어 있는 것과 같은 사정). 지금 필요한 건 "개체마다 다르고,
+     * 사람이 보고 배터리 한 대를 지목할 수 있는 값"이라 그 수준으로 만든다 - 표준 식별자가
+     * 생기면 이 값을 그쪽으로 옮기고 여기는 폴백으로 남긴다.
+     */
+    private String generateBatteryUniqueId(Long orgId) {
+        String rand = UUID.randomUUID().toString().replace("-", "").substring(0, 4).toUpperCase();
+        return "BAT-" + orgId + "-" + System.currentTimeMillis() + "-" + rand;
+    }
+
+    /**
+     * 서버가 만든 값을 dpp_field_value 에 넣는다. 이미 값이 있으면 건드리지 않는다 -
+     * 사용자가 나중에 실제 일련번호로 고쳤는데 재저장 때마다 자동 생성값이 덮어쓰면 안 된다.
+     */
+    private void upsertSystemValue(Long dppId, String fieldCode, String value, Long orgId) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        Optional<DppFieldValue> existing = fieldValueRepository.findByDppIdAndFieldCode(dppId, fieldCode);
+        if (existing.isPresent() && existing.get().getValueText() != null
+                && !existing.get().getValueText().isBlank()) {
+            return;
+        }
+        DppFieldValue row = existing.orElseGet(() -> {
+            DppFieldValue v = new DppFieldValue();
+            v.setDppId(dppId);
+            v.setFieldCode(fieldCode);
+            return v;
+        });
+        row.setValueText(value);
+        row.setSubmittedByOrg(orgId);
+        row.setUpdatedAt(OffsetDateTime.now());
+        fieldValueRepository.save(row);
+    }
+
+    /**
+     * BATTERY_UNIQUE_ID 를 dpp.serial_number 에 반영한다. 사용자가 폼에서 식별자를 자기
+     * 일련번호로 고치면 dpp_field_value 만 바뀌고 dpp.serial_number 는 생성 시점 값에
+     * 머무르는데, 목록/QR/세관 조회는 serial_number 를 읽는다 - syncModelName 이 제품명에
+     * 대해 하는 일과 같은 이유로 여기서 다시 맞춘다.
+     */
+    private void syncBatteryUniqueId(Dpp dpp) {
+        if (!"BATTERY".equals(dpp.getDomain())) {
+            return;
+        }
+        String value = fieldValueRepository.findByDppIdAndFieldCode(dpp.getDppId(), BATTERY_UNIQUE_ID_FIELD)
+                .map(DppFieldValue::getValueText)
+                .orElse(null);
+        if (value == null || value.isBlank() || value.equals(dpp.getSerialNumber())) {
+            return;
+        }
+        dpp.setSerialNumber(trimTo(value.trim(), 100));
+        dppRepository.save(dpp);
     }
 
     /**

@@ -1,16 +1,7 @@
-# .github/workflows/cd.yml
-#
-# 트리거: main으로 PR이 "merge"됐을 때만 배포합니다 (단순 push 아님, close인데 merge 안 된 경우도 제외).
-# 전제: main 브랜치는 PR을 통해서만 반영되고(브랜치 보호 규칙), 기존 CI가 PR의 필수 체크로
-#       걸려있어서 CI를 통과해야만 merge 버튼이 눌린다는 전제입니다.
-# 브랜치 보호 규칙 설정 위치: 저장소 Settings > Branches > Add rule
-#   - Branch name pattern: main
-#   - Require a pull request before merging: 체크
-#   - Require status checks to pass before merging: 체크 (기존 CI 워크플로 선택)
-
 name: CD
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [closed]
     branches: [main]
@@ -18,12 +9,28 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: ${{ github.event.pull_request.merged == true }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: main
+
+      - name: Runner IP
+        id: ip
+        run: echo "ip=$(curl -s https://checkip.amazonaws.com)" >> $GITHUB_OUTPUT
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Open SSH for this runner
+        run: |
+          aws ec2 authorize-security-group-ingress --group-id ${{ secrets.EC2_SG_ID }} \
+            --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ip }}/32
+          sleep 5
 
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -36,12 +43,6 @@ jobs:
             set -e
             cd /opt/app
 
-            # 원격 추적 ref(refs/remotes/origin/main)가 깨지면 fetch가
-            #   "error: fetching ref refs/remotes/origin/main failed: incorrect old value provided"
-            # 로 죽는다(2026-08-21, PR #54 배포에서 실제 발생). loose ref와 packed-refs에
-            # 서로 다른 값이 남아 있을 때 나는 증상이라, 코드나 커밋과는 무관하고 EC2 쪽
-            # .git 상태 문제다. 한 번 나면 사람이 손대기 전까지 모든 배포가 같은 자리에서
-            # 멈추므로, 실패하면 그 ref를 지우고 packed-refs를 정리한 뒤 한 번 더 시도한다.
             if ! git fetch origin main; then
               echo "fetch 실패 - origin/main 추적 ref를 재생성하고 재시도"
               git update-ref -d refs/remotes/origin/main || true
@@ -49,50 +50,27 @@ jobs:
               git fetch origin main
             fi
 
-            # origin/main 대신 FETCH_HEAD로 리셋한다. 방금 받은 커밋을 직접 가리키므로
-            # 추적 ref 상태와 무관하게 항상 정확하다.
             git reset --hard FETCH_HEAD
             git log --oneline -1
 
-            cd docker                          # docker-compose.yml이 /opt/app/docker 에 위치
-            # docker-compose.yml의 env_file(.env)은 반드시 존재해야 한다. 이 파일에는 메일
-            # 계정·OAuth 시크릿처럼 git에 올릴 수 없는 값이 들어가고(.gitignore), 서버에
-            # 사람이 직접 만들어 둔다. git reset --hard는 추적되지 않는 파일을 지우지 않으므로
-            # 한 번 만들어 두면 배포마다 그대로 남는다. 아직 안 만들었으면 빈 파일로 생성해서
-            # 배포 자체가 멈추지 않게 한다(그 상태면 메일/SNS 로그인만 비활성으로 동작).
+            cd docker
             if [ ! -f .env ]; then
               echo "WARNING: /opt/app/docker/.env 없음 - 빈 파일로 생성합니다."
-              echo "         메일 발송·SNS 로그인을 쓰려면 .env.example을 참고해 값을 채우세요."
               touch .env
             fi
-            # /opt/app/fabric-identity에 Fabric 인증서(admin-cert.pem 등)가 준비돼 있으면
-            # blockchain 오버레이를 자동으로 포함한다. 없으면(예: Fabric 네트워크를 아직 안 띄운
-            # 새 EC2 인스턴스) 오버레이 없이 배포해 BLOCKCHAIN_ENABLED=false로 계속 진행 - CD
-            # 자체가 Fabric 상태 때문에 실패하지 않도록 하기 위함.
+
             COMPOSE_FILES="-f docker-compose.yml"
             if [ -f /opt/app/fabric-identity/admin-cert.pem ]; then
               COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.blockchain.yml"
               echo "Fabric identity 확인됨 - blockchain 오버레이 적용"
             else
-              echo "WARNING: /opt/app/fabric-identity/admin-cert.pem 없음 - blockchain 오버레이 생략 (BLOCKCHAIN_ENABLED=false로 배포)"
+              echo "WARNING: fabric-identity 없음 - blockchain 오버레이 생략"
             fi
 
-            # 배포가 중간에 끊기면(예: recreate 도중 SSH 세션 종료) compose가 재생성용으로
-            # rename한 임시 이름(<hash>_<service>)의 컨테이너가 지워지지 않고 남을 수 있다 -
-            # 다음 배포 때 그 이름이 새 컨테이너와 충돌해서 "Conflict. The container name ...
-            # is already in use" 에러로 up이 죽는다(2026-08-16, PR #42 배포 중 실제 발생).
-            # down은 이름이 아니라 compose 프로젝트/서비스 레이블로 컨테이너를 찾으므로
-            # rename된 상태여도 정리되고, up이 항상 처음부터 다시 만들게 돼 이 충돌이
-            # 원천적으로 재발하지 않는다.
             docker compose $COMPOSE_FILES down --remove-orphans || true
             docker compose $COMPOSE_FILES pull || true
             docker compose $COMPOSE_FILES build
 
-            # down 직후 바로 up으로 재생성하면 compose v2가 방금 내린 컨테이너의 ID를
-            # 여전히 내부 캐시에 들고 있다가 "No such container: <옛 ID>"로 죽는 레이스가
-            # 있다(2026-08-16, PR #41 재배포 중 dpp-parser에서 실제 발생 - down/up
-            # 자체는 정상 동작했고 orphan 충돌도 없었는데 이 레이스만 새로 나옴). 거의
-            # 항상 한 번 더 돌리면 통과하는 일시적 상태라 짧게 쉬고 재시도한다.
             docker compose $COMPOSE_FILES up -d --remove-orphans \
               || (echo "up 1차 실패 - 5초 대기 후 재시도" && sleep 5 \
                   && docker compose $COMPOSE_FILES up -d --remove-orphans)
@@ -106,30 +84,26 @@ jobs:
           key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
           port: ${{ secrets.EC2_SSH_PORT || 22 }}
           script: |
-            sleep 15
             cd /opt/app/docker
             COMPOSE_FILES="-f docker-compose.yml"
             if [ -f /opt/app/fabric-identity/admin-cert.pem ]; then
               COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.blockchain.yml"
             fi
-            curl -f http://localhost:8080/actuator/health \
-              || (docker compose $COMPOSE_FILES logs --tail=100 && exit 1)
-            curl -f http://localhost/ \
+            for i in $(seq 1 40); do
+              if curl -sf http://localhost:8080/actuator/health > /dev/null; then
+                echo "backend UP"; break
+              fi
+              echo "backend 대기 중 ($i/40)"; sleep 5
+              if [ "$i" -eq 40 ]; then
+                docker compose $COMPOSE_FILES logs --tail=100
+                exit 1
+              fi
+            done
+            curl -f http://localhost/ > /dev/null \
               || (docker compose $COMPOSE_FILES logs frontend --tail=100 && exit 1)
 
-# ─────────────────────────────────────────────
-# 필요한 GitHub Secrets (Settings > Secrets and variables > Actions)
-#   EC2_HOST             : Elastic IP 또는 도메인
-#   EC2_USER             : deploy (bootstrap 스크립트에서 만든 전용 계정)
-#   EC2_SSH_PRIVATE_KEY  : deploy 계정 authorized_keys에 등록한 키 쌍의 개인키
-#   EC2_SSH_PORT         : 기본 22 (변경했다면 명시)
-#
-# 사전 준비
-#   1. EC2에서: ssh-keygen -t ed25519 -f github-actions-deploy (또는 로컬에서 생성 후 공개키만 서버에 등록)
-#   2. 공개키를 /home/deploy/.ssh/authorized_keys 에 추가
-#   3. 개인키를 위 Secrets에 등록 (절대 리포지토리에 커밋 금지)
-#   4. /opt/app 에 docker-compose.yml, chaincode, ZKP 회로/zkey 아티팩트를 최초 1회 수동 배치
-#      (trusted setup 결과물인 zkey는 매 배포마다 재생성하지 말고 고정 아티팩트로 관리 —
-#       S3나 Release 자산으로 버전 관리하고, 배포 스크립트에서는 다운로드만 하는 방식 권장)
-#   5. curl health check의 PORT/health는 실제 애플리케이션 헬스체크 엔드포인트로 교체
-# ─────────────────────────────────────────────
+      - name: Close SSH
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress --group-id ${{ secrets.EC2_SG_ID }} \
+            --protocol tcp --port 22 --cidr ${{ steps.ip.outputs.ip }}/32
