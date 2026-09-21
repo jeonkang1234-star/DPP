@@ -531,3 +531,32 @@ export function sendAdminInquiryReply(inquiryId, message) {
     body: JSON.stringify({ message }),
   });
 }
+
+/** 문서 검증(업로드 -> 파싱 -> 앵커 -> ZKP) 진행률 - 진행 중 + 최근 10분 이내 종료 항목. */
+export function fetchIngestProgress() {
+  return authedFetch('/document/progress');
+}
+
+/** 제품 사진 등록/교체 - 이 조직 소유 DPP에만 붙는다(JPG/PNG/WEBP, 5MB 이하). */
+export function uploadProductPhoto(dppId, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return authedFetch(`/me/dpp/${dppId}/photo`, { method: 'POST', body: formData });
+}
+
+export function deleteProductPhoto(dppId) {
+  return authedFetch(`/me/dpp/${dppId}/photo`, { method: 'DELETE' });
+}
+
+/** 제품 사진 원본 - 인증 헤더가 필요해서 <img src> 대신 blob -> object URL로 띄운다. 없으면 null. */
+export async function fetchProductPhotoBlob(dppId) {
+  const session = loadSession();
+  const token = session?.accessToken;
+  const res = await fetch(`/me/dpp/${dppId}/photo`, {
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('제품 사진을 불러오지 못했습니다.');
+  return res.blob();
+}

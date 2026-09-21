@@ -19,6 +19,8 @@ import { fetchMe, fetchScans, deleteScan, searchProducts, recordScan, fetchNotif
   // 도메인 확장(2026-08-22) - 마이페이지 신청 / 관리자 심사 / DPP 생성 도메인 선택기.
   fetchMyDomains, requestDomainGrant, fetchDomainGrants, approveDomainGrant, rejectDomainGrant,
   fetchDomainGrantEvidenceBlob,
+  // 제품 사진 + 문서 검증 진행률(2026-09-21 강 요청).
+  fetchIngestProgress, uploadProductPhoto, deleteProductPhoto, fetchProductPhotoBlob,
   // "관리자에게 문의" 챗봇 위젯 + 관리자 문의함(2026-09-17 강 요청) - 폴링 기반 양방향 채팅.
   createInquiry, fetchMyInquiries, fetchInquiryMessages, sendInquiryMessage,
   fetchAdminInquiries, fetchAdminInquiryMessages, sendAdminInquiryReply } from './api/meApi.js';
@@ -723,6 +725,58 @@ export function useAppLogic(userProps) {
   }, [state.view, state.role, state.tab, state.fieldFormDppId, state.partnerAssignedDppId]);
 
   /**
+   * 제품 사진(2026-09-21 강 요청) - DPP 이름 칸 오른쪽 버튼으로 등록한다.
+   * dppId가 아직 없는(첫 임시저장 전) 상태에서 고른 사진은 state.pendingPhoto에 들고 있다가,
+   * dppId가 생기는 순간 여기서 올린다. 등록된 사진은 blob URL(productPhotoUrl)로 화면에 띄운다.
+   */
+  useEffect(() => {
+    if (state.view !== 'app' || !domainForRole(state.role) || state.tab !== 'input') return;
+    const dppId = state.fieldFormDppId;
+    if (!dppId) { setState({ productPhotoUrl: null, productPhotoDppId: null }); return; }
+    const session = loadSession();
+    if (!session?.accessToken) return;
+    let alive = true;
+    let url = null;
+    (async () => {
+      try {
+        if (state.pendingPhoto) {
+          try { await uploadProductPhoto(dppId, state.pendingPhoto); } catch (err) { say(err.message || '제품 사진 등록에 실패했습니다.'); }
+          // pendingPhoto가 비면 이 effect가 다시 돌면서 방금 올린 사진을 불러온다.
+          setState({ pendingPhoto: null, pendingPhotoPreview: null });
+          return;
+        }
+        const blob = await fetchProductPhotoBlob(dppId);
+        if (!alive) return;
+        url = blob ? URL.createObjectURL(blob) : null;
+        setState({ productPhotoUrl: url, productPhotoDppId: dppId });
+      } catch (err) {
+        if (alive) setState({ productPhotoUrl: null, productPhotoDppId: dppId });
+      }
+    })();
+    return () => { alive = false; if (url) URL.revokeObjectURL(url); };
+  }, [state.view, state.role, state.tab, state.fieldFormDppId, state.photoVersion, state.pendingPhoto]);
+
+  /**
+   * 문서 검증 진행률 폴링 - 제조사 화면에서만. 업로드 API는 ZKP 증명까지 끝나야 응답하므로
+   * 그 사이 GET /document/progress로 단계별 퍼센트를 가져온다. 진행 중인 작업이 있으면 1초,
+   * 없으면 15초 간격(끝난 항목은 서버가 10분간 남겨둔다).
+   */
+  const [ingestProgress, setIngestProgress] = useState([]);
+  const anyRunning = ingestProgress.some((e) => e.status === 'RUNNING') || (state.uploadingDocTypes || []).length > 0;
+  useEffect(() => {
+    const isMakerRole = state.role === 'steel' || state.role === 'battery' || state.role === 'textile';
+    if (state.view !== 'app' || !isMakerRole) { setIngestProgress([]); return; }
+    let alive = true;
+    const tick = () => {
+      if (!loadSession()?.accessToken) return;
+      fetchIngestProgress().then((res) => { if (alive && Array.isArray(res)) setIngestProgress(res); }).catch(() => {});
+    };
+    tick();
+    const id = setInterval(tick, anyRunning ? 1000 : 15000);
+    return () => { alive = false; clearInterval(id); };
+  }, [state.view, state.role, anyRunning]);
+
+  /**
    * fieldFormDppId를 role+계정(email)별로 localStorage에 계속 동기화 - 첫 임시저장으로
    * 새로 생기든, "제품 조회"에서 식별자를 눌러 이어서 작성하든, 어느 경로로 바뀌든 다음
    * 새로고침에서 그대로 복원되게 한다(위 useState 초기값 참고). role만으로 키를 잡으면
@@ -1396,11 +1450,11 @@ export function useAppLogic(userProps) {
       setAdminMemberDomainFilter: (v) => setState({ adminMemberDomainFilter: v }),
       setAdminMemberRoleFilter: (v) => setState({ adminMemberRoleFilter: v }),
       adminMemberDomainOptions: [['ALL', '도메인 전체'], ['철강', '철강'], ['배터리', '배터리'], ['섬유·패션', '섬유·패션']],
-      adminMemberRoleOptions: [['ALL', '역할군 전체'], ['제조사', '제조사'], ['협력사', '협력사'], ['세관', '세관'], ['시장감독기관', '시장감독기관']],
+      adminMemberRoleOptions: [['ALL', '역할군 전체'], ['제조사', '제조사'], ['협력사', '협력사'], ['세관', '세관'], ['시장감독기관', '시장감독기관'], ['개인', '개인']],
       members: (() => {
         return adminMembersFiltered.map((m) => ({
           key: m.orgId, name: m.orgName, biz: m.bizRegNo, joined: m.joinedDate, country: m.countryCode,
-          domain: m.domainLabel, held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),
+          role: m.roleLabel, domain: ['세관', '시장감독기관', '개인'].includes(m.roleLabel) ? '' : m.domainLabel, hasDomain: !['세관', '시장감독기관', '개인'].includes(m.roleLabel), held: m.heldDppCount, issued: m.issuedDppCount, initial: (m.orgName || '?').charAt(0),
           avatar: avatarStyle(avatarColorFor(m.orgName)), domainChip: domainChipFor(m.domainLabel),
           domainDot: { width: 8, height: 8, flex: 'none', borderRadius: 999, background: m.domainLabel === '철강' ? '#0045A9' : m.domainLabel === '배터리' ? '#12A150' : '#E3A008' },
           // 예전엔 토스트 한 줄만 띄우고 끝이었다("...회원 상세 정보를 조회했습니다").
@@ -1740,6 +1794,7 @@ export function useAppLogic(userProps) {
     fieldFormData, setFieldFormData, fieldFormInputs, setFieldFormInputs,
     saveFieldFormDraft: saveFieldFormDraftForRole, issueFieldFormDpp, resolveCrossCheck,
     documentFormData, setDocumentFormData, uploadDocument,
+    ingestProgress, uploadProductPhoto, deleteProductPhoto,
     millSheetResult, setMillSheetResult, uploadSteelMillSheet, refreshFieldForm, refreshDocumentForm, refreshDashboard,
     cbamResult, setCbamResult, uploadCbamReport,
     careLabelResult, setCareLabelResult, uploadCareLabel,
