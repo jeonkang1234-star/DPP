@@ -870,6 +870,7 @@ export function makerVals(ctx) {
       const failed = e.status === 'FAILED';
       return {
         key: e.dppId + ':' + e.docTypeCode,
+        dppId: e.dppId,
         dppName: found ? (found.displayName || found.modelName || ('DPP #' + found.dppId)) : ('DPP #' + e.dppId),
         docLabel: DOC_TYPE_LABEL[e.docTypeCode] || e.docTypeCode,
         percent: e.percent,
@@ -877,6 +878,12 @@ export function makerVals(ctx) {
         running, failed,
         barColor: failed ? '#E03B3B' : running ? '#E3A008' : '#12A150',
         stateLabel: failed ? '실패' : running ? '검증 중' : '완료',
+        // 작업 현황 항목 클릭 -> 해당 DPP 제작 화면으로 이동(2026-09-22 강 요청).
+        // "제품 조회" 표의 식별자 클릭(resume)·완성도 목록(open)과 같은 패턴 - steel만
+        // 실제 입력 화면이 있어 그 외 도메인은 기존 상세 패널로 폴백한다. 이동 후 패널은 닫는다.
+        open: r === 'steel'
+          ? () => setState({ tab: 'input', fieldFormDppId: e.dppId, workStatusOpen: false })
+          : () => setState({ dppOpen: true, dppId: e.dppId, workStatusOpen: false }),
       };
     }),
     saveDraft: async () => {

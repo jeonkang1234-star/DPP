@@ -2873,7 +2873,7 @@ export default function AppView(v) {
         </div>
         {workStatusEmpty ? (<span style={{ fontSize: '12.5px', color: '#8494AC', padding: '10px 0' }}>진행 중인 문서 검증이 없습니다.</span>) : null}
         {(workStatusItems || []).map((w) => (<React.Fragment key={w.key}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+        <button onClick={w.open} title="해당 DPP 제작 화면으로 이동" style={{ display: 'flex', flexDirection: 'column', gap: '5px', width: '100%', border: '0', background: 'transparent', padding: '0', textAlign: 'left', cursor: 'pointer' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
             <span style={{ fontSize: '13px', fontWeight: '600', minWidth: '0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.dppName}</span>
             <span style={{ fontSize: '11.5px', fontWeight: '700', color: w.barColor, flex: 'none' }}>{w.stateLabel} {w.percent}%</span>
@@ -2881,7 +2881,7 @@ export default function AppView(v) {
           <span style={{ fontSize: '12px', color: '#44546F' }}>{w.docLabel}</span>
           <div style={{ height: '6px', borderRadius: '999px', background: 'rgba(16,32,64,.08)', overflow: 'hidden' }}><div style={{ width: w.percent + '%', height: '100%', background: w.barColor, transition: 'width 1s linear' }}></div></div>
           <span style={{ fontSize: '11px', color: w.failed ? '#E03B3B' : '#8494AC' }}>{w.stage}</span>
-        </div>
+        </button>
         </React.Fragment>))}
       </div>
       ) : null}
