@@ -1,0 +1,91 @@
+﻿도메인,역할,회사명,국가,이메일(로그인),비밀번호,담당자,전화
+철강,제조사,한결제강 주식회사,KR,hj.wi@hangyeolsteel.co.kr,Demo1234!,위혜진,041-719-3450
+철강,제조사,서해특수강 주식회사,KR,ju.kim@seohaess.co.kr,Demo1234!,김준우,063-596-8856
+철강,제조사,동림스틸 주식회사,KR,jh.son@donglimsteel.co.kr,Demo1234!,손재현,061-262-1838
+철강,제조사,태영후판 주식회사,KR,ms.sun@typlate.co.kr,Demo1234!,선명수,054-360-4536
+철강,제조사,금산강판 주식회사,KR,sa.myung@geumsancs.co.kr,Demo1234!,명수아,032-319-8701
+철강,제조사,미래제철 주식회사,KR,mj.yu@miraeis.co.kr,Demo1234!,유민준,055-819-8511
+철강,제조사,청솔스틸 주식회사,KR,ja.park@cheongsolsteel.co.kr,Demo1234!,박지아,051-634-4763
+철강,제조사,대원선재 주식회사,KR,yj.chun@daewonwr.co.kr,Demo1234!,천용준,052-332-4339
+철강,제조사,우성강재 주식회사,KR,yj.yu@wooseongsm.co.kr,Demo1234!,유용준,052-742-8642
+철강,제조사,한빛메탈 주식회사,KR,ys.song@hanvitmetal.co.kr,Demo1234!,송윤서,031-792-2956
+철강,협력사(원자재),경인자원 주식회사,KR,mj.lee@gyeonginres.co.kr,Demo1234!,이민준,032-782-4482
+철강,협력사(원자재),남부스크랩 주식회사,KR,ja.jeon@nambuscrap.co.kr,Demo1234!,전지아,051-535-8508
+철강,협력사(원자재),영남철원 주식회사,KR,ty.lee@yniron.co.kr,Demo1234!,이태윤,054-772-4419
+철강,협력사(원자재),대광합금철 주식회사,KR,hj.ji@dgferro.co.kr,Demo1234!,지혜진,041-419-8017
+철강,협력사(원자재),삼정석회 주식회사,KR,sy.heo@samjunglime.co.kr,Demo1234!,허서연,052-325-6116
+철강,협력사(원자재),한우리코크스 주식회사,KR,jy.koo@hanwooricoke.co.kr,Demo1234!,구지윤,061-818-3168
+철강,협력사(원자재),Pilgrim Ore Trading Pty Ltd,AU,l.walker@pilgrimore.com.au,Demo1234!,Liam Walker,+61 8 6143 2270
+철강,협력사(원자재),Minas Serrana Mineração Ltda,BR,r.souza@minasserrana.com.br,Demo1234!,Rafael Souza,+55 31 3517 4410
+철강,협력사(원자재),"Kitakami Alloy Co., Ltd.",JP,h.sato@kitakami-alloy.co.jp,Demo1234!,Haruto Sato,+81 197 61 3380
+철강,협력사(시험·인증),한국소재시험연구원,KR,sm.kim@ksmr.re.kr,Demo1234!,김성민,054-263-5706
+철강,협력사(시험·인증),대한금속분석센터 주식회사,KR,yj.bae@dmac.co.kr,Demo1234!,배유진,055-897-4231
+철강,협력사(시험·인증),그린카본검증원 주식회사,KR,he.lee@greencarbonv.co.kr,Demo1234!,이하은,02-483-3435
+철강,협력사(시험·인증),Nordprüf Materialtechnik GmbH,DE,j.becker@nordpruef.de,Demo1234!,Jonas Becker,+49 203 7289 410
+철강,협력사(시험·인증),Carbonis Verification B.V.,NL,d.devries@carbonis.nl,Demo1234!,Daan de Vries,+31 10 750 3310
+철강,협력사(시험·인증),한빛인증원 주식회사,KR,sy.kim@hanbitcert.co.kr,Demo1234!,김소영,042-740-5824
+철강,협력사(재활용),리메탈 주식회사,KR,de.ko@remetal.co.kr,Demo1234!,고다은,031-658-8933
+철강,협력사(재활용),에코스틸리사이클 주식회사,KR,gm.yeo@ecosteelrc.co.kr,Demo1234!,여경민,031-536-6347
+철강,협력사(재활용),한강자원순환 주식회사,KR,yh.gil@hangangrc.co.kr,Demo1234!,길영호,031-342-2608
+철강,협력사(재활용),Rijnmond Metal Recovery B.V.,NL,s.bakker@rijnmondmetal.nl,Demo1234!,Sanne Bakker,+31 181 290 330
+철강,협력사(재활용),제일해체산업 주식회사,KR,sa.kim@jeildemo.co.kr,Demo1234!,김수아,052-488-1934
+배터리,제조사,볼트라인에너지 주식회사,KR,dh.ahn@voltline.co.kr,Demo1234!,안동현,043-716-6505
+배터리,제조사,셀코어 주식회사,KR,ys.na@cellcore.co.kr,Demo1234!,나윤서,041-586-4725
+배터리,제조사,하이온배터리 주식회사,KR,sj.yeo@haionbattery.co.kr,Demo1234!,여서준,054-816-7491
+배터리,제조사,에이펙스셀 주식회사,KR,su.kwon@apexcell.co.kr,Demo1234!,권시우,063-688-1229
+배터리,제조사,누리모빌리티에너지 주식회사,KR,gu.joo@nuri-me.co.kr,Demo1234!,주건우,043-721-2555
+배터리,제조사,파워그리드이에스에스 주식회사,KR,yj.na@powergridess.co.kr,Demo1234!,나유진,044-372-1708
+배터리,제조사,대진축전지 주식회사,KR,jh.heo@daejinbattery.co.kr,Demo1234!,허재현,053-326-7838
+배터리,제조사,모비셀 주식회사,KR,jw.hwang@mobicell.co.kr,Demo1234!,황주원,031-335-4563
+배터리,제조사,그린볼트모빌리티 주식회사,KR,ju.lee@greenvolt.co.kr,Demo1234!,이정우,042-241-9590
+배터리,제조사,코어파워텍 주식회사,KR,su.ahn@corepowertech.co.kr,Demo1234!,안선우,031-612-3721
+배터리,협력사(원자재),Salar Andino Litio SpA,CL,m.rojas@andinolitio.cl,Demo1234!,Matías Rojas,+56 2 2940 1180
+배터리,협력사(원자재),PT Sulawesi Nikel Prima,ID,b.santoso@sulawesinikel.co.id,Demo1234!,Budi Santoso,+62 21 5150 3320
+배터리,협력사(원자재),Nordic Cobalt Refinery Oy,FI,m.virtanen@nordiccobalt.fi,Demo1234!,Mikko Virtanen,+358 6 820 4410
+배터리,협력사(원자재),한국양극재 주식회사,KR,ej.yu@kcathode.co.kr,Demo1234!,유은지,054-406-1323
+배터리,협력사(원자재),새한음극소재 주식회사,KR,hj.ji@saehananode.co.kr,Demo1234!,지혜진,044-411-5073
+배터리,협력사(원자재),에이치엘전해액 주식회사,KR,yj.jin@hlelectrolyte.co.kr,Demo1234!,진유진,052-435-5007
+배터리,협력사(원자재),동방분리막 주식회사,KR,de.choi@dbseparator.co.kr,Demo1234!,최다은,043-655-9644
+배터리,협력사(원자재),진우동박 주식회사,KR,sb.lee@jinwoofoil.co.kr,Demo1234!,이수빈,063-422-1944
+배터리,협력사(원자재),"Qinghai Salt Lake Graphite Co., Ltd.",CN,w.zhang@qhgraphite.cn,Demo1234!,Wei Zhang,+86 971 821 6630
+배터리,협력사(시험·인증),한국배터리안전연구원,KR,sy.seol@kbsi.re.kr,Demo1234!,설서윤,043-346-3554
+배터리,협력사(시험·인증),셀테스트코리아 주식회사,KR,js.yeon@celltest.co.kr,Demo1234!,연준서,041-756-3089
+배터리,협력사(시험·인증),Batterieprüfzentrum Süd GmbH,DE,l.hoffmann@bpz-sued.de,Demo1234!,Lena Hoffmann,+49 731 1754 220
+배터리,협력사(시험·인증),카본랩 주식회사,KR,ja.han@carbonlab.co.kr,Demo1234!,한지아,042-453-7836
+배터리,협력사(시험·인증),공급망실사센터 주식회사,KR,su.ko@rmdcenter.co.kr,Demo1234!,고선우,02-681-3890
+배터리,협력사(재활용),리사이클에너지 주식회사,KR,jh.hyun@recycle-e.co.kr,Demo1234!,현지후,063-582-9589
+배터리,협력사(재활용),세컨드라이프이에스에스 주식회사,KR,hj.ko@secondlifeess.co.kr,Demo1234!,고하준,031-725-4252
+배터리,협력사(재활용),Hydromet Recovery GmbH,DE,f.wagner@hydromet-recovery.de,Demo1234!,Felix Wagner,+49 3494 638 710
+배터리,협력사(재활용),순환배터리 주식회사,KR,gu.hyun@sunhwanbattery.co.kr,Demo1234!,현건우,053-349-5446
+배터리,협력사(재활용),블랙매스테크 주식회사,KR,mg.baek@blackmasstech.co.kr,Demo1234!,백미경,052-722-5157
+배터리,협력사(재활용),리드사이클 주식회사,KR,ys.park@leadcycle.co.kr,Demo1234!,박윤서,043-745-6548
+섬유,제조사,새봄텍스타일 주식회사,KR,jh.min@saebomtex.co.kr,Demo1234!,민재현,02-473-2011
+섬유,제조사,라온패브릭 주식회사,KR,hj.shim@raonfabric.co.kr,Demo1234!,심희정,053-306-5924
+섬유,제조사,한올니트 주식회사,KR,sj.so@hanolknit.co.kr,Demo1234!,소서준,031-806-5428
+섬유,제조사,블루진어패럴 주식회사,KR,dh.na@bluejeanapparel.co.kr,Demo1234!,나동현,02-216-3233
+섬유,제조사,소담방적 주식회사,KR,hy.na@sodamspin.co.kr,Demo1234!,나하윤,053-271-8749
+섬유,제조사,누리아웃도어 주식회사,KR,jy.lee@nurioutdoor.co.kr,Demo1234!,이지영,02-588-1327
+섬유,제조사,모아린넨 주식회사,KR,js.nam@moalinen.co.kr,Demo1234!,남재석,053-698-9407
+섬유,제조사,하늘섬유 주식회사,KR,hy.lee@haneulfiber.co.kr,Demo1234!,이하윤,054-410-3189
+섬유,제조사,가람패션 주식회사,KR,yj.park@garamfashion.co.kr,Demo1234!,박예준,02-325-5040
+섬유,제조사,다인섬유 주식회사,KR,gs.lim@daintextile.co.kr,Demo1234!,임광수,063-295-4335
+섬유,협력사(원자재),Aegean Organic Cotton A.Ş.,TR,e.yilmaz@aegeancotton.com.tr,Demo1234!,Emre Yılmaz,+90 232 376 5120
+섬유,협력사(원자재),Gujarat Fibre Mills Pvt. Ltd.,IN,a.patel@gujaratfibre.in,Demo1234!,Arjun Patel,+91 2646 221 470
+섬유,협력사(원자재),Saigon Yarn Joint Stock Company,VN,m.nguyen@saigonyarn.vn,Demo1234!,Minh Nguyen,+84 28 3754 1190
+섬유,협력사(원자재),효원화섬 주식회사,KR,sj.ham@hyowonfiber.co.kr,Demo1234!,함서준,054-662-2690
+섬유,협력사(원자재),진주실크 주식회사,KR,mg.ma@jinjusilk.co.kr,Demo1234!,마미경,055-494-7945
+섬유,협력사(원자재),대구염색가공 주식회사,KR,jh.chae@dgdyeing.co.kr,Demo1234!,채재현,053-443-7456
+섬유,협력사(원자재),Southern Merino Wool Co-op,AU,c.bennett@southernmerino.com.au,Demo1234!,Chloe Bennett,+61 3 9690 4471
+섬유,협력사(원자재),하나로부자재 주식회사,KR,yj.yeon@hanarotrims.co.kr,Demo1234!,연예준,031-383-9023
+섬유,협력사(원자재),다운피아 주식회사,KR,jw.kim@downpia.co.kr,Demo1234!,김주원,063-388-6548
+섬유,협력사(시험·인증),코텍스시험인증원 주식회사,KR,jy.kim@cotextest.co.kr,Demo1234!,김지영,02-782-8849
+섬유,협력사(시험·인증),Hohenberg Textilinstitut GmbH,DE,f.wagner@hohenberg-textil.de,Demo1234!,Felix Wagner,+49 7143 271 330
+섬유,협력사(시험·인증),섬유안전검사센터 주식회사,KR,hj.kang@fsic.co.kr,Demo1234!,강희정,053-367-2032
+섬유,협력사(시험·인증),에코라벨인증원 주식회사,KR,es.min@ecolabelcert.co.kr,Demo1234!,민은서,042-792-4792
+섬유,협력사(시험·인증),Textile Compliance Lab Ltd.,GB,o.hughes@textilecompliancelab.co.uk,Demo1234!,Oliver Hughes,+44 161 872 5540
+섬유,협력사(재활용),리패브릭 주식회사,KR,ms.nam@refabric.co.kr,Demo1234!,남민서,031-298-8840
+섬유,협력사(재활용),의류자원순환센터 주식회사,KR,jy.lee@clothcycle.co.kr,Demo1234!,이지영,031-725-5861
+섬유,협력사(재활용),Loop Fibre Recovery Ltd.,GB,a.clarke@loopfibre.co.uk,Demo1234!,Amelia Clarke,+44 116 251 7730
+섬유,협력사(재활용),펫투파이버 주식회사,KR,sj.kong@pet2fiber.co.kr,Demo1234!,공서준,053-301-3166
+섬유,협력사(재활용),온사이클 주식회사,KR,su.yu@oncycle.co.kr,Demo1234!,유선우,031-660-9709
+섬유,협력사(재활용),그린룸리사이클 주식회사,KR,dy.cho@greenloom.co.kr,Demo1234!,조도윤,053-212-5798
