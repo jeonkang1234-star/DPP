@@ -24,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 제품 사진 등록/조회/삭제. DPP 데이터 입력 화면의 "DPP 이름" 입력칸 오른쪽 버튼이 쓴다.
@@ -88,6 +89,28 @@ public class ProductPhotoController {
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(type))
                 .header(HttpHeaders.CACHE_CONTROL, "private, max-age=60")
+                .body(Files.readAllBytes(Path.of(uri.toString())));
+    }
+
+    /**
+     * QR/링크 공개 조회 화면(PublicPassport.jsx) 최상단 제품 사진(2026-09-23 강 요청).
+     * 로그인 없이 열리므로 /public/** 아래에 둔다(SecurityConfig permitAll, nginx /public/ 블록).
+     * 공개 여권 본문과 같은 기준 - 삭제되지 않았고 발급된 DPP만 내려주고, 그 외엔 404.
+     * 사진이 없으면 404이고 FE는 그 자리를 빈 칸으로 둔다.
+     */
+    @GetMapping("/public/dpp/{publicUuid}/photo")
+    public ResponseEntity<byte[]> getPublic(@PathVariable UUID publicUuid) throws IOException {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT product_photo_uri, product_photo_content_type FROM dpp "
+                        + "WHERE public_uuid = ? AND deleted_at IS NULL AND issued_at IS NOT NULL", publicUuid);
+        Object uri = rows.isEmpty() ? null : rows.get(0).get("product_photo_uri");
+        if (uri == null || !Files.exists(Path.of(uri.toString()))) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        }
+        String type = String.valueOf(rows.get(0).get("product_photo_content_type"));
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(type))
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=300")
                 .body(Files.readAllBytes(Path.of(uri.toString())));
     }
 

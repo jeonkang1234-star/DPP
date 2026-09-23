@@ -72,9 +72,11 @@ jobs:
               echo "WARNING: fabric-identity 없음 - blockchain 오버레이 생략"
             fi
 
-            docker compose $COMPOSE_FILES down --remove-orphans || true
+            # 빌드를 먼저 하고, 성공했을 때만 내린다(2026-09-23). 예전엔 down → build 순서라
+            # 컴파일 에러 한 번에 서버가 내려간 채로 남았다(set -e로 build에서 멈추므로).
             docker compose $COMPOSE_FILES pull || true
             docker compose $COMPOSE_FILES build
+            docker compose $COMPOSE_FILES down --remove-orphans || true
 
             docker compose $COMPOSE_FILES up -d --remove-orphans \
               || (echo "up 1차 실패 - 5초 대기 후 재시도" && sleep 5 \

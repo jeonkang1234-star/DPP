@@ -165,7 +165,8 @@ public class ParticipationService {
         if (dpp == null) {
             // dpp가 소프트/하드 삭제된 경우 등 - 참여 행은 남아있어도 조용히 건너뛴다.
             return new ParticipationDto(participant.getDppId(), "(삭제된 DPP)", "", participant.getRoleCode(),
-                    participant.getSubmitStatus(), 0, 0, 0, 0, participant.getAcceptedAt() != null);
+                    participant.getSubmitStatus(), 0, 0, 0, 0, participant.getAcceptedAt() != null,
+                    participant.getInvitedAt());
         }
         String dppLabel = productModelRepository.findById(dpp.getModelId())
                 .map(ProductModel::getModelName)
@@ -205,6 +206,6 @@ public class ParticipationService {
 
         return new ParticipationDto(dpp.getDppId(), dppLabel, ownerOrgName, participant.getRoleCode(),
                 participant.getSubmitStatus(), (int) filled, myFields.size(), (int) docsFilled, myDocFields.size(),
-                participant.getAcceptedAt() != null);
+                participant.getAcceptedAt() != null, participant.getInvitedAt());
     }
 }
