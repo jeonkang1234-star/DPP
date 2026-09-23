@@ -20,53 +20,87 @@ export function partnerVals(ctx) {
   const DOC_STATUS_LABEL = { NOT_UPLOADED: '미제출', PENDING: '검토 중', APPROVED: '제출 완료', REJECTED: '반려됨', EXPIRED: '만료됨' };
   const DOC_STATUS_COLOR = { NOT_UPLOADED: '#9AA8BE', PENDING: '#E3A008', APPROVED: '#12A150', REJECTED: '#E03B3B', EXPIRED: '#C22B2B' };
 
+  const participationRows = (ctx.participationsData || []).map(p => {
+    const roleLabel = { RAW_SUPPLIER: '원자재·화학 공급사', LOGISTICS: '물류사', DISTRIBUTOR: '유통사', RECYCLER: '재활용업체', TEST_LAB: '시험·인증기관' }[p.roleCode] || p.roleCode;
+    // 수락 전에는 "입력 대기"가 아니라 "수락 대기"다 - 아직 아무것도 맡지 않은 상태이고,
+    // 그 사이 담당 항목은 제조사가 그대로 채울 수 있다(2026-08-23 강 요청).
+    const statusLabel = !p.accepted ? '수락 대기'
+      : ({ INVITED: '입력 대기', IN_PROGRESS: '작성 중', SUBMITTED: '제출 완료', COMPLETED: '완료' }[p.submitStatus] || p.submitStatus);
+    const selected = state.partnerAssignedDppId === p.dppId;
+    const filled = (p.myFieldsFilled || 0) + (p.myDocsFilled || 0);
+    const total = (p.myFieldsTotal || 0) + (p.myDocsTotal || 0);
+    return {
+      key: p.dppId, dppId: p.dppId, invitedAt: p.invitedAt || null, label: p.dppLabel, owner: p.ownerOrgName, roleLabel, statusLabel,
+      filled, total,
+      fieldsFilled: p.myFieldsFilled, fieldsTotal: p.myFieldsTotal,
+      docsFilled: p.myDocsFilled, docsTotal: p.myDocsTotal,
+      pct: total > 0 ? Math.round((filled / total) * 100) : 0,
+      selected,
+      cardStyle: {
+        flex: 1, minWidth: 0, height: 64, boxSizing: 'border-box', justifyContent: 'center',
+        display: 'flex', flexDirection: 'column', gap: 4, padding: '0 18px',
+        border: selected ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.08)', borderRadius: 14,
+        background: selected ? 'rgba(0,69,169,.04)' : '#fff', cursor: 'pointer', textAlign: 'left'
+      },
+      statusDot: ctx.pillDot(!p.accepted ? '#9AA8BE' : p.submitStatus === 'SUBMITTED' || p.submitStatus === 'COMPLETED' ? '#12A150' : p.submitStatus === 'IN_PROGRESS' ? '#E3A008' : '#9AA8BE'),
+      // 수락 버튼(2026-08-23). 수락해야 이 역할 담당 항목·문서가 우리 것이 되고, 그때부터
+      // 제조사 화면에서는 그 칸이 잠긴다. 안내 문구("우리 조직만 제출할 수 있습니다")는
+      // 2026-09-23 강 요청으로 목록에서 뺐다 - 수락 전이면 버튼만 남는다.
+      accepted: !!p.accepted,
+      accept: async () => {
+        try {
+          const result = await ctx.acceptParticipation(p.dppId);
+          ctx.setParticipationsData(result || []);
+          ctx.say('참여를 수락했습니다.');
+        } catch (e) {
+          ctx.say(e.message || '수락에 실패했습니다.');
+        }
+      },
+      open: () => setState({ partnerAssignedDppId: p.dppId })
+    };
+  });
+
+  // 참여 DPP 목록 정리(2026-09-23 강 요청): 입력 완료된 건은 맨 위 토글로 접어 두고,
+  // 나머지(아직 입력할 게 남은 건)만 펼쳐서 보여준다. 정렬은 오래된 순(초대 시각) /
+  // 입력률 낮은 순 / 입력률 높은 순. 초대 시각이 없으면(구버전 BE 응답) dppId로 대신한다.
+  const partnerSort = state.partnerAssignedSort || 'oldest';
+  const invitedTs = r => (r.invitedAt ? Date.parse(r.invitedAt) : NaN);
+  const byOldest = (a, b) => {
+    const ta = invitedTs(a), tb = invitedTs(b);
+    if (!isNaN(ta) && !isNaN(tb) && ta !== tb) return ta - tb;
+    return (a.dppId || 0) - (b.dppId || 0);
+  };
+  const sorter = partnerSort === 'pctAsc' ? (a, b) => (a.pct - b.pct) || byOldest(a, b)
+    : partnerSort === 'pctDesc' ? (a, b) => (b.pct - a.pct) || byOldest(a, b)
+    : byOldest;
+  const isDone = r => r.total > 0 && r.filled >= r.total;
+  const sortedRows = participationRows.slice().sort(sorter);
+  const doneRows = sortedRows.filter(isDone);
+  const pendingRows = sortedRows.filter(r => !isDone(r));
+  const sortPill = active => ({
+    height: 30, padding: '0 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+    border: active ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.12)',
+    background: active ? '#0045A9' : '#fff', color: active ? '#fff' : '#44546F'
+  });
+
   return {
     // "DPP 전체 상세는 안 보이고 본인이 올려야 하는 것만" - myFieldsFilled/Total(입력값)과
     // myDocsFilled/Total(업로드 문서)을 합쳐서 하나의 진행률로 보여준다. 둘 다 백엔드가
     // 이 협력사 role_code 담당 항목만 세서 내려주므로(ParticipationService 참고) DPP
     // 전체 완성도는 여기 전혀 안 섞인다(2026-08-15).
-    participations: (ctx.participationsData || []).map(p => {
-      const roleLabel = { RAW_SUPPLIER: '원자재·화학 공급사', LOGISTICS: '물류사', DISTRIBUTOR: '유통사', RECYCLER: '재활용업체', TEST_LAB: '시험·인증기관' }[p.roleCode] || p.roleCode;
-      // 수락 전에는 "입력 대기"가 아니라 "수락 대기"다 - 아직 아무것도 맡지 않은 상태이고,
-      // 그 사이 담당 항목은 제조사가 그대로 채울 수 있다(2026-08-23 강 요청).
-      const statusLabel = !p.accepted ? '수락 대기'
-        : ({ INVITED: '입력 대기', IN_PROGRESS: '작성 중', SUBMITTED: '제출 완료', COMPLETED: '완료' }[p.submitStatus] || p.submitStatus);
-      const selected = state.partnerAssignedDppId === p.dppId;
-      const filled = (p.myFieldsFilled || 0) + (p.myDocsFilled || 0);
-      const total = (p.myFieldsTotal || 0) + (p.myDocsTotal || 0);
-      return {
-        key: p.dppId, dppId: p.dppId, label: p.dppLabel, owner: p.ownerOrgName, roleLabel, statusLabel,
-        filled, total,
-        fieldsFilled: p.myFieldsFilled, fieldsTotal: p.myFieldsTotal,
-        docsFilled: p.myDocsFilled, docsTotal: p.myDocsTotal,
-        pct: total > 0 ? Math.round((filled / total) * 100) : 0,
-        selected,
-        cardStyle: {
-          display: 'flex', flexDirection: 'column', gap: 6, padding: '16px 18px',
-          border: selected ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.08)', borderRadius: 14,
-          background: selected ? 'rgba(0,69,169,.04)' : '#fff', cursor: 'pointer', textAlign: 'left'
-        },
-        statusDot: ctx.pillDot(!p.accepted ? '#9AA8BE' : p.submitStatus === 'SUBMITTED' || p.submitStatus === 'COMPLETED' ? '#12A150' : p.submitStatus === 'IN_PROGRESS' ? '#E3A008' : '#9AA8BE'),
-        // 수락 버튼(2026-08-23). 수락해야 이 역할 담당 항목·문서가 우리 것이 되고, 그때부터
-        // 제조사 화면에서는 그 칸이 잠긴다. 수락 전에도 값을 열어볼 수는 있지만, 제조사가
-        // 같은 칸을 쓰고 있을 수 있다는 점을 안내 문구로 밝힌다.
-        accepted: !!p.accepted,
-        acceptHint: p.accepted
-          ? '이 DPP의 ' + roleLabel + ' 담당 항목은 우리 조직만 제출할 수 있습니다.'
-          : '수락하면 ' + roleLabel + ' 담당 항목·문서를 우리 조직만 제출하게 됩니다. 그전까지는 제조사가 직접 채울 수 있습니다.',
-        accept: async () => {
-          try {
-            const result = await ctx.acceptParticipation(p.dppId);
-            ctx.setParticipationsData(result || []);
-            ctx.say('참여를 수락했습니다.');
-          } catch (e) {
-            ctx.say(e.message || '수락에 실패했습니다.');
-          }
-        },
-        open: () => setState({ partnerAssignedDppId: p.dppId })
-      };
-    }),
+    participations: participationRows,
     participationsEmpty: (ctx.participationsData || []).length === 0,
+    participationsPending: pendingRows,
+    participationsDone: doneRows,
+    participationsDoneCount: doneRows.length,
+    participationsPendingEmpty: participationRows.length > 0 && pendingRows.length === 0,
+    partnerDoneOpen: !!state.partnerDoneOpen,
+    togglePartnerDone: () => setState({ partnerDoneOpen: !state.partnerDoneOpen }),
+    partnerSortOptions: [
+      { key: 'oldest', label: '오래된 순' },
+      { key: 'pctAsc', label: '입력률 낮은 순' },
+      { key: 'pctDesc', label: '입력률 높은 순' }
+    ].map(o => ({ ...o, style: sortPill(partnerSort === o.key), onClick: () => setState({ partnerAssignedSort: o.key }) })),
     partnerAssignedHasSelection: !!state.partnerAssignedDppId,
     partnerAssignedBack: () => setState({ partnerAssignedDppId: null }),
     partnerAssignedSelectedLabel: (() => {

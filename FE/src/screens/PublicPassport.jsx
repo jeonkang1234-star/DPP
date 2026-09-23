@@ -20,6 +20,13 @@ export default function PublicPassport() {
    * 이 화면은 이미 그 서버에서 열린 것이므로 window.location.href가 언제나 정답이다.
    */
   const [qr, setQr] = useState('');
+  /*
+   * 제품 사진(2026-09-23 강 요청 "QR 인식하면 최상단에 해당 제품 사진, 없으면 빈 화면").
+   * 공개 엔드포인트라 토큰 없이 <img src>로 바로 띄운다. 사진이 없으면 서버가 404를 주고,
+   * 그때는 이미지를 숨기고 같은 크기의 빈 칸만 남긴다(레이아웃이 튀지 않게).
+   */
+  const [photoMissing, setPhotoMissing] = useState(false);
+  useEffect(() => { setPhotoMissing(false); }, [publicUuid]);
 
   useEffect(() => {
     let alive = true;
@@ -75,6 +82,12 @@ export default function PublicPassport() {
           </div>
         ) : (
           <>
+            {/* 제품 사진 - 공개 조회 화면 최상단(2026-09-23). 없으면 빈 칸. */}
+            <div style={{ width: '100%', aspectRatio: '4 / 3', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', overflow: 'hidden', display: 'grid', placeItems: 'center' }}>
+              {photoMissing ? null : (
+                <img src={`/public/dpp/${publicUuid}/photo`} alt={state.data.modelName || '제품 사진'} onError={() => setPhotoMissing(true)} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+              )}
+            </div>
             {/* 2026-08-23 강 요청: "QR로 조회할 때 맨 위에 제품명이 나오게". 예전엔 카드
                 첫 줄이 "발급 완료" 배지였고 제품명은 그 아래였다 - QR을 찍은 사람이 가장
                 먼저 확인해야 하는 건 "이게 무슨 제품인가"지 발급 상태가 아니다. 제품명을

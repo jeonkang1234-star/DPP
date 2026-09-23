@@ -1,5 +1,7 @@
 package com.dpp.dpp.dto;
 
+import java.time.OffsetDateTime;
+
 /**
  * GET /me/participations 응답 1건 - 내 조직이 참여 협력사로 연결된 DPP 하나.
  * myFieldsFilled/Total은 담당 FIELD_VALUE 항목, myDocsFilled/Total은 담당 DOCUMENT
@@ -21,6 +23,8 @@ public record ParticipationDto(
          * 수락하기 전에는 이 협력사 담당 항목을 제조사가 그대로 입력할 수 있고, 수락한
          * 순간부터 그 항목들은 이 협력사 전용이 된다(PartnerAssignmentService).
          */
-        boolean accepted
+        boolean accepted,
+        /** 초대받은 시각(dpp_participant.invited_at) - 협력사 목록 "오래된 순" 정렬용(2026-09-23). */
+        OffsetDateTime invitedAt
 ) {
 }

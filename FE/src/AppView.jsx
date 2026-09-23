@@ -6,6 +6,10 @@ import loginSlidePassport from './assets/icons/login-slide-passport.png';
 import loginSlideDocextract from './assets/icons/login-slide-docextract.png';
 import loginSlideBlockchain from './assets/icons/login-slide-blockchain.png';
 import loginSlideZkp from './assets/icons/login-slide-zkp.png';
+import dashAdminUsersIcon from './assets/icons/dash-admin-users.png';
+import dashAdminDppIcon from './assets/icons/dash-admin-dpp.png';
+import dashMakerRegisteredIcon from './assets/icons/dash-maker-registered.png';
+import dashMakerDraftingIcon from './assets/icons/dash-maker-drafting.png';
 
 /**
  * Presentational layer for the whole IEUM DPP prototype.
@@ -165,6 +169,13 @@ export default function AppView(v) {
     partnersSelectedDppName,
     participations,
     participationsEmpty,
+    participationsPending,
+    participationsDone,
+    participationsDoneCount,
+    participationsPendingEmpty,
+    partnerDoneOpen,
+    togglePartnerDone,
+    partnerSortOptions,
     partnerAssignedHasSelection,
     partnerAssignedBack,
     partnerAssignedSelectedLabel,
@@ -821,15 +832,23 @@ export default function AppView(v) {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.6fr', gap: '16px' }}>
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0045A9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none' }}><circle cx="12" cy="8" r="4" fill="#0045A9" fillOpacity=".15" /><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8" /></svg><span style={{ fontSize: '14px', fontWeight: '600' }}>전체 가입자 수</span></div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalUsersLabel}</span></div>
-              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminUserBreakdownLabel}</span>
+            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>전체 가입자 수</span></div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalUsersLabel}</span></div>
+                <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminUserBreakdownLabel}</span>
+              </div>
+              {/* 3D 아이콘을 카드 오른쪽 빈 공간으로(2026-09-23 강 요청). */}
+              <img src={dashAdminUsersIcon} alt="" aria-hidden="true" style={{ width: '76px', height: '76px', objectFit: 'contain', flex: 'none' }} />
             </div>
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0045A9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none' }}><rect x="5" y="2.5" width="14" height="19" rx="2" fill="#0045A9" fillOpacity=".12" /><circle cx="12" cy="10" r="3" /><path d="M9.5 10h5M12 7v6" strokeWidth="1.2" /><path d="M8.5 17h7" /></svg><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalDppsLabel}</span></div>
-              <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminDppBreakdownLabel}</span>
+            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></div>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalDppsLabel}</span></div>
+                <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminDppBreakdownLabel}</span>
+              </div>
+              {/* 3D 아이콘을 카드 오른쪽 빈 공간으로(2026-09-23 강 요청). */}
+              <img src={dashAdminDppIcon} alt="" aria-hidden="true" style={{ width: '76px', height: '76px', objectFit: 'contain', flex: 'none' }} />
             </div>
             <div style={{ background: '#0B1B33', borderRadius: '18px', padding: '20px 22px', color: '#fff', display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1048,13 +1067,13 @@ export default function AppView(v) {
             {/* 2026-09-17 강 요청: "등록 DPP 수"는 작성 완료(완성도 100%) 기준으로 세고,
                 클릭하면 그 DPP들을 팝업 목록으로 보여준다. */}
             <div onClick={openDppTotalList} title="등록 DPP 목록 보기" style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px', cursor: 'pointer' }} className="hv8">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#12A150" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none' }}><circle cx="12" cy="12" r="9.5" fill="#12A150" fillOpacity=".14" /><path d="M7.5 12.5l3 3 6-6.5" /></svg><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><img src={dashMakerRegisteredIcon} alt="" aria-hidden="true" style={{ width: '30px', height: '30px', objectFit: 'contain', flex: 'none' }} /><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em' }}>{kpiTotal}</span><span style={{ ...kpiNewBadgeStyle, fontSize: '13px' }}>+{kpiNew}</span></div>
               <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>작성 완료 기준 · 이번 달 신규 {kpiNew}건</span>
             </div>
             {/* "작성중인 DPP 수"도 같은 방식으로 미완료 DPP 목록 팝업을 연다. */}
             <div onClick={openDppIncompleteList} title="작성중인 DPP 목록 보기" style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px', cursor: 'pointer' }} className="hv8">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C22B2B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: 'none' }}><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9" /><path d="M14 3v4h4" opacity=".0" /><path d="M8 8h5M8 12h4M8 16h3" /><path d="M20.2 10.3a1.6 1.6 0 0 1 0 2.3L13 19.8 9.8 20.5l.7-3.2 7.4-7.4a1.6 1.6 0 0 1 2.3 0z" fill="#C22B2B" fillOpacity=".12" /></svg><span style={{ fontSize: '14px', fontWeight: '600' }}>작성중인 DPP 수</span></span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><img src={dashMakerDraftingIcon} alt="" aria-hidden="true" style={{ width: '30px', height: '30px', objectFit: 'contain', flex: 'none' }} /><span style={{ fontSize: '14px', fontWeight: '600' }}>작성중인 DPP 수</span></span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em', color: '#C22B2B' }}>{kpiIncomplete}</span><span style={{ ...kpiActionBadgeStyle, fontSize: '12.5px' }}>조치 필요</span></div>
               <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>필드 누락 {kpiMissing}건 · 서류 대기 {kpiWaiting}건</span>
             </div>
@@ -1703,27 +1722,35 @@ export default function AppView(v) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {participationsEmpty ? (<>
             <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px' }}>아직 참여 요청받은 DPP가 없습니다. 초대 메일을 받은 이메일로 가입했는지 확인해 주세요.</div>
-            </>) : null}
-            {(participations || []).map((p, $index) => (<React.Fragment key={$index}>
-            {/* 카드 본문은 button이라 그 안에 버튼을 또 넣을 수 없다 - 수락 버튼은 형제로 둔다. */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <button onClick={p.open} style={p.cardStyle}>
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '15px', fontWeight: '600' }}>{p.label}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', height: '28px', padding: '0 12px 0 10px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={p.statusDot}></span><span style={{ fontSize: '12px', fontWeight: '600', color: '#2A3A55' }}>{p.statusLabel}</span></span>
-                </span>
-                <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{p.owner} · {p.roleLabel} 담당 · {p.filled}/{p.total}개 입력 · {p.pct}%</span>
-              </button>
-              {/* 참여 수락(2026-08-23 강 요청) - 수락한 뒤부터 이 담당 항목·문서는 우리
-                  조직만 제출할 수 있고, 제조사 화면에서는 잠긴다. */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '10px 18px 0' }}>
-                <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.5' }}>{p.acceptHint}</span>
-                {p.accepted
-                  ? (<span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: '600', color: '#0E7A3D' }}><span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#12A150' }} />수락 완료</span>)
-                  : (<button type="button" onClick={p.accept} style={{ flex: 'none', height: '32px', padding: '0 14px', border: '0', borderRadius: '10px', background: '#0045A9', color: '#fff', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>참여 수락</button>)}
-              </div>
+            </>) : (<>
+            {/* 참여 DPP 목록(2026-09-23 강 요청): 안내 문구 없이 목록만. 정렬(오래된 순 /
+                입력률 낮은 순 / 높은 순), 입력 완료 건은 맨 위 토글로 묶고, 목록은 한 화면에
+                최대 10건(행 64px + 간격 8px → 712px)까지 보이고 나머지는 스크롤로 본다. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: '600', color: '#6B7A93', marginRight: '2px' }}>정렬</span>
+              {(partnerSortOptions || []).map((o) => (<button key={o.key} type="button" onClick={o.onClick} style={o.style}>{o.label}</button>))}
             </div>
-            </React.Fragment>))}
+            {participationsDoneCount > 0 ? (<>
+            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '14px', display: 'flex', flexDirection: 'column' }}>
+              <button type="button" onClick={togglePartnerDone} style={{ height: '48px', padding: '0 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '0', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', fontWeight: '600', color: '#0E7A3D' }}><span style={{ width: '7px', height: '7px', borderRadius: '999px', background: '#12A150' }} />입력 완료 · {participationsDoneCount}건</span>
+                <span style={{ fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>{partnerDoneOpen ? '접기 ▴' : '펼치기 ▾'}</span>
+              </button>
+              {partnerDoneOpen ? (<>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '712px', overflowY: 'auto', padding: '0 10px 10px' }}>
+                {(participationsDone || []).map((p) => (<PartnerAssignedRow key={p.key} p={p} />))}
+              </div>
+              </>) : null}
+            </div>
+            </>) : null}
+            {participationsPendingEmpty ? (<>
+            <div style={{ padding: '28px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '14px' }}>입력할 DPP가 없습니다. 모두 입력 완료했습니다.</div>
+            </>) : (<>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '712px', overflowY: 'auto', paddingRight: '4px' }}>
+              {(participationsPending || []).map((p) => (<PartnerAssignedRow key={p.key} p={p} />))}
+            </div>
+            </>)}
+            </>)}
           </div>
           </>)}
         </div>
@@ -2934,5 +2961,25 @@ export default function AppView(v) {
       </div>
 
     </>
+  );
+}
+
+/**
+ * 협력사 "참여 DPP" 목록 한 줄(2026-09-23). 높이 64px 고정 - 목록 스크롤 영역을
+ * 10줄 기준(712px)으로 잡았기 때문에 줄 높이가 바뀌면 그 값도 같이 바꿔야 한다.
+ * 카드 본문이 button이라 그 안에 버튼을 또 넣을 수 없어 수락 버튼은 형제로 둔다.
+ */
+function PartnerAssignedRow({ p }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 'none' }}>
+      <button type="button" onClick={p.open} style={p.cardStyle}>
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', minWidth: '0' }}>
+          <span style={{ fontSize: '14.5px', fontWeight: '600', color: '#0B1B33', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: '0' }}>{p.label}</span>
+          <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '24px', padding: '0 10px 0 8px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.10),0 0 0 1px rgba(16,32,64,.05)' }}><span style={p.statusDot}></span><span style={{ fontSize: '11.5px', fontWeight: '600', color: '#2A3A55' }}>{p.statusLabel}</span></span>
+        </span>
+        <span style={{ fontSize: '12px', color: '#8494AC', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.owner} · {p.roleLabel} 담당 · {p.filled}/{p.total}개 입력 · {p.pct}%</span>
+      </button>
+      {p.accepted ? null : (<button type="button" onClick={p.accept} style={{ flex: 'none', height: '36px', padding: '0 14px', border: '0', borderRadius: '10px', background: '#0045A9', color: '#fff', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>참여 수락</button>)}
+    </div>
   );
 }

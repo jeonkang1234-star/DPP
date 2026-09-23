@@ -13,7 +13,10 @@ COPY build.gradle settings.gradle ./
 RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
 
 COPY src src
-RUN ./gradlew build -x test --no-daemon
+# Gradle 배포판·Maven 의존성을 BuildKit 캐시에 남긴다(2026-09-23). 캐시가 없으면 소스만 바꿔도
+# 매번 수백 개를 새로 받아야 해서, 네트워크가 한 번만 끊겨도 빌드 전체가 실패했다.
+# 캐시가 있으면 실패 전까지 받은 파일은 남으므로 재시도할수록 진행된다.
+RUN --mount=type=cache,target=/root/.gradle ./gradlew build -x test --no-daemon
 
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
