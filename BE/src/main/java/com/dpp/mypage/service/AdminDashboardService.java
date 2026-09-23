@@ -210,7 +210,8 @@ public class AdminDashboardService {
         if (orgType == null) return "미지정";
         return switch (String.valueOf(orgType)) {
             case "MANUFACTURER" -> "제조사";
-            case "RAW_SUPPLIER" -> "협력사";
+            // 시험·인증기관/재활용업체/물류/유통도 가입 역할군은 "협력사"다(2026-09-23 - 예전엔 미지정으로 떴다).
+            case "RAW_SUPPLIER", "TEST_LAB", "RECYCLER", "LOGISTICS", "DISTRIBUTOR" -> "협력사";
             case "CUSTOMS" -> "세관";
             case "EU_AUTHORITY" -> "시장감독기관";
             case "INDIVIDUAL", "PERSONAL", "CONSUMER" -> "개인";

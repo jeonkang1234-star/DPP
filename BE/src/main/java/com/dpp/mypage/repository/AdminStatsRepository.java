@@ -94,16 +94,22 @@ public interface AdminStatsRepository extends Repository<Organization, Long> {
      * 회원(조직) 목록 + 보유/발행 DPP 수 - "보유"는 삭제되지 않은 전체 DPP, "발행"은
      * status='ACTIVE'(공개 발급 완료)만. LEFT JOIN이라 DPP가 하나도 없는 조직도 0건으로
      * 나온다(가짜 숫자를 채우지 않는 게 이 코드베이스 관례 - DashboardService 주석 참고).
+     *
+     * 2026-09-23: 협력사(원자재/시험/재활용)는 DPP를 소유하지 않아서 회원 상세에 늘 "0건 / 0건"이
+     * 떴다(강 리포트). 소유 DPP에 더해 참여 중인 DPP(dpp_participant)도 "보유"로 센다 -
+     * 제조사는 참여 행이 없으니 숫자가 그대로다. 같은 DPP를 소유+참여로 두 번 세지 않게 UNION.
      */
     @Query(value = "SELECT o.org_id, o.org_name, o.biz_reg_no, o.created_at, o.country_code, o.domain, "
-            + "COUNT(d.dpp_id) FILTER (WHERE d.deleted_at IS NULL) AS held, "
-            + "COUNT(d.dpp_id) FILTER (WHERE d.deleted_at IS NULL AND d.status = 'ACTIVE') AS issued, "
+            + "COALESCE(c.held, 0) AS held, COALESCE(c.issued, 0) AS issued, "
             + "o.contact_name, o.contact_phone, o.contact_email, o.org_type "
             + "FROM organization o "
-            + "LEFT JOIN dpp d ON d.owner_org_id = o.org_id "
+            + "LEFT JOIN (SELECT x.org_id, COUNT(*) AS held, COUNT(*) FILTER (WHERE x.status = 'ACTIVE') AS issued "
+            + "  FROM (SELECT d.owner_org_id AS org_id, d.dpp_id, d.status FROM dpp d WHERE d.deleted_at IS NULL "
+            + "        UNION "
+            + "        SELECT p.org_id, d.dpp_id, d.status FROM dpp_participant p JOIN dpp d ON d.dpp_id = p.dpp_id "
+            + "         WHERE d.deleted_at IS NULL AND p.org_id IS NOT NULL) x "
+            + "  GROUP BY x.org_id) c ON c.org_id = o.org_id "
             + "WHERE o.deleted_at IS NULL AND o.approval_status = 'ACTIVE' "
-            + "GROUP BY o.org_id, o.org_name, o.biz_reg_no, o.created_at, o.country_code, o.domain, "
-            + "o.contact_name, o.contact_phone, o.contact_email, o.org_type "
             + "ORDER BY o.created_at DESC", nativeQuery = true)
     List<Object[]> findMembersWithDppCounts();
 }

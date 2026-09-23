@@ -11,6 +11,8 @@ import com.dpp.dpp.entity.Dpp;
 import com.dpp.dpp.entity.DppFieldValue;
 import com.dpp.dpp.entity.ProductModel;
 import com.dpp.dpp.entity.RequirementField;
+import com.dpp.dpp.entity.CodeMaster;
+import com.dpp.dpp.repository.CodeMasterRepository;
 import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
 import com.dpp.dpp.repository.ProductModelRepository;
@@ -22,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -85,6 +88,7 @@ public class PublicPassportService {
     private final ZkpProofRepository zkpProofRepository;
     private final UserAccountRepository userAccountRepository;
     private final OrganizationRepository organizationRepository;
+    private final CodeMasterRepository codeMasterRepository;
 
     public PublicPassportService(DppQueryRepository dppRepository,
                                   ProductModelRepository productModelRepository,
@@ -92,7 +96,8 @@ public class PublicPassportService {
                                   DppFieldValueRepository fieldValueRepository,
                                   ZkpProofRepository zkpProofRepository,
                                   UserAccountRepository userAccountRepository,
-                                  OrganizationRepository organizationRepository) {
+                                  OrganizationRepository organizationRepository,
+                                  CodeMasterRepository codeMasterRepository) {
         this.dppRepository = dppRepository;
         this.productModelRepository = productModelRepository;
         this.requirementFieldRepository = requirementFieldRepository;
@@ -100,6 +105,7 @@ public class PublicPassportService {
         this.zkpProofRepository = zkpProofRepository;
         this.userAccountRepository = userAccountRepository;
         this.organizationRepository = organizationRepository;
+        this.codeMasterRepository = codeMasterRepository;
     }
 
     /** 토큰 없이 부르던 기존 호출부 호환용 - 일반 공개 뷰. */
@@ -148,6 +154,11 @@ public class PublicPassportService {
         Map<String, String> values = fieldValueRepository.findByDppId(dpp.getDppId()).stream()
                 .collect(Collectors.toMap(DppFieldValue::getFieldCode, DppFieldValue::getValueText, (a, b) -> b));
 
+        // 코드값(BF_BOF, HR_COIL, NMC ...)과 true/false를 사람이 읽는 말로 바꿔 보여준다(2026-09-23).
+        // 입력 폼은 code_master 코드와 'true'/'false'를 저장하는데, 공개 여권이 그 원문을 그대로
+        // 찍어서 QR로 열면 "EN10204_3_1", "true" 같은 값이 보였다. 저장값은 건드리지 않고 표시만 바꾼다.
+        Map<String, String> codeLabels = codeLabelsFor(fields);
+
         boolean hasVerifiedProof = !zkpProofRepository.findByDppIdAndStatus(dpp.getDppId(), "VERIFIED").isEmpty();
 
         List<PublicPassportFieldDto> visible = new ArrayList<>();
@@ -162,6 +173,8 @@ public class PublicPassportService {
                 continue;
             }
             String scope = f.getDisclosureScope() == null ? PUBLIC : f.getDisclosureScope();
+
+            value = displayValue(f, value, codeLabels);
 
             if (PUBLIC.equals(scope)) {
                 visible.add(new PublicPassportFieldDto(f.getLabelKo(), f.getLabelEn(), f.getSection(),
@@ -196,6 +209,36 @@ public class PublicPassportService {
                 viewerRole,
                 viewerLabel(viewerRole)
         );
+    }
+
+    /** 이 필드 목록에 등장하는 code_group의 (그룹|코드) -> 한글 이름. */
+    private Map<String, String> codeLabelsFor(List<RequirementField> fields) {
+        Set<String> groups = fields.stream()
+                .map(RequirementField::getCodeGroup)
+                .filter(g -> g != null && !g.isBlank())
+                .collect(Collectors.toSet());
+        Map<String, String> out = new HashMap<>();
+        if (groups.isEmpty()) {
+            return out;
+        }
+        for (CodeMaster c : codeMasterRepository.findByCodeGroupInAndActiveTrueOrderByCodeGroupAscSortOrderAsc(groups)) {
+            out.put(c.getCodeGroup() + "|" + c.getCode(), c.getNameKo());
+        }
+        return out;
+    }
+
+    /** 저장된 값 -> 화면 표시값. 매핑이 없으면 원문 그대로. */
+    private static String displayValue(RequirementField f, String value, Map<String, String> codeLabels) {
+        if ("BOOLEAN".equals(f.getDataType())) {
+            if ("true".equalsIgnoreCase(value.trim())) return "예";
+            if ("false".equalsIgnoreCase(value.trim())) return "아니오";
+            return value;
+        }
+        if (f.getCodeGroup() != null) {
+            String label = codeLabels.get(f.getCodeGroup() + "|" + value.trim());
+            if (label != null) return label;
+        }
+        return value;
     }
 
     /**
