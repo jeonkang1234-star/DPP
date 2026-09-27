@@ -60,9 +60,15 @@ import { obVals } from './viewModels/obVals.js';
 // 개인 회원 제품 둘러보기 - 도메인 라벨/칩(2026-09-27).
 const CATALOG_DOMAIN_LABEL = { STEEL: '철강', BATTERY: '배터리', TEXTILE: '섬유·패션' };
 function catalogDomainChip(domain) {
-  const c = { STEEL: ['rgba(0,69,169,.09)', '#0045A9'], BATTERY: ['rgba(18,161,80,.11)', '#0E7A3D'], TEXTILE: ['rgba(122,61,184,.10)', '#6A2FA8'] }[domain]
-    || ['#F2F5FA', '#6B7A93'];
-  return { display: 'inline-flex', alignItems: 'center', height: '22px', padding: '0 8px', borderRadius: '7px', background: c[0], color: c[1], fontSize: '11px', fontWeight: '700', whiteSpace: 'nowrap' };
+  // 흰 배경 + 도메인 색 글자만, 살짝 볼록한 버튼 느낌(2026-09-27 강 요청 - 연한 색 배경 칩이 너무 AI스럽다).
+  const color = { STEEL: '#0045A9', BATTERY: '#0E7A3D', TEXTILE: '#6A2FA8' }[domain] || '#6B7A93';
+  return {
+    display: 'inline-flex', alignItems: 'center', height: '24px', padding: '0 10px', borderRadius: '8px',
+    background: 'linear-gradient(180deg, #FFFFFF 0%, #F3F5F9 100%)',
+    border: '1px solid rgba(16,32,64,.12)',
+    boxShadow: '0 1px 2px rgba(16,32,64,.10), 0 2px 5px rgba(16,32,64,.05), inset 0 1px 0 #FFFFFF',
+    color, fontSize: '11.5px', fontWeight: '700', letterSpacing: '-.01em', whiteSpace: 'nowrap',
+  };
 }
 
 export const DEFAULT_PROPS = {
