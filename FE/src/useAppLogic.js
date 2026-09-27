@@ -461,7 +461,7 @@ export function useAppLogic(userProps) {
   }, [catalogInput]);
 
   const personalCatalogOn = state.role === 'personal' && state.tab === 'scans';
-  const CATALOG_PAGE_SIZE = 24;
+  const CATALOG_PAGE_SIZE = 30;
   // 브랜드를 고른 상태면 그 브랜드 안에서 제품명으로 찾는다.
   const catalogRequest = (page) => ({
     by: 'product',
@@ -1429,29 +1429,30 @@ export function useAppLogic(userProps) {
       catalogShowBrands: catalogBy === 'brand' && !catalogBrand,
       catalogSelectedBrand: catalogBrand,
       clearCatalogBrand: () => { setCatalogBrand(''); setCatalogInput(''); setCatalogQ(''); },
-      catalogBrandCards: (catalogBrands || []).map((b) => ({
+      // 목록은 한 줄에 한 브랜드/한 제품(표 형태, 2026-09-27 강 요청 - 카드 그리드가 너무 크고 산만).
+      catalogBrandRows: (catalogBrands || []).map((b) => ({
         key: b.brandName,
         name: b.brandName,
-        maker: b.makerName || '',
-        initial: (b.brandName || '?').charAt(0),
-        domainLabel: CATALOG_DOMAIN_LABEL[b.domain] || '',
+        maker: b.makerName || '—',
+        domainLabel: CATALOG_DOMAIN_LABEL[b.domain] || '—',
         domainChip: catalogDomainChip(b.domain),
-        countLabel: `발급 제품 ${Number(b.productCount || 0).toLocaleString()}개`,
+        products: Number(b.productCount || 0).toLocaleString(),
+        models: Number(b.modelCount || 0).toLocaleString(),
+        latest: b.latestIssuedDate || '—',
         pick: () => { setCatalogBrand(b.brandName); setCatalogInput(''); setCatalogQ(''); },
       })),
-      catalogCards: (catalogItems || []).map((r, i) => ({
+      catalogProductRows: (catalogItems || []).map((r, i) => ({
         key: r.publicUuid || i,
         name: r.productName || '(제품명 없음)',
-        sub: r.displayName || '',
-        brand: r.brandName || r.makerName || '—',
-        maker: r.makerName || '',
-        domainLabel: CATALOG_DOMAIN_LABEL[r.domain] || '',
+        sub: (r.displayName || '').split(' · ').slice(1).join(' · '),
+        brand: r.brandName || '—',
+        maker: r.makerName || '—',
+        domainLabel: CATALOG_DOMAIN_LABEL[r.domain] || '—',
         domainChip: catalogDomainChip(r.domain),
-        issued: r.issuedAtDate ? `발급 ${r.issuedAtDate}` : '',
-        photo: r.hasPhoto ? `/public/dpp/${r.publicUuid}/photo` : '',
-        initial: (r.brandName || r.productName || '?').charAt(0),
+        issued: r.issuedAtDate || '—',
         open: () => openPublicPassport(r.publicUuid),
       })),
+      catalogSearchNow: () => setCatalogQ((catalogInput || '').trim()),
       catalogSummary: (catalogBy === 'brand' && !catalogBrand)
         ? `브랜드 ${(catalogBrands || []).length.toLocaleString()}곳`
         : `발급 제품 ${Number(catalogTotal || 0).toLocaleString()}개`,

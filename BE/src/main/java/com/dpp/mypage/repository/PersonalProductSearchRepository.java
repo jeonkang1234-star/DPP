@@ -82,10 +82,11 @@ public interface PersonalProductSearchRepository extends Repository<Dpp, Long> {
                       @Param("domain") String domain);
 
     /**
-     * 브랜드 목록. Object[] 순서: brand, org_name(대표 제조사), domain(대표 도메인), 제품 수.
+     * 브랜드 목록. Object[] 순서: brand, org_name(대표 제조사), domain(대표 도메인), 제품 수,
+     * 모델 수, 최근 발급일.
      * 한 브랜드를 여러 회사가 쓰는 경우는 없지만, 혹시 있어도 행이 갈라지지 않게 브랜드로만 묶는다.
      */
-    @Query(value = "SELECT m.brand, min(o.org_name), min(d.domain), count(*) "
+    @Query(value = "SELECT m.brand, min(o.org_name), min(d.domain), count(*), count(DISTINCT d.model_id), max(d.issued_at) "
             + "FROM dpp d "
             + "JOIN product_model m ON m.model_id = d.model_id "
             + "JOIN organization o ON o.org_id = d.owner_org_id "

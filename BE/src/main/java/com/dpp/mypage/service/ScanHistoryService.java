@@ -81,7 +81,7 @@ public class ScanHistoryService {
                 .toList();
     }
 
-    /** 전체 제품 둘러보기 한 페이지 최대 건수 - 카드 그리드 4열 기준 6줄. */
+    /** 전체 제품 둘러보기 한 페이지 최대 건수. */
     private static final int CATALOG_MAX_SIZE = 48;
     private static final Set<String> DOMAINS = Set.of("STEEL", "BATTERY", "TEXTILE");
 
@@ -126,7 +126,9 @@ public class ScanHistoryService {
                         (String) row[0],
                         (String) row[1],
                         (String) row[2],
-                        row[3] instanceof Number n ? n.longValue() : 0L))
+                        row[3] instanceof Number n ? n.longValue() : 0L,
+                        row[4] instanceof Number m ? m.longValue() : 0L,
+                        toDateString(row[5])))
                 .toList();
     }
 
