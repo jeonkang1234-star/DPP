@@ -404,6 +404,9 @@ export default function AppView(v) {
     scanSearchClear,
     scanResults,
     scanResultsEmpty,
+    catalogIsBrand, setCatalogByBrand, setCatalogByProduct, catalogInput, setCatalogInput, catalogInputClear,
+    catalogPlaceholder, catalogDomainPills, catalogShowBrands, catalogSelectedBrand, clearCatalogBrand,
+    catalogBrandCards, catalogCards, catalogSummary, catalogLoading, catalogEmpty, catalogHasMore, catalogMoreLabel, loadMoreCatalog,
     searchRegistry,
     sendInvite,
     setBatch,
@@ -1760,39 +1763,77 @@ export default function AppView(v) {
 
         {scScans ? (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', maxWidth: '1120px', margin: '0 auto', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '22px', width: '100%' }}>
-            <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', whiteSpace: 'nowrap' }}>제품 조회 기록</h1>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', maxWidth: '460px', height: '52px', padding: '0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
+          {/* 제품 조회(2026-09-27 강 요청) - 발급된 DPP 전체를 브랜드/제품명 토글로 둘러보기. */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '18px', width: '100%', flexWrap: 'wrap' }}>
+            <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', whiteSpace: 'nowrap' }}>제품 조회</h1>
+            <div style={{ display: 'flex', gap: '4px', padding: '5px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '15px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', flex: 'none' }}>
+              <button onClick={setCatalogByBrand} style={{ height: '40px', padding: '0 18px', border: '0', borderRadius: '11px', background: catalogIsBrand ? '#0045A9' : 'transparent', color: catalogIsBrand ? '#fff' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>브랜드</button>
+              <button onClick={setCatalogByProduct} style={{ height: '40px', padding: '0 18px', border: '0', borderRadius: '11px', background: !catalogIsBrand ? '#0045A9' : 'transparent', color: !catalogIsBrand ? '#fff' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>제품명</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', minWidth: '260px', maxWidth: '520px', height: '52px', padding: '0 12px 0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
               <span style={{ width: '14px', height: '14px', border: '1.8px solid #9AA8BE', borderRadius: '8px', flex: 'none' }}></span>
-              <input value={scanSearchQ || ''} onChange={(e) => setScanSearchQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') runScanSearch(); }} placeholder="제품명 · 브랜드 검색" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
+              <input value={catalogInput || ''} onChange={(e) => setCatalogInput(e.target.value)} placeholder={catalogPlaceholder} style={{ flex: '1', minWidth: '0', border: '0', background: 'transparent', fontSize: '14.5px' }} />
+              {catalogInput ? (<button onClick={catalogInputClear} title="검색어 지우기" style={{ width: '28px', height: '28px', border: '0', borderRadius: '8px', background: '#F2F5FA', color: '#6B7A93', fontSize: '14px', cursor: 'pointer', flex: 'none' }}>×</button>) : null}
             </div>
-            <button onClick={runScanSearch} disabled={!!scanSearchBusy} style={{ height: '52px', padding: '0 22px', border: '0', borderRadius: '16px', background: scanSearchBusy ? '#9AA8BE' : '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: scanSearchBusy ? 'default' : 'pointer', flex: 'none' }}>{scanSearchBusy ? '검색 중…' : '검색'}</button>
           </div>
-          {scanSearchDone ? (<>
-          <div style={{ width: '100%', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-              <span style={{ fontSize: '15px', fontWeight: '600' }}>검색 결과</span>
-              <button onClick={scanSearchClear} style={{ height: '30px', padding: '0 12px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
+
+          <div style={{ width: '100%', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '0' }}>
+                {catalogSelectedBrand ? (<>
+                <button onClick={clearCatalogBrand} style={{ height: '32px', padding: '0 12px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '10px', background: '#fff', fontSize: '12.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>← 전체 브랜드</button>
+                <span style={{ fontSize: '16px', fontWeight: '700' }}>{catalogSelectedBrand}</span>
+                </>) : (<span style={{ fontSize: '15px', fontWeight: '600' }}>{catalogIsBrand ? '브랜드' : '전체 제품'}</span>)}
+                <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{catalogSummary}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {(catalogDomainPills || []).map((d) => (<React.Fragment key={d.key}>
+                <button onClick={d.pick} style={{ height: '32px', padding: '0 13px', border: d.active ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.12)', borderRadius: '999px', background: d.active ? 'rgba(0,69,169,.07)' : '#fff', color: d.active ? '#0045A9' : '#44546F', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }}>{d.label}</button>
+                </React.Fragment>))}
+              </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-              <span>제품명</span><span>브랜드</span><span>제조사</span><span>발급일</span><span></span>
-            </div>
-            {scanResultsEmpty ? (<>
-            <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>검색 결과가 없습니다. 제품명이나 브랜드를 다시 확인해 주세요.</div>
+
+            {catalogEmpty ? (<>
+            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>{catalogIsBrand && !catalogSelectedBrand ? '조건에 맞는 브랜드가 없습니다.' : '조건에 맞는 제품이 없습니다.'}</div>
             </>) : null}
-            {(scanResults || []).map((r) => (<React.Fragment key={r.key}>
-            <div style={r.rowStyle}>
-              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13.5px', fontWeight: '600' }}>{r.name}</span>
-              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#44546F' }}>{r.brand}</span>
-              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#44546F' }}>{r.maker}</span>
-              <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{r.issued}</span>
-              <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button onClick={r.open} style={{ height: '32px', padding: '0 14px', border: '0', borderRadius: '9px', background: '#0045A9', fontSize: '12px', fontWeight: '600', color: '#fff', cursor: 'pointer' }}>열람</button>
-              </span>
+
+            {catalogShowBrands ? (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '12px' }}>
+              {(catalogBrandCards || []).map((b) => (<React.Fragment key={b.key}>
+              <button onClick={b.pick} style={{ display: 'flex', alignItems: 'center', gap: '13px', padding: '16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '15px', background: '#FBFCFE', cursor: 'pointer', textAlign: 'left' }} className="hv8">
+                <span style={{ width: '46px', height: '46px', flex: 'none', borderRadius: '13px', background: 'linear-gradient(145deg,#EEF4FF,#DCE8FB)', color: '#0045A9', display: 'grid', placeItems: 'center', fontSize: '18px', fontWeight: '700' }}>{b.initial}</span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '0' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '7px' }}><span style={{ fontSize: '14.5px', fontWeight: '700', color: '#0B1B33', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.name}</span><span style={b.domainChip}>{b.domainLabel}</span></span>
+                  <span style={{ fontSize: '12px', color: '#6B7A93' }}>{b.countLabel}</span>
+                </span>
+              </button>
+              </React.Fragment>))}
             </div>
-            </React.Fragment>))}
+            </>) : (<>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '14px' }}>
+              {(catalogCards || []).map((c) => (<React.Fragment key={c.key}>
+              <button onClick={c.open} style={{ display: 'flex', flexDirection: 'column', padding: '0', border: '1px solid rgba(16,32,64,.09)', borderRadius: '15px', background: '#fff', cursor: 'pointer', textAlign: 'left', overflow: 'hidden' }} className="hv8">
+                <span style={{ position: 'relative', display: 'block', width: '100%', aspectRatio: '4 / 3', background: '#F2F5FA' }}>
+                  <span style={{ position: 'absolute', inset: '0', display: 'grid', placeItems: 'center', fontSize: '30px', fontWeight: '700', color: '#B7C3D6' }}>{c.initial}</span>
+                  {c.photo ? (<img src={c.photo} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} style={{ position: 'absolute', inset: '0', width: '100%', height: '100%', objectFit: 'cover' }} />) : null}
+                </span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px 14px 14px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={c.domainChip}>{c.domainLabel}</span><span style={{ fontSize: '12px', fontWeight: '600', color: '#44546F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.brand}</span></span>
+                  <span style={{ fontSize: '13.5px', fontWeight: '700', color: '#0B1B33', lineHeight: '1.35', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.name}</span>
+                  <span style={{ fontSize: '11.5px', color: '#8494AC', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.sub}</span>
+                  <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#6B7A93' }}>{c.issued}</span>
+                </span>
+              </button>
+              </React.Fragment>))}
+            </div>
+            {catalogHasMore ? (<>
+            <button onClick={loadMoreCatalog} disabled={!!catalogLoading} style={{ alignSelf: 'center', height: '40px', padding: '0 22px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: catalogLoading ? 'default' : 'pointer' }}>{catalogLoading ? '불러오는 중…' : catalogMoreLabel}</button>
+            </>) : null}
+            </>)}
+            {catalogLoading && (catalogShowBrands ? !(catalogBrandCards || []).length : !(catalogCards || []).length) ? (<>
+            <div style={{ padding: '30px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>불러오는 중…</div>
+            </>) : null}
           </div>
-          </>) : null}
 
           <div style={{ width: '100%', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <span style={{ fontSize: '15px', fontWeight: '600' }}>최근 조회 기록</span>
@@ -1800,7 +1841,7 @@ export default function AppView(v) {
               <span>제품명</span><span>브랜드</span><span>열람 일시</span><span>최근 갱신</span><span></span>
             </div>
             {scansEmpty ? (<>
-            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>아직 조회한 제품이 없습니다. 위에서 제품명·브랜드로 검색해 열람하면 최근 5건이 여기에 남습니다.</div>
+            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>아직 조회한 제품이 없습니다. 위 목록에서 제품을 눌러 열람하면 최근 5건이 여기에 남습니다.</div>
             </>) : null}
             {(scans || []).map((p, $index) => (<React.Fragment key={$index}>
             <div style={p.rowStyle}>

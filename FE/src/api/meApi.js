@@ -92,6 +92,22 @@ export function searchProducts(q) {
 }
 
 /**
+ * 발급된 제품 전체 둘러보기(2026-09-27 강 요청). by='brand'|'product', q는 비우면 전체,
+ * brand는 특정 브랜드만, domain은 STEEL|BATTERY|TEXTILE, page는 0부터.
+ * 응답: { items: [{publicUuid, productName, displayName, brandName, makerName, domain, issuedAtDate, hasPhoto}], total, page, size }
+ */
+export function fetchCatalog({ by = 'product', q = '', brand = '', domain = '', page = 0, size = 24 } = {}) {
+  const qs = new URLSearchParams({ by, q, brand, domain, page: String(page), size: String(size) });
+  return authedFetch(`/me/scans/catalog?${qs.toString()}`);
+}
+
+/** 브랜드 목록(제품 수 많은 순). 응답: [{brandName, makerName, domain, productCount}] */
+export function fetchCatalogBrands({ q = '', domain = '' } = {}) {
+  const qs = new URLSearchParams({ q, domain });
+  return authedFetch(`/me/scans/brands?${qs.toString()}`);
+}
+
+/**
  * 공개 여권을 열람했다는 기록 남기기. 같은 제품을 다시 열면 새 행이 아니라
  * 기존 행의 열람 일시만 갱신된다(최근 5칸을 한 제품이 다 먹지 않게).
  */

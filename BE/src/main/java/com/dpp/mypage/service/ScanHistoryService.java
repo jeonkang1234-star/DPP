@@ -6,6 +6,9 @@ import com.dpp.mypage.dto.PersonalProductDto;
 import com.dpp.mypage.dto.ScanSummaryDto;
 import com.dpp.mypage.entity.ScanHistory;
 import com.dpp.mypage.entity.ScanStatus;
+import com.dpp.mypage.dto.PersonalBrandDto;
+import com.dpp.mypage.dto.PersonalCatalogItemDto;
+import com.dpp.mypage.dto.PersonalCatalogPageDto;
 import com.dpp.mypage.repository.PersonalProductSearchRepository;
 import com.dpp.mypage.repository.ScanHistoryRepository;
 import org.springframework.http.HttpStatus;
@@ -17,6 +20,8 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /** REQ-MYPAGE(개인): 제품 검색(제품명·브랜드) / 조회 이력 기록·조회·삭제. */
 @Service
@@ -74,6 +79,60 @@ public class ScanHistoryService {
                         (String) row[3],
                         toDateString(row[4])))
                 .toList();
+    }
+
+    /** 전체 제품 둘러보기 한 페이지 최대 건수 - 카드 그리드 4열 기준 6줄. */
+    private static final int CATALOG_MAX_SIZE = 48;
+    private static final Set<String> DOMAINS = Set.of("STEEL", "BATTERY", "TEXTILE");
+
+    /**
+     * 발급된 DPP 전체 둘러보기(2026-09-27 강 요청 - "개인 페이지에서 조회할 데이터가 거의 없다").
+     * by=brand 면 검색어를 브랜드에, 그 외(product)면 제품명에 맞춘다. 검색어가 없으면 전체 목록.
+     * brand 를 주면 그 브랜드 제품만(브랜드 카드를 눌렀을 때).
+     */
+    @Transactional(readOnly = true)
+    public PersonalCatalogPageDto catalog(Long userId, String by, String q, String brand, String domain,
+                                          int page, int size) {
+        requireUser(userId);
+        String mode = "brand".equalsIgnoreCase(by) ? "brand" : "product";
+        String query = q == null ? "" : q.trim();
+        String brandName = brand == null ? "" : brand.trim();
+        String dom = normalizeDomain(domain);
+        int safeSize = Math.max(1, Math.min(size <= 0 ? 24 : size, CATALOG_MAX_SIZE));
+        int safePage = Math.max(0, page);
+        List<PersonalCatalogItemDto> items = personalProductSearchRepository
+                .catalog(mode, query, brandName, dom, safeSize, safePage * safeSize).stream()
+                .map(row -> new PersonalCatalogItemDto(
+                        String.valueOf(row[0]),
+                        (String) row[1],
+                        (String) row[2],
+                        (String) row[3],
+                        (String) row[4],
+                        (String) row[5],
+                        toDateString(row[6]),
+                        Boolean.TRUE.equals(row[7])))
+                .toList();
+        long total = personalProductSearchRepository.catalogCount(mode, query, brandName, dom);
+        return new PersonalCatalogPageDto(items, total, safePage, safeSize);
+    }
+
+    /** 브랜드 목록(제품 수 많은 순). q 는 브랜드명·제조사명 부분 일치. */
+    @Transactional(readOnly = true)
+    public List<PersonalBrandDto> brands(Long userId, String q, String domain) {
+        requireUser(userId);
+        String query = q == null ? "" : q.trim();
+        return personalProductSearchRepository.brands(query, normalizeDomain(domain)).stream()
+                .map(row -> new PersonalBrandDto(
+                        (String) row[0],
+                        (String) row[1],
+                        (String) row[2],
+                        row[3] instanceof Number n ? n.longValue() : 0L))
+                .toList();
+    }
+
+    private String normalizeDomain(String domain) {
+        String d = domain == null ? "" : domain.trim().toUpperCase(Locale.ROOT);
+        return DOMAINS.contains(d) ? d : "";
     }
 
     /**

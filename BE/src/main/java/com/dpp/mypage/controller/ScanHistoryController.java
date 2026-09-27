@@ -1,5 +1,7 @@
 package com.dpp.mypage.controller;
 
+import com.dpp.mypage.dto.PersonalBrandDto;
+import com.dpp.mypage.dto.PersonalCatalogPageDto;
 import com.dpp.mypage.dto.PersonalProductDto;
 import com.dpp.mypage.dto.RecordScanRequest;
 import com.dpp.mypage.dto.ScanSummaryDto;
@@ -48,6 +50,29 @@ public class ScanHistoryController {
     public ResponseEntity<List<PersonalProductDto>> search(Authentication authentication,
                                                             @RequestParam(required = false) String q) {
         return ResponseEntity.ok(scanHistoryService.searchProducts(parseUserId(authentication), q));
+    }
+
+    /**
+     * 발급된 제품 전체 둘러보기(2026-09-27). by=brand|product, q=검색어(없으면 전체),
+     * brand=특정 브랜드만, domain=STEEL|BATTERY|TEXTILE, page는 0부터.
+     */
+    @GetMapping("/catalog")
+    public ResponseEntity<PersonalCatalogPageDto> catalog(Authentication authentication,
+                                                          @RequestParam(defaultValue = "product") String by,
+                                                          @RequestParam(required = false) String q,
+                                                          @RequestParam(required = false) String brand,
+                                                          @RequestParam(required = false) String domain,
+                                                          @RequestParam(defaultValue = "0") int page,
+                                                          @RequestParam(defaultValue = "24") int size) {
+        return ResponseEntity.ok(scanHistoryService.catalog(parseUserId(authentication), by, q, brand, domain, page, size));
+    }
+
+    /** 브랜드 목록(제품 수 많은 순). */
+    @GetMapping("/brands")
+    public ResponseEntity<List<PersonalBrandDto>> brands(Authentication authentication,
+                                                         @RequestParam(required = false) String q,
+                                                         @RequestParam(required = false) String domain) {
+        return ResponseEntity.ok(scanHistoryService.brands(parseUserId(authentication), q, domain));
     }
 
     /** 공개 여권 열람 기록 남기기 - 같은 제품이면 새 행 대신 열람 일시만 갱신된다. */
