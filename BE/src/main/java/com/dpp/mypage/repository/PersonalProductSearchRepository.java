@@ -48,4 +48,51 @@ public interface PersonalProductSearchRepository extends Repository<Dpp, Long> {
             + "AND CAST(d.public_uuid AS TEXT) = :publicUuid",
             nativeQuery = true)
     List<Object[]> findActiveByPublicUuid(@Param("publicUuid") String publicUuid);
+
+    // ─────────────────────────────────────────────────────────────────────
+    // 전체 제품 둘러보기(2026-09-27 강 요청) - "개인 페이지에서 조회할 데이터가 거의 없다".
+    // 발급(ACTIVE)된 DPP 전체를 브랜드/제품명 기준으로 훑을 수 있게 연다. 여기서 나가는 값도
+    // 위 검색과 마찬가지로 전부 공개 여권(/p/{uuid})에 로그인 없이 보이는 것들뿐이다.
+    // 문자열 파라미터는 null 대신 ''(필터 없음)으로 받는다 - native 쿼리에서 null 바인딩의
+    // 타입 추론 문제를 피하려고.
+    // ─────────────────────────────────────────────────────────────────────
+
+    String CATALOG_FILTER = "FROM dpp d "
+            + "JOIN product_model m ON m.model_id = d.model_id "
+            + "JOIN organization o ON o.org_id = d.owner_org_id "
+            + "WHERE d.deleted_at IS NULL AND d.status = 'ACTIVE' "
+            + "AND (:domain = '' OR d.domain = :domain) "
+            + "AND (:brand = '' OR m.brand = :brand) "
+            + "AND (:q = '' OR (CASE WHEN :by = 'brand' THEN COALESCE(m.brand, '') "
+            + "     ELSE m.model_name || ' ' || COALESCE(d.display_name, '') END) ILIKE CONCAT('%', :q, '%')) ";
+
+    /**
+     * Object[] 순서: public_uuid, model_name, display_name, brand, org_name, domain, issued_at, has_photo.
+     */
+    @Query(value = "SELECT CAST(d.public_uuid AS TEXT), m.model_name, d.display_name, m.brand, o.org_name, "
+            + "d.domain, d.issued_at, (d.product_photo_uri IS NOT NULL) "
+            + CATALOG_FILTER
+            + "ORDER BY d.issued_at DESC NULLS LAST, d.dpp_id DESC LIMIT :limit OFFSET :offset",
+            nativeQuery = true)
+    List<Object[]> catalog(@Param("by") String by, @Param("q") String q, @Param("brand") String brand,
+                           @Param("domain") String domain, @Param("limit") int limit, @Param("offset") int offset);
+
+    @Query(value = "SELECT count(*) " + CATALOG_FILTER, nativeQuery = true)
+    long catalogCount(@Param("by") String by, @Param("q") String q, @Param("brand") String brand,
+                      @Param("domain") String domain);
+
+    /**
+     * 브랜드 목록. Object[] 순서: brand, org_name(대표 제조사), domain(대표 도메인), 제품 수.
+     * 한 브랜드를 여러 회사가 쓰는 경우는 없지만, 혹시 있어도 행이 갈라지지 않게 브랜드로만 묶는다.
+     */
+    @Query(value = "SELECT m.brand, min(o.org_name), min(d.domain), count(*) "
+            + "FROM dpp d "
+            + "JOIN product_model m ON m.model_id = d.model_id "
+            + "JOIN organization o ON o.org_id = d.owner_org_id "
+            + "WHERE d.deleted_at IS NULL AND d.status = 'ACTIVE' AND COALESCE(m.brand, '') <> '' "
+            + "AND (:domain = '' OR d.domain = :domain) "
+            + "AND (:q = '' OR m.brand ILIKE CONCAT('%', :q, '%') OR o.org_name ILIKE CONCAT('%', :q, '%')) "
+            + "GROUP BY m.brand ORDER BY count(*) DESC, m.brand",
+            nativeQuery = true)
+    List<Object[]> brands(@Param("q") String q, @Param("domain") String domain);
 }

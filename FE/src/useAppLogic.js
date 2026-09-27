@@ -14,7 +14,7 @@ import {
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
-import { fetchMe, fetchScans, deleteScan, searchProducts, recordScan, fetchNotificationCategories, fetchNotifications,
+import { fetchMe, fetchScans, deleteScan, searchProducts, recordScan, fetchCatalog, fetchCatalogBrands, fetchNotificationCategories, fetchNotifications,
   markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, resolveCrossCheck, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, acceptParticipation, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
   // 도메인 확장(2026-08-22) - 마이페이지 신청 / 관리자 심사 / DPP 생성 도메인 선택기.
   fetchMyDomains, requestDomainGrant, fetchDomainGrants, approveDomainGrant, rejectDomainGrant,
@@ -56,6 +56,14 @@ import { euVals } from './viewModels/euVals.js';
 import { notifVals } from './viewModels/notifVals.js';
 import { dppVals } from './viewModels/dppVals.js';
 import { obVals } from './viewModels/obVals.js';
+
+// 개인 회원 제품 둘러보기 - 도메인 라벨/칩(2026-09-27).
+const CATALOG_DOMAIN_LABEL = { STEEL: '철강', BATTERY: '배터리', TEXTILE: '섬유·패션' };
+function catalogDomainChip(domain) {
+  const c = { STEEL: ['rgba(0,69,169,.09)', '#0045A9'], BATTERY: ['rgba(18,161,80,.11)', '#0E7A3D'], TEXTILE: ['rgba(122,61,184,.10)', '#6A2FA8'] }[domain]
+    || ['#F2F5FA', '#6B7A93'];
+  return { display: 'inline-flex', alignItems: 'center', height: '22px', padding: '0 8px', borderRadius: '7px', background: c[0], color: c[1], fontSize: '11px', fontWeight: '700', whiteSpace: 'nowrap' };
+}
 
 export const DEFAULT_PROPS = {
   startView: 'login',  // 'login' | 'signup' | 'app'
@@ -236,6 +244,19 @@ export function useAppLogic(userProps) {
   const [productResults, setProductResults] = useState([]);
   const [productSearching, setProductSearching] = useState(false);
   const [productSearched, setProductSearched] = useState(false);
+  // 개인 회원 "전체 제품 둘러보기"(2026-09-27 강 요청 - 조회할 데이터가 거의 없다).
+  // 토글: 'brand'(브랜드 카드 → 누르면 그 브랜드 제품) / 'product'(제품명으로 전체 목록).
+  // catalogInput은 입력창 값, catalogQ는 350ms 디바운스 후 실제로 조회에 쓰는 값.
+  const [catalogBy, setCatalogBy] = useState('brand');
+  const [catalogInput, setCatalogInput] = useState('');
+  const [catalogQ, setCatalogQ] = useState('');
+  const [catalogDomain, setCatalogDomain] = useState('');
+  const [catalogBrand, setCatalogBrand] = useState('');
+  const [catalogItems, setCatalogItems] = useState([]);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [catalogPage, setCatalogPage] = useState(0);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogBrands, setCatalogBrands] = useState(null);
   const [invitesData, setInvitesData] = useState([]);
   const [participationsData, setParticipationsData] = useState([]);
   const [notifCatsData, setNotifCatsData] = useState([]);
@@ -432,6 +453,70 @@ export function useAppLogic(userProps) {
     const t = setInterval(poll, 4000);
     return () => { alive = false; clearInterval(t); };
   }, [inqOpen, inqInquiryId]);
+
+  /** 개인 회원 제품 둘러보기 - 입력 디바운스. */
+  useEffect(() => {
+    const t = setTimeout(() => setCatalogQ((catalogInput || '').trim()), 350);
+    return () => clearTimeout(t);
+  }, [catalogInput]);
+
+  const personalCatalogOn = state.role === 'personal' && state.tab === 'scans';
+  const CATALOG_PAGE_SIZE = 24;
+  // 브랜드를 고른 상태면 그 브랜드 안에서 제품명으로 찾는다.
+  const catalogRequest = (page) => ({
+    by: 'product',
+    q: catalogQ,
+    brand: catalogBy === 'brand' ? catalogBrand : '',
+    domain: catalogDomain,
+    page,
+    size: CATALOG_PAGE_SIZE,
+  });
+
+  /** 브랜드 모드(브랜드 미선택) - 브랜드 카드 목록. */
+  useEffect(() => {
+    if (!personalCatalogOn || catalogBy !== 'brand' || catalogBrand) return undefined;
+    let alive = true;
+    setCatalogLoading(true);
+    fetchCatalogBrands({ q: catalogQ, domain: catalogDomain })
+      .then((res) => { if (alive) setCatalogBrands(Array.isArray(res) ? res : []); })
+      .catch(() => { if (alive) setCatalogBrands([]); })
+      .finally(() => { if (alive) setCatalogLoading(false); });
+    return () => { alive = false; };
+  }, [personalCatalogOn, catalogBy, catalogBrand, catalogQ, catalogDomain]);
+
+  /** 제품 모드 또는 브랜드를 고른 상태 - 제품 카드 첫 페이지. */
+  useEffect(() => {
+    if (!personalCatalogOn || (catalogBy === 'brand' && !catalogBrand)) return undefined;
+    let alive = true;
+    setCatalogLoading(true);
+    fetchCatalog(catalogRequest(0))
+      .then((res) => {
+        if (!alive) return;
+        setCatalogItems((res && res.items) || []);
+        setCatalogTotal((res && res.total) || 0);
+        setCatalogPage(0);
+      })
+      .catch(() => { if (alive) { setCatalogItems([]); setCatalogTotal(0); } })
+      .finally(() => { if (alive) setCatalogLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [personalCatalogOn, catalogBy, catalogBrand, catalogQ, catalogDomain]);
+
+  async function loadMoreCatalog() {
+    if (catalogLoading) return;
+    const next = catalogPage + 1;
+    setCatalogLoading(true);
+    try {
+      const res = await fetchCatalog(catalogRequest(next));
+      setCatalogItems((prev) => [...(prev || []), ...((res && res.items) || [])]);
+      setCatalogTotal((res && res.total) || 0);
+      setCatalogPage(next);
+    } catch (err) {
+      say(err.message || '제품 목록을 더 불러오지 못했습니다.');
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
 
   /** 관리자 문의함 목록 폴링 - 인박스 모달이 열려 있는 동안만. */
   useEffect(() => {
@@ -949,6 +1034,8 @@ export function useAppLogic(userProps) {
     setProductResults([]);
     setProductQuery('');
     setProductSearched(false);
+    setCatalogBy('brand'); setCatalogInput(''); setCatalogQ(''); setCatalogDomain(''); setCatalogBrand('');
+    setCatalogItems([]); setCatalogTotal(0); setCatalogPage(0); setCatalogBrands(null);
     setInvitesData([]);
     setParticipationsData([]);
     setNotifCatsData([]);
@@ -1095,7 +1182,7 @@ export function useAppLogic(userProps) {
     const r = state.role;
     if (r === 'admin') return [['dash', '대시보드'], ['approve', '회원 관리']];
     if (r === 'eu') return [['registry', 'DPP 레지스트리'], ['audit', '감사 로그']];
-    if (r === 'personal') return [['scans', '제품 조회 기록'], ['my', '마이페이지']];
+    if (r === 'personal') return [['scans', '제품 조회'], ['my', '마이페이지']];
     if (r === 'customs') return [['clearance', '통관 검증']];
     if (r === 'partner') return [['assigned', '참여 DPP'], ['my', '마이페이지']];
     return [['dash', '대시보드'], ['input', 'DPP 생성'], ['partners', '협력사 관리'], ['products', '제품 조회'], ['my', '마이페이지']];
@@ -1326,6 +1413,53 @@ export function useAppLogic(userProps) {
         };
       }),
       scansEmpty: (scansData || []).length === 0,
+      // --- 개인 회원 전체 제품 둘러보기(브랜드/제품명 토글, 2026-09-27) ---
+      catalogIsBrand: catalogBy === 'brand',
+      setCatalogByBrand: () => { setCatalogBy('brand'); setCatalogBrand(''); setCatalogInput(''); setCatalogQ(''); },
+      setCatalogByProduct: () => { setCatalogBy('product'); setCatalogBrand(''); setCatalogInput(''); setCatalogQ(''); },
+      catalogInput,
+      setCatalogInput: (v) => setCatalogInput(v),
+      catalogInputClear: () => { setCatalogInput(''); setCatalogQ(''); },
+      catalogPlaceholder: catalogBy === 'brand'
+        ? (catalogBrand ? `${catalogBrand} 제품 중에서 제품명 검색` : '브랜드명 · 제조사명 검색')
+        : '제품명 검색 (예: 티셔츠, 열연코일, 배터리 팩)',
+      catalogDomainPills: [['', '전체'], ['STEEL', '철강'], ['BATTERY', '배터리'], ['TEXTILE', '섬유·패션']].map(([v, l]) => ({
+        key: v || 'ALL', label: l, active: catalogDomain === v, pick: () => setCatalogDomain(v),
+      })),
+      catalogShowBrands: catalogBy === 'brand' && !catalogBrand,
+      catalogSelectedBrand: catalogBrand,
+      clearCatalogBrand: () => { setCatalogBrand(''); setCatalogInput(''); setCatalogQ(''); },
+      catalogBrandCards: (catalogBrands || []).map((b) => ({
+        key: b.brandName,
+        name: b.brandName,
+        maker: b.makerName || '',
+        initial: (b.brandName || '?').charAt(0),
+        domainLabel: CATALOG_DOMAIN_LABEL[b.domain] || '',
+        domainChip: catalogDomainChip(b.domain),
+        countLabel: `발급 제품 ${Number(b.productCount || 0).toLocaleString()}개`,
+        pick: () => { setCatalogBrand(b.brandName); setCatalogInput(''); setCatalogQ(''); },
+      })),
+      catalogCards: (catalogItems || []).map((r, i) => ({
+        key: r.publicUuid || i,
+        name: r.productName || '(제품명 없음)',
+        sub: r.displayName || '',
+        brand: r.brandName || r.makerName || '—',
+        maker: r.makerName || '',
+        domainLabel: CATALOG_DOMAIN_LABEL[r.domain] || '',
+        domainChip: catalogDomainChip(r.domain),
+        issued: r.issuedAtDate ? `발급 ${r.issuedAtDate}` : '',
+        photo: r.hasPhoto ? `/public/dpp/${r.publicUuid}/photo` : '',
+        initial: (r.brandName || r.productName || '?').charAt(0),
+        open: () => openPublicPassport(r.publicUuid),
+      })),
+      catalogSummary: (catalogBy === 'brand' && !catalogBrand)
+        ? `브랜드 ${(catalogBrands || []).length.toLocaleString()}곳`
+        : `발급 제품 ${Number(catalogTotal || 0).toLocaleString()}개`,
+      catalogLoading,
+      catalogEmpty: !catalogLoading && ((catalogBy === 'brand' && !catalogBrand) ? (catalogBrands !== null && catalogBrands.length === 0) : (catalogItems || []).length === 0),
+      catalogHasMore: !(catalogBy === 'brand' && !catalogBrand) && (catalogItems || []).length < (catalogTotal || 0),
+      catalogMoreLabel: `더 보기 (${(catalogItems || []).length.toLocaleString()} / ${Number(catalogTotal || 0).toLocaleString()})`,
+      loadMoreCatalog,
       // --- 개인 회원 제품 검색(제품명·브랜드) ---
       scanSearchQ: productQuery,
       setScanSearchQ: (v) => setProductQuery(v),
