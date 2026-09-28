@@ -400,6 +400,7 @@ export default function AppView(v) {
     scScans,
     scans,
     scansEmpty,
+    isPersonalApp, scanPanelOpen, toggleScanPanel,
     scanSearchQ,
     setScanSearchQ,
     runScanSearch,
@@ -1767,32 +1768,6 @@ export default function AppView(v) {
 
         {scScans ? (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', maxWidth: '1120px', margin: '0 auto', alignItems: 'center' }}>
-          <div style={{ width: '100%', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {/* 2026-09-28 강 요청: 최근 조회 기록을 검색 목록 위로 올리고, 10건까지만 한눈에
-                보이게 한 뒤 나머지는 카드 안에서 상하 스크롤로 본다(행 높이 60px 고정 x 10). */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>최근 조회 기록</span>{!scansEmpty ? (<span style={{ fontSize: '12.5px', color: '#8494AC' }}>{(scans || []).length}건</span>) : null}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-              <span>제품명</span><span>브랜드</span><span>열람 일시</span><span>최근 갱신</span><span></span>
-            </div>
-            {scansEmpty ? (<>
-            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>아직 조회한 제품이 없습니다. 아래 목록에서 제품을 눌러 열람하면 여기에 기록이 남습니다.</div>
-            </>) : null}
-            <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-            {(scans || []).map((p, $index) => (<React.Fragment key={$index}>
-            <div style={p.rowStyle}>
-              <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600', lineHeight: '1.3' }}>{p.name}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC', lineHeight: '1.3' }}>{p.id}</span></span>
-              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#44546F' }}>{p.company}</span>
-              <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{p.at}</span>
-              <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{p.updated}</span>
-              <span style={{ display: 'flex', gap: '7px', justifyContent: 'flex-end' }}>
-                <button onClick={p.open} style={{ height: '32px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv27">열람</button>
-                <button onClick={p.remove} title="조회 기록 삭제" style={{ width: '32px', height: '32px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', color: '#8494AC', cursor: 'pointer' }} className="hv28"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
-              </span>
-            </div>
-            </React.Fragment>))}
-            </div>
-          </div>
-
           {/* 제품 조회(2026-09-27 강 요청) - 발급된 DPP 전체를 브랜드/제품명 토글로 둘러보기. 한 줄에 하나씩 표 형태. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', width: '100%', flexWrap: 'wrap' }}>
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', whiteSpace: 'nowrap' }}>제품 조회</h1>
@@ -3096,6 +3071,37 @@ export default function AppView(v) {
 
       {toast ? (<>
       <div style={{ position: 'fixed', left: '50%', bottom: '92px', transform: 'translateX(-50%)', zIndex: '90', display: 'flex', alignItems: 'center', gap: '10px', padding: '13px 20px', borderRadius: '13px', background: '#0B1B33', color: '#fff', fontSize: '13.5px', fontWeight: '500', boxShadow: '0 12px 30px rgba(11,27,51,.32)', animation: 'ieumUp .18s ease-out' }}><span style={{ width: '7px', height: '7px', borderRadius: '4px', background: '#4ADE80' }}></span>{toast}</div>
+      </>) : null}
+
+      {/* 최근 조회 기록 플로팅 패널(2026-09-28 강 요청) - 제품 조회 화면은 그대로 두고,
+          제조사 화면의 "작업 현황"처럼 오른쪽 아래 버튼을 누르면 열린다. 10건 높이까지 보이고
+          나머지는 패널 안에서 상하 스크롤(행 56px 고정 x 10 = 560px). */}
+      {isApp && isPersonalApp ? (<>
+      {scanPanelOpen ? (
+      <div style={{ position: 'fixed', right: '28px', bottom: '84px', zIndex: '96', width: '380px', maxWidth: 'calc(100vw - 40px)', background: '#fff', border: '1px solid rgba(16,32,64,.10)', borderRadius: '16px', boxShadow: '0 18px 40px rgba(11,27,51,.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid rgba(16,32,64,.08)' }}>
+          <span style={{ fontSize: '14px', fontWeight: '700' }}>최근 조회 기록 {!scansEmpty ? (<span style={{ fontSize: '12px', fontWeight: '500', color: '#8494AC' }}>{(scans || []).length}건</span>) : null}</span>
+          <button onClick={toggleScanPanel} style={{ border: '0', background: 'transparent', fontSize: '18px', lineHeight: '1', color: '#8494AC', cursor: 'pointer' }} aria-label="닫기">×</button>
+        </div>
+        {scansEmpty ? (<div style={{ padding: '28px 18px', textAlign: 'center', fontSize: '12.5px', color: '#8494AC', lineHeight: '1.6' }}>아직 조회한 제품이 없습니다.<br />제품을 열람하면 여기에 기록이 남습니다.</div>) : (
+        <div style={{ maxHeight: '560px', overflowY: 'auto' }}>
+          {(scans || []).map((p, $index) => (<React.Fragment key={$index}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', height: '56px', boxSizing: 'border-box', padding: '0 12px 0 18px', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
+            <button onClick={p.open} title="열람" style={{ flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '3px', border: '0', background: 'transparent', padding: '0', textAlign: 'left', cursor: 'pointer' }}>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#0B1B33', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+              <span style={{ fontSize: '11.5px', color: '#8494AC', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.company ? p.company + ' · ' : ''}<span style={{ fontFamily: '\'JetBrains Mono\',monospace' }}>{p.at}</span></span>
+            </button>
+            <button onClick={p.remove} title="조회 기록 삭제" style={{ width: '30px', height: '30px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', color: '#8494AC', cursor: 'pointer', flex: 'none' }} className="hv28"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
+          </div>
+          </React.Fragment>))}
+        </div>
+        )}
+      </div>
+      ) : null}
+      <button onClick={toggleScanPanel} title="최근 조회 기록" style={{ position: 'fixed', right: '28px', bottom: '28px', zIndex: '95', height: '44px', padding: '0 18px', borderRadius: '999px', border: scanPanelOpen ? '0' : '1px solid rgba(16,32,64,.12)', background: scanPanelOpen ? '#0045A9' : '#fff', color: scanPanelOpen ? '#fff' : '#0B1B33', boxShadow: '0 8px 20px rgba(11,27,51,.18)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', fontWeight: '600' }}>
+        <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2.5a7.5 7.5 0 1 1-7.1 5.1l1.6.5A5.8 5.8 0 1 0 10 4.2V6L6.8 3.4 10 .8v1.7Zm-.8 3.8h1.6v3.4l2.6 1.6-.8 1.4-3.4-2V6.3Z" /></svg>
+        최근 조회 기록{!scansEmpty ? (' · ' + (scans || []).length) : ''}
+      </button>
       </>) : null}
 
       {isApp && isMaker && !inqOpen ? (<>

@@ -1416,10 +1416,14 @@ export function useAppLogic(userProps) {
           rowStyle: { display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: 12, height: 60, boxSizing: 'border-box', padding: '0 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' },
           // 예전엔 목데이터 화면(tab:'passport')으로 보냈다. 이제 실제 공개 여권으로 보낸다 -
           // 기록에 남은 passportCode가 곧 public_uuid다(2026-08-23).
-          open: () => openPublicPassport(sc.passportCode)
+          open: () => { setState({ scanPanelOpen: false }); openPublicPassport(sc.passportCode); }
         };
       }),
       scansEmpty: (scansData || []).length === 0,
+      // 최근 조회 기록 플로팅 패널(2026-09-28 강 요청) - 개인 회원 앱 화면 어디서든 오른쪽 아래 버튼으로 연다.
+      isPersonalApp: s.view === 'app' && s.role === 'personal',
+      scanPanelOpen: !!s.scanPanelOpen,
+      toggleScanPanel: () => setState((st) => ({ scanPanelOpen: !st.scanPanelOpen })),
       // --- 개인 회원 전체 제품 둘러보기(브랜드/제품명 토글, 2026-09-27) ---
       catalogIsBrand: catalogBy === 'brand',
       setCatalogByBrand: () => { setCatalogBy('brand'); setCatalogBrand(''); setCatalogInput(''); setCatalogQ(''); },
