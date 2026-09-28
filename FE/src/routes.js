@@ -36,6 +36,7 @@ export const ROUTES = [
   { path: '/market-surveillance/audit-log', view: 'app', role: 'eu', tab: 'audit' },
 
   { path: '/customs/clearance', view: 'app', role: 'customs', tab: 'clearance' },
+  { path: '/customs/registry', view: 'app', role: 'customs', tab: 'registry' },
 
   // 협력사(원자재공급·시험소·재활용). 2026-08-21까지 이 두 줄이 없어서 협력사 계정만
   // F5를 누르면 로그아웃된 것처럼 보였다 - pathFor가 null을 돌려주는 바람에 주소창이

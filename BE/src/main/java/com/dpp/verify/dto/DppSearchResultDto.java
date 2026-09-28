@@ -16,6 +16,8 @@ public record DppSearchResultDto(
         String hsCode,
         String domain,
         String status,
-        String issuedAtDate
+        String issuedAtDate,
+        /** 브랜드(product_model.brand) - 2026-09-28 레지스트리 목록에 표시하려고 추가. 없으면 null. */
+        String brand
 ) {
 }

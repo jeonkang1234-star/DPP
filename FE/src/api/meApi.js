@@ -441,13 +441,24 @@ export async function fetchOrgBizCertBlob(orgId) {
  * DppRegistryController) - ADMIN이거나 org_type이 EU_AUTHORITY/CUSTOMS인 계정만 200.
  * q를 안 주면 최신 발급분 50건을 돌려준다.
  */
-export function searchDppRegistry(q, orgName, hsCode) {
+export function searchDppRegistry(q, orgName, hsCode, extra) {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (orgName) params.set('orgName', orgName);
   if (hsCode) params.set('hsCode', hsCode);
+  // 2026-09-28: 제품명(모델명·브랜드)·도메인(STEEL/BATTERY/TEXTILE) 필터 추가.
+  if (extra && extra.productName) params.set('productName', extra.productName);
+  if (extra && extra.domain) params.set('domain', extra.domain);
   const qs = params.toString();
   return authedFetch('/verify/dpp/search' + (qs ? '?' + qs : ''));
+}
+
+/**
+ * 규제기관(EU 시장감시/세관) 전용 DPP 상세 - 2026-09-28. 개인 QR 조회보다 넓은 범위
+ * (제조사 신원, 공급망 참여자, 증빙서류, ZKP, 블록체인 앵커, 통관 이력, 제한 항목 값).
+ */
+export function fetchRegulatorDppDetail(publicUuid) {
+  return authedFetch(`/verify/dpp/${encodeURIComponent(publicUuid)}/detail`);
 }
 
 

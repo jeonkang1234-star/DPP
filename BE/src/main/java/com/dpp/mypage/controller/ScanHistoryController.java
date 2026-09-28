@@ -39,7 +39,7 @@ public class ScanHistoryController {
         this.scanHistoryService = scanHistoryService;
     }
 
-    /** 최근 조회 기록(최대 5건). */
+    /** 최근 조회 기록(최대 50건 - 화면은 10건 높이로 보이고 나머지는 스크롤). */
     @GetMapping
     public ResponseEntity<List<ScanSummaryDto>> list(Authentication authentication) {
         return ResponseEntity.ok(scanHistoryService.getScans(parseUserId(authentication)));

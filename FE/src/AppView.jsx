@@ -6,10 +6,8 @@ import loginSlidePassport from './assets/icons/login-slide-passport.png';
 import loginSlideDocextract from './assets/icons/login-slide-docextract.png';
 import loginSlideBlockchain from './assets/icons/login-slide-blockchain.png';
 import loginSlideZkp from './assets/icons/login-slide-zkp.png';
-import dashAdminUsersIcon from './assets/icons/dash-admin-users.png';
-import dashAdminDppIcon from './assets/icons/dash-admin-dpp.png';
-import dashMakerRegisteredIcon from './assets/icons/dash-maker-registered.png';
-import dashMakerDraftingIcon from './assets/icons/dash-maker-drafting.png';
+// 대시보드 KPI 아이콘 - 2026-09-28 강 요청으로 3D PNG → 2D(플랫) SVG로 교체.
+import { PassportFlatIcon, UsersFlatIcon, DraftingFlatIcon, RegisteredFlatIcon } from './components/FlatIcons.jsx';
 
 /**
  * Presentational layer for the whole IEUM DPP prototype.
@@ -362,8 +360,14 @@ export default function AppView(v) {
     profileUrl,
     refreshCaptcha, captchaGlyphs, suCaptcha, onSuCaptcha, captchaBorderColor,
     registry,
-    euQuery,
-    onEuQueryChange,
+    euBy, euByOrg, euByProduct, euById, euInput, onEuInputChange, euInputClear, euPlaceholder, euDomainPills,
+    regDetailOpen, regDetailLoading, regDetailError, regDetailTitle, regDetailSub, regDetailViewer,
+    regDetailQr, regDetailPhoto, copyRegDetailUrl, closeRegDetail, regDetailTabs,
+    regTabFields, regTabMaker, regTabChain, regTabDocs, regTabTrace,
+    regDetailFields, regDetailRestrictedShown, regDetailTradeSecretNote, regDetailProduct, regDetailMaker,
+    regDetailParticipants, regDetailParticipantsEmpty, regDetailDocs, regDetailDocsEmpty,
+    regDetailProofs, regDetailProofsEmpty, regDetailAnchors, regDetailAnchorsEmpty,
+    regDetailClearances, regDetailClearancesEmpty,
     repairBar,
     repairColorStyle,
     repairScore,
@@ -392,7 +396,7 @@ export default function AppView(v) {
     scPersonalMy,
     scProducts,
     scRegistry,
-    euOrgName, onEuOrgNameChange, euHsCode, onEuHsCodeChange, onEuSearchKeyDown,
+    onEuSearchKeyDown,
     scScans,
     scans,
     scansEmpty,
@@ -841,8 +845,8 @@ export default function AppView(v) {
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalUsersLabel}</span></div>
                 <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminUserBreakdownLabel}</span>
               </div>
-              {/* 3D 아이콘을 카드 오른쪽 빈 공간으로(2026-09-23 강 요청). */}
-              <img src={dashAdminUsersIcon} alt="" aria-hidden="true" style={{ width: '76px', height: '76px', objectFit: 'contain', flex: 'none' }} />
+              {/* 아이콘은 카드 오른쪽 빈 공간(2026-09-23), 2D 플랫으로 교체(2026-09-28 강 요청). */}
+              <span style={{ width: '76px', height: '76px', borderRadius: '20px', background: '#EEF4FE', display: 'grid', placeItems: 'center', flex: 'none' }}><UsersFlatIcon size={48} /></span>
             </div>
             <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', alignItems: 'center', gap: '14px' }}>
               <div style={{ flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -850,8 +854,8 @@ export default function AppView(v) {
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '34px', fontWeight: '700', letterSpacing: '-.02em', lineHeight: '1' }}>{adminTotalDppsLabel}</span></div>
                 <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{adminDppBreakdownLabel}</span>
               </div>
-              {/* 3D 아이콘을 카드 오른쪽 빈 공간으로(2026-09-23 강 요청). */}
-              <img src={dashAdminDppIcon} alt="" aria-hidden="true" style={{ width: '76px', height: '76px', objectFit: 'contain', flex: 'none' }} />
+              {/* 아이콘은 카드 오른쪽 빈 공간(2026-09-23), 2D 플랫으로 교체(2026-09-28 강 요청). */}
+              <span style={{ width: '76px', height: '76px', borderRadius: '20px', background: '#EEF4FE', display: 'grid', placeItems: 'center', flex: 'none' }}><PassportFlatIcon size={48} /></span>
             </div>
             <div style={{ background: '#0B1B33', borderRadius: '18px', padding: '20px 22px', color: '#fff', display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'center' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1070,13 +1074,13 @@ export default function AppView(v) {
             {/* 2026-09-17 강 요청: "등록 DPP 수"는 작성 완료(완성도 100%) 기준으로 세고,
                 클릭하면 그 DPP들을 팝업 목록으로 보여준다. */}
             <div onClick={openDppTotalList} title="등록 DPP 목록 보기" style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px', cursor: 'pointer' }} className="hv8">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><img src={dashMakerRegisteredIcon} alt="" aria-hidden="true" style={{ width: '30px', height: '30px', objectFit: 'contain', flex: 'none' }} /><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><RegisteredFlatIcon size={26} /><span style={{ fontSize: '14px', fontWeight: '600' }}>등록 DPP 수</span></span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em' }}>{kpiTotal}</span><span style={{ ...kpiNewBadgeStyle, fontSize: '13px' }}>+{kpiNew}</span></div>
               <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>작성 완료 기준 · 이번 달 신규 {kpiNew}건</span>
             </div>
             {/* "작성중인 DPP 수"도 같은 방식으로 미완료 DPP 목록 팝업을 연다. */}
             <div onClick={openDppIncompleteList} title="작성중인 DPP 목록 보기" style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px', cursor: 'pointer' }} className="hv8">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><img src={dashMakerDraftingIcon} alt="" aria-hidden="true" style={{ width: '30px', height: '30px', objectFit: 'contain', flex: 'none' }} /><span style={{ fontSize: '14px', fontWeight: '600' }}>작성중인 DPP 수</span></span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}><DraftingFlatIcon size={26} /><span style={{ fontSize: '14px', fontWeight: '600' }}>작성중인 DPP 수</span></span><span style={{ fontSize: '11px', color: '#8494AC' }}>목록 보기 →</span></div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '9px' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '32px', fontWeight: '700', lineHeight: '1', letterSpacing: '-.02em', color: '#C22B2B' }}>{kpiIncomplete}</span><span style={{ ...kpiActionBadgeStyle, fontSize: '12.5px' }}>조치 필요</span></div>
               <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>필드 누락 {kpiMissing}건 · 서류 대기 {kpiWaiting}건</span>
             </div>
@@ -1763,6 +1767,32 @@ export default function AppView(v) {
 
         {scScans ? (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', maxWidth: '1120px', margin: '0 auto', alignItems: 'center' }}>
+          <div style={{ width: '100%', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {/* 2026-09-28 강 요청: 최근 조회 기록을 검색 목록 위로 올리고, 10건까지만 한눈에
+                보이게 한 뒤 나머지는 카드 안에서 상하 스크롤로 본다(행 높이 60px 고정 x 10). */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>최근 조회 기록</span>{!scansEmpty ? (<span style={{ fontSize: '12.5px', color: '#8494AC' }}>{(scans || []).length}건</span>) : null}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
+              <span>제품명</span><span>브랜드</span><span>열람 일시</span><span>최근 갱신</span><span></span>
+            </div>
+            {scansEmpty ? (<>
+            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>아직 조회한 제품이 없습니다. 아래 목록에서 제품을 눌러 열람하면 여기에 기록이 남습니다.</div>
+            </>) : null}
+            <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+            {(scans || []).map((p, $index) => (<React.Fragment key={$index}>
+            <div style={p.rowStyle}>
+              <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600', lineHeight: '1.3' }}>{p.name}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC', lineHeight: '1.3' }}>{p.id}</span></span>
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#44546F' }}>{p.company}</span>
+              <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{p.at}</span>
+              <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{p.updated}</span>
+              <span style={{ display: 'flex', gap: '7px', justifyContent: 'flex-end' }}>
+                <button onClick={p.open} style={{ height: '32px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv27">열람</button>
+                <button onClick={p.remove} title="조회 기록 삭제" style={{ width: '32px', height: '32px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', color: '#8494AC', cursor: 'pointer' }} className="hv28"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
+              </span>
+            </div>
+            </React.Fragment>))}
+            </div>
+          </div>
+
           {/* 제품 조회(2026-09-27 강 요청) - 발급된 DPP 전체를 브랜드/제품명 토글로 둘러보기. 한 줄에 하나씩 표 형태. */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '14px', width: '100%', flexWrap: 'wrap' }}>
             <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', whiteSpace: 'nowrap' }}>제품 조회</h1>
@@ -1840,27 +1870,6 @@ export default function AppView(v) {
             </>) : null}
           </div>
 
-          <div style={{ width: '100%', background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <span style={{ fontSize: '15px', fontWeight: '600' }}>최근 조회 기록</span>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-              <span>제품명</span><span>브랜드</span><span>열람 일시</span><span>최근 갱신</span><span></span>
-            </div>
-            {scansEmpty ? (<>
-            <div style={{ padding: '40px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>아직 조회한 제품이 없습니다. 위 목록에서 제품을 눌러 열람하면 최근 5건이 여기에 남습니다.</div>
-            </>) : null}
-            {(scans || []).map((p, $index) => (<React.Fragment key={$index}>
-            <div style={p.rowStyle}>
-              <span style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '3px' }}><span style={{ fontSize: '13.5px', fontWeight: '600', lineHeight: '1.3' }}>{p.name}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#8494AC', lineHeight: '1.3' }}>{p.id}</span></span>
-              <span style={{ display: 'flex', alignItems: 'center', fontSize: '13px', color: '#44546F' }}>{p.company}</span>
-              <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{p.at}</span>
-              <span style={{ display: 'flex', alignItems: 'center', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12.5px', color: '#44546F' }}>{p.updated}</span>
-              <span style={{ display: 'flex', gap: '7px', justifyContent: 'flex-end' }}>
-                <button onClick={p.open} style={{ height: '32px', padding: '0 14px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv27">열람</button>
-                <button onClick={p.remove} title="조회 기록 삭제" style={{ width: '32px', height: '32px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', color: '#8494AC', cursor: 'pointer' }} className="hv28"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
-              </span>
-            </div>
-            </React.Fragment>))}
-          </div>
         </div>
         </>) : null}
 
@@ -2160,25 +2169,43 @@ export default function AppView(v) {
               <h1 style={{ margin: '0', fontSize: '34px', fontWeight: '700', letterSpacing: '-.03em' }}>DPP 레지스트리 조회</h1>
             </div>
           </div>
-          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '22px', display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>식별자(UUID 일부)</span><input value={euQuery} onChange={onEuQueryChange} onKeyDown={onEuSearchKeyDown} placeholder="예: 3f2a 또는 SKU/모델명 일부" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>등록회사</span><input value={euOrgName} onChange={onEuOrgNameChange} onKeyDown={onEuSearchKeyDown} placeholder="예: 가온스틸" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>HS 코드</span><input value={euHsCode} onChange={onEuHsCodeChange} onKeyDown={onEuSearchKeyDown} placeholder="예: 7208 또는 720851" style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-            <button onClick={searchRegistry} style={{ height: '48px', padding: '0 26px', border: '0', borderRadius: '12px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>조회</button>
+          {/* 2026-09-28 강 요청: 개인 제품 조회처럼 [회사 | 제품명 | 식별자·HS] 토글 + 검색창 +
+              분야(도메인) pill. EU 시장감시와 세관이 같은 화면을 쓴다. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '4px', padding: '5px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '15px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', flex: 'none' }}>
+              <button onClick={euByOrg} style={{ height: '40px', padding: '0 18px', border: '0', borderRadius: '11px', background: euBy === 'org' ? '#0045A9' : 'transparent', color: euBy === 'org' ? '#fff' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>회사</button>
+              <button onClick={euByProduct} style={{ height: '40px', padding: '0 18px', border: '0', borderRadius: '11px', background: euBy === 'product' ? '#0045A9' : 'transparent', color: euBy === 'product' ? '#fff' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>제품명</button>
+              <button onClick={euById} style={{ height: '40px', padding: '0 18px', border: '0', borderRadius: '11px', background: euBy === 'id' ? '#0045A9' : 'transparent', color: euBy === 'id' ? '#fff' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>식별자·HS</button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', minWidth: '260px', height: '52px', padding: '0 12px 0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
+              <span style={{ width: '14px', height: '14px', border: '1.8px solid #9AA8BE', borderRadius: '8px', flex: 'none' }}></span>
+              <input value={euInput} onChange={onEuInputChange} onKeyDown={onEuSearchKeyDown} placeholder={euPlaceholder} style={{ flex: '1', minWidth: '0', border: '0', background: 'transparent', fontSize: '14.5px' }} />
+              {euInput ? (<button onClick={euInputClear} title="검색어 지우기" style={{ width: '28px', height: '28px', border: '0', borderRadius: '8px', background: '#F2F5FA', color: '#6B7A93', fontSize: '14px', cursor: 'pointer', flex: 'none' }}>×</button>) : null}
+            </div>
+            <button onClick={searchRegistry} style={{ height: '52px', padding: '0 26px', border: '0', borderRadius: '16px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)', flex: 'none' }}>검색</button>
           </div>
           <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '15px', fontWeight: '600' }}>조회 결과 <span style={{ color: '#8494AC', fontWeight: '500' }}>{registry.length}건</span></span></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.1fr 1.2fr 1.5fr 1.2fr .9fr 64px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
-              <span>식별자(UUID)</span><span>Lot/시리얼</span><span>발급일</span><span>상품명</span><span>등록회사</span><span>HS코드</span><span></span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '15px', fontWeight: '600' }}>조회 결과 <span style={{ color: '#8494AC', fontWeight: '500' }}>{registry.length}건</span></span>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {(euDomainPills || []).map((d) => (<React.Fragment key={d.key}>
+                <button onClick={d.pick} style={{ height: '30px', padding: '0 12px', border: d.active ? '1px solid #0045A9' : '1px solid rgba(16,32,64,.12)', borderRadius: '999px', background: d.active ? 'rgba(0,69,169,.07)' : '#fff', color: d.active ? '#0045A9' : '#44546F', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }}>{d.label}</button>
+                </React.Fragment>))}
+              </div>
             </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.9fr 1fr 1.3fr 96px 1fr .8fr 1fr 64px', gap: '12px', padding: '0 14px', height: '40px', alignItems: 'center', background: '#F7F9FD', borderRadius: '11px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}>
+              <span>제품명</span><span>브랜드</span><span>등록회사</span><span>분야</span><span>식별자(UUID)</span><span>HS코드</span><span>발급일</span><span></span>
+            </div>
+            {registry.length === 0 ? (<div style={{ padding: '32px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>조건에 맞는 DPP가 없습니다.</div>) : null}
             {(registry || []).map((r, $index) => (<React.Fragment key={$index}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.1fr 1.2fr 1.5fr 1.2fr .9fr 64px', gap: '12px', padding: '0 14px', height: '58px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.9fr 1fr 1.3fr 96px 1fr .8fr 1fr 64px', gap: '12px', padding: '0 14px', height: '58px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
+              <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: '0' }}><span style={{ fontSize: '13.5px', fontWeight: '700', color: '#0B1B33', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#8494AC' }}>{r.code}</span></span>
+              <span style={{ fontSize: '12.5px', color: '#44546F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.brand}</span>
+              <span style={{ fontSize: '12.5px', color: '#44546F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.company}</span>
+              <span><span style={r.domainChip}>{r.domainLabel}</span></span>
               <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', fontWeight: '600', color: '#0045A9' }}>{r.id}</span>
-              <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{r.code}</span>
-              <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.3' }}><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#0B1B33' }}>{r.date}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#8494AC' }}>{r.time}</span></span>
-              <span style={{ fontSize: '13px', fontWeight: '500' }}>{r.name}</span>
-              <span style={{ fontSize: '12.5px', color: '#44546F' }}>{r.company}</span>
               <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{r.hs}</span>
+              <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{r.date}</span>
               <button onClick={r.open} style={{ width: '100%', height: '32px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv33">열람</button>
             </div>
             </React.Fragment>))}
@@ -2484,6 +2511,140 @@ export default function AppView(v) {
           <div style={{ padding: '14px 26px 20px', borderTop: '1px solid rgba(16,32,64,.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
             <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{passportModalHiddenNote}</span>
             <button onClick={closePassportModal} style={{ height: '42px', padding: '0 20px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer', flex: 'none' }}>닫기</button>
+          </div>
+        </div>
+      </div>
+      </>) : null}
+
+      {/* 규제기관 전용 DPP 상세(2026-09-28 강 요청) - EU 시장감시·세관이 레지스트리에서 열람.
+          개인 QR 조회보다 넓은 범위: 제한 항목 값, 제품 식별·제조사 신원, 공급망, 서류·ZKP,
+          블록체인 앵커·통관 이력. */}
+      {regDetailOpen ? (<>
+      <div style={{ position: 'fixed', inset: '0', zIndex: '91', display: 'grid', placeItems: 'center', padding: '32px' }}>
+        <div onClick={closeRegDetail} style={{ position: 'absolute', inset: '0', background: 'rgba(6,17,36,.55)' }}></div>
+        <div style={{ position: 'relative', width: '920px', maxWidth: '100%', height: '86vh', background: '#fff', borderRadius: '22px', boxShadow: '0 30px 70px rgba(6,17,36,.32)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ padding: '20px 26px 0', display: 'flex', flexDirection: 'column', gap: '14px', borderBottom: '1px solid rgba(16,32,64,.08)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '18px' }}>
+              {regDetailPhoto ? (<img src={regDetailPhoto} alt="제품 사진" style={{ width: '84px', height: '84px', objectFit: 'contain', borderRadius: '14px', border: '1px solid rgba(16,32,64,.08)', background: '#F7F9FD', flex: 'none' }} />) : null}
+              <div style={{ flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#0045A9' }}>규제기관 상세 열람</span>
+                  {regDetailViewer ? (<span style={{ display: 'inline-flex', alignItems: 'center', height: '22px', padding: '0 8px', borderRadius: '7px', background: 'rgba(0,69,169,.08)', color: '#0045A9', fontSize: '11px', fontWeight: '700' }}>{regDetailViewer} 권한</span>) : null}
+                </span>
+                <span style={{ fontSize: '20px', fontWeight: '700', overflowWrap: 'anywhere' }}>{regDetailTitle}</span>
+                <span style={{ fontSize: '12.5px', color: '#6B7A93' }}>{regDetailSub}</span>
+                <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.55' }}>개인이 QR로 여는 공개 여권에는 없는 정보(제한 항목 값·제조사 신원·공급망·증빙서류·ZKP·블록체인·통관 이력)가 함께 표시됩니다.</span>
+              </div>
+              {regDetailQr ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flex: 'none' }}>
+                <img src={regDetailQr} alt="공개 여권 QR" width="84" height="84" style={{ borderRadius: '10px', border: '1px solid rgba(16,32,64,.08)' }} />
+                <button onClick={copyRegDetailUrl} style={{ height: '26px', padding: '0 10px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '8px', background: '#fff', fontSize: '11px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>공개 주소 복사</button>
+              </div>
+              ) : null}
+            </div>
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+              {(regDetailTabs || []).map((t) => (<React.Fragment key={t.key}>
+              <button onClick={t.pick} style={{ height: '38px', padding: '0 14px', border: '0', borderBottom: t.active ? '2px solid #0045A9' : '2px solid transparent', background: 'transparent', color: t.active ? '#0045A9' : '#6B7A93', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>{t.label}</button>
+              </React.Fragment>))}
+            </div>
+          </div>
+
+          <div style={{ flex: '1', overflowY: 'auto', padding: '18px 26px 22px' }}>
+            {regDetailLoading ? (
+              <div style={{ padding: '60px 0', textAlign: 'center', fontSize: '13.5px', color: '#8494AC' }}>불러오는 중…</div>
+            ) : regDetailError ? (
+              <div style={{ padding: '60px 0', textAlign: 'center', fontSize: '13.5px', color: '#C22B2B' }}>{regDetailError}</div>
+            ) : (<>
+
+            {regTabFields ? (<>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', marginBottom: '6px', borderRadius: '12px', background: '#F7F9FD', fontSize: '12px', color: '#44546F' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', height: '20px', padding: '0 7px', borderRadius: '6px', background: 'rgba(0,69,169,.10)', color: '#0045A9', fontSize: '10.5px', fontWeight: '700' }}>규제기관 전용</span>
+                <span>표시가 붙은 {regDetailRestrictedShown}개 항목은 개인 QR 조회에서는 가려지는 값입니다.</span>
+              </div>
+              {regDetailFields.length === 0 ? (<div style={{ padding: '40px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>입력된 항목이 없습니다.</div>) : null}
+              {(regDetailFields || []).map((f) => (
+              <div key={f.key} style={{ display: 'grid', gridTemplateColumns: '240px 1fr', gap: '12px', padding: '10px 0', borderTop: '1px solid rgba(16,32,64,.07)', alignItems: 'baseline' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '12.5px', color: '#6B7A93', overflowWrap: 'anywhere' }}>{f.label}{f.restricted ? (<span style={{ display: 'inline-flex', alignItems: 'center', height: '18px', padding: '0 6px', borderRadius: '5px', background: 'rgba(0,69,169,.10)', color: '#0045A9', fontSize: '10px', fontWeight: '700' }}>규제기관 전용</span>) : null}</span>
+                <span style={{ fontSize: '13.5px', fontWeight: '600', color: f.isProof ? '#0E7A3D' : '#0B1B33', overflowWrap: 'anywhere', minWidth: '0' }}>{f.value}</span>
+              </div>
+              ))}
+              {regDetailTradeSecretNote ? (<div style={{ marginTop: '10px', fontSize: '11.5px', color: '#8494AC' }}>{regDetailTradeSecretNote}</div>) : null}
+            </>) : null}
+
+            {regTabMaker ? (<>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                {[['제품 식별 정보', regDetailProduct], ['제조사(책임 경제운영자) 정보', regDetailMaker]].map(([title, rows]) => (
+                <div key={title} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '700' }}>{title}</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: 'rgba(16,32,64,.08)', borderRadius: '14px', overflow: 'hidden' }}>
+                    {(rows || []).map((x) => (
+                    <div key={x.label} style={{ background: '#fff', padding: '12px 15px', display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '0' }}>
+                      <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{x.label}</span>
+                      <span style={{ fontSize: '13px', fontWeight: '600', fontFamily: x.mono ? '\'JetBrains Mono\',monospace' : 'inherit', overflowWrap: 'anywhere' }}>{x.value}</span>
+                    </div>
+                    ))}
+                  </div>
+                </div>
+                ))}
+              </div>
+            </>) : null}
+
+            {regTabChain ? (<>
+              <span style={{ display: 'block', fontSize: '14px', fontWeight: '700', marginBottom: '10px' }}>공급망 참여자</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 100px 1fr', gap: '12px', padding: '0 12px', height: '36px', alignItems: 'center', background: '#F7F9FD', borderRadius: '10px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}><span>참여 조직</span><span>역할</span><span>제출 상태</span><span>완료 시각</span></div>
+              {regDetailParticipantsEmpty ? (<div style={{ padding: '28px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>등록된 협력사가 없습니다(제조사 단독 작성).</div>) : null}
+              {(regDetailParticipants || []).map((r) => (
+              <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.2fr 100px 1fr', gap: '12px', padding: '0 12px', height: '46px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)', fontSize: '12.5px' }}>
+                <span style={{ fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.org}</span><span style={{ color: '#44546F' }}>{r.role}</span><span><span style={r.statusStyle}>{r.status}</span></span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{r.at}</span>
+              </div>
+              ))}
+            </>) : null}
+
+            {regTabDocs ? (<>
+              <span style={{ display: 'block', fontSize: '14px', fontWeight: '700', marginBottom: '10px' }}>증빙서류</span>
+              {regDetailDocsEmpty ? (<div style={{ padding: '20px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>연결된 증빙서류가 없습니다.</div>) : null}
+              {(regDetailDocs || []).map((r) => (
+              <div key={r.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px 14px', marginBottom: '8px', border: '1px solid rgba(16,32,64,.08)', borderRadius: '12px', background: '#FBFCFE' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><span style={{ fontSize: '13.5px', fontWeight: '700' }}>{r.type}</span><span style={r.reviewStyle}>{r.review}</span><span style={{ marginLeft: 'auto', fontSize: '11.5px', color: '#8494AC' }}>업로드 {r.uploaded}</span></div>
+                <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '12px', color: '#44546F' }}><span>파일 {r.file}</span><span>발행 {r.issuer}</span><span>유효기간 {r.period}</span><span>제출 {r.by}</span></div>
+                <span title={r.fullHash} style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#8494AC' }}>SHA-256 {r.hash}</span>
+              </div>
+              ))}
+              <span style={{ display: 'block', fontSize: '14px', fontWeight: '700', margin: '18px 0 10px' }}>영지식증명(ZKP)</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 100px 1fr', gap: '12px', padding: '0 12px', height: '36px', alignItems: 'center', background: '#F7F9FD', borderRadius: '10px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}><span>증명 대상</span><span>회로</span><span>상태</span><span>검증 시각</span></div>
+              {regDetailProofsEmpty ? (<div style={{ padding: '20px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>생성된 증명이 없습니다.</div>) : null}
+              {(regDetailProofs || []).map((r) => (
+              <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.4fr 100px 1fr', gap: '12px', padding: '0 12px', height: '44px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)', fontSize: '12.5px' }}>
+                <span style={{ fontWeight: '600' }}>{r.claim}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#44546F' }}>{r.circuit}</span><span><span style={r.statusStyle}>{r.status}</span></span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{r.at}</span>
+              </div>
+              ))}
+            </>) : null}
+
+            {regTabTrace ? (<>
+              <span style={{ display: 'block', fontSize: '14px', fontWeight: '700', marginBottom: '10px' }}>블록체인 앵커</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr .8fr 80px 1.1fr', gap: '12px', padding: '0 12px', height: '36px', alignItems: 'center', background: '#F7F9FD', borderRadius: '10px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}><span>대상</span><span>트랜잭션</span><span>블록</span><span>상태</span><span>앵커 시각</span></div>
+              {regDetailAnchorsEmpty ? (<div style={{ padding: '20px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>앵커 기록이 없습니다.</div>) : null}
+              {(regDetailAnchors || []).map((r) => (
+              <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr .8fr 80px 1.1fr', gap: '12px', padding: '0 12px', height: '44px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)', fontSize: '12.5px' }}>
+                <span style={{ fontWeight: '600' }}>{r.target}</span>
+                {r.openTx ? (<button onClick={r.openTx} title="전체 해시 보기" style={{ justifySelf: 'start', padding: '0', border: '0', background: 'transparent', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#0045A9', cursor: 'pointer', textDecoration: 'underline' }}>{r.tx}</button>) : (<span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#B7C0D1' }}>—</span>)}
+                <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{r.block}</span><span><span style={r.statusStyle}>{r.status}</span></span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{r.at}</span>
+              </div>
+              ))}
+              <span style={{ display: 'block', fontSize: '14px', fontWeight: '700', margin: '18px 0 10px' }}>통관 이력</span>
+              <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1.3fr .8fr 90px 90px 1fr', gap: '10px', padding: '0 12px', height: '36px', alignItems: 'center', background: '#F7F9FD', borderRadius: '10px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}><span>구분</span><span>경로</span><span>관할 세관</span><span>HS</span><span>판정</span><span>무결성</span><span>일시</span></div>
+              {regDetailClearancesEmpty ? (<div style={{ padding: '20px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>통관 이력이 없습니다.</div>) : null}
+              {(regDetailClearances || []).map((r) => (
+              <div key={r.key} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 1.3fr .8fr 90px 90px 1fr', gap: '10px', padding: '0 12px', height: '44px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)', fontSize: '12.5px' }}>
+                <span style={{ fontWeight: '600' }}>{r.side}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px' }}>{r.route}</span><span style={{ color: '#44546F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.office}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px' }}>{r.hs}</span><span><span style={r.decisionStyle}>{r.decision}</span></span><span style={{ fontSize: '12px', color: '#44546F' }}>{r.integrity}</span><span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#44546F' }}>{r.at}</span>
+              </div>
+              ))}
+            </>) : null}
+
+            </>)}
+          </div>
+          <div style={{ padding: '12px 26px 16px', borderTop: '1px solid rgba(16,32,64,.08)', display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={closeRegDetail} style={{ height: '42px', padding: '0 22px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '12px', background: '#fff', fontSize: '13px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>닫기</button>
           </div>
         </div>
       </div>
