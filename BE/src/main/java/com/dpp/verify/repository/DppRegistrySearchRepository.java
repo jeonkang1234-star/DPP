@@ -27,11 +27,13 @@ public interface DppRegistrySearchRepository extends Repository<Dpp, Long> {
      * 셋 다 비면 예전 recent()와 같은 "최신 목록"이 된다 - 메서드 하나로 합쳐진다.
      * q 안에서는 여전히 OR 매칭(식별자/시리얼/모델명/HS/회사명 중 아무거나).
      *
+     * 2026-09-28 강 요청: 제품명(모델명·브랜드)·도메인 필터 추가, 최대 100건.
+     *
      * Object[] 순서: dpp_id, public_uuid, serial_number, model_name, org_name,
-     * hs_code, domain, status, issued_at.
+     * hs_code, domain, status, issued_at, brand(2026-09-28 추가).
      */
     @Query(value = "SELECT d.dpp_id, d.public_uuid, d.serial_number, m.model_name, o.org_name, "
-            + "m.hs_code, d.domain, d.status, d.issued_at "
+            + "m.hs_code, d.domain, d.status, d.issued_at, m.brand "
             + "FROM dpp d "
             + "JOIN product_model m ON m.model_id = d.model_id "
             + "JOIN organization o ON o.org_id = d.owner_org_id "
@@ -43,10 +45,15 @@ public interface DppRegistrySearchRepository extends Repository<Dpp, Long> {
             + "     OR m.hs_code ILIKE CONCAT('%', :q, '%') "
             + "     OR o.org_name ILIKE CONCAT('%', :q, '%')) "
             + "AND (CAST(:orgName AS TEXT) = '' OR o.org_name ILIKE CONCAT('%', :orgName, '%')) "
+            + "AND (CAST(:productName AS TEXT) = '' OR m.model_name ILIKE CONCAT('%', :productName, '%') "
+            + "     OR m.brand ILIKE CONCAT('%', :productName, '%')) "
             + "AND (CAST(:hsCode AS TEXT) = '' OR m.hs_code ILIKE CONCAT('%', :hsCode, '%')) "
-            + "ORDER BY d.issued_at DESC NULLS LAST LIMIT 50",
+            + "AND (CAST(:domain AS TEXT) = '' OR d.domain = :domain) "
+            + "ORDER BY d.issued_at DESC NULLS LAST LIMIT 100",
             nativeQuery = true)
     List<Object[]> search(@Param("q") String query,
                           @Param("orgName") String orgName,
-                          @Param("hsCode") String hsCode);
+                          @Param("productName") String productName,
+                          @Param("hsCode") String hsCode,
+                          @Param("domain") String domain);
 }

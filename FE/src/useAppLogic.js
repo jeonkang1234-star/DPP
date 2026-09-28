@@ -1094,7 +1094,7 @@ export function useAppLogic(userProps) {
     try {
       const saved = await recordScan(uuid);
       if (saved) {
-        setScansData((prev) => [saved, ...(prev || []).filter((x) => x.passportCode !== saved.passportCode)].slice(0, 5));
+        setScansData((prev) => [saved, ...(prev || []).filter((x) => x.passportCode !== saved.passportCode)].slice(0, 50));
       }
     } catch {
       // 기록 실패는 조용히 넘긴다 - 사용자가 원한 건 제품을 보는 것이다.
@@ -1189,7 +1189,8 @@ export function useAppLogic(userProps) {
     if (r === 'admin') return [['dash', '대시보드'], ['approve', '회원 관리']];
     if (r === 'eu') return [['registry', 'DPP 레지스트리'], ['audit', '감사 로그']];
     if (r === 'personal') return [['scans', '제품 조회'], ['my', '마이페이지']];
-    if (r === 'customs') return [['clearance', '통관 검증']];
+    // 2026-09-28 강 요청: 세관도 EU처럼 DPP 레지스트리에서 회사·제품명·도메인으로 검색하고 상세 열람.
+    if (r === 'customs') return [['clearance', '통관 검증'], ['registry', 'DPP 레지스트리']];
     if (r === 'partner') return [['assigned', '참여 DPP'], ['my', '마이페이지']];
     return [['dash', '대시보드'], ['input', 'DPP 생성'], ['partners', '협력사 관리'], ['products', '제품 조회'], ['my', '마이페이지']];
   }
@@ -1412,7 +1413,7 @@ export function useAppLogic(userProps) {
           renewed: sc.status === 'UPDATED',
           failed: sc.status === 'FAILED',
           statusIconStyle: { display: 'grid', placeItems: 'center', flex: 'none', color: sc.status === 'VERIFIED' ? '#12A150' : sc.status === 'UPDATED' ? '#0045A9' : '#C22B2B' },
-          rowStyle: { display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: 12, padding: '13px 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' },
+          rowStyle: { display: 'grid', gridTemplateColumns: '1.7fr 1.1fr 1.1fr 1fr 116px', gap: 12, height: 60, boxSizing: 'border-box', padding: '0 14px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' },
           // 예전엔 목데이터 화면(tab:'passport')으로 보냈다. 이제 실제 공개 여권으로 보낸다 -
           // 기록에 남은 passportCode가 곧 public_uuid다(2026-08-23).
           open: () => openPublicPassport(sc.passportCode)
@@ -1488,7 +1489,7 @@ export function useAppLogic(userProps) {
       scClearance: s.role === 'customs' && s.tab === 'clearance',
       scClearLog: s.role === 'customs' && s.tab === 'clearlog',
       ...customsVals(ctx),
-      scRegistry: s.role === 'eu' && s.tab === 'registry',
+      scRegistry: (s.role === 'eu' || s.role === 'customs') && s.tab === 'registry',
       scAudit: s.role === 'eu' && s.tab === 'audit',
       goApprove: () => setState({ tab: 'approve' }),
       ...approvalVals(ctx),

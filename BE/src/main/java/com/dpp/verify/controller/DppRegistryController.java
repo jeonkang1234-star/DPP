@@ -1,11 +1,13 @@
 package com.dpp.verify.controller;
 
 import com.dpp.verify.dto.DppSearchResultDto;
+import com.dpp.verify.dto.RegulatorDppDetailDto;
 import com.dpp.verify.service.DppRegistryService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -30,10 +32,22 @@ public class DppRegistryController {
     @GetMapping("/verify/dpp/search")
     public ResponseEntity<List<DppSearchResultDto>> search(@RequestParam(required = false) String q,
                                                              @RequestParam(required = false) String orgName,
+                                                             @RequestParam(required = false) String productName,
                                                              @RequestParam(required = false) String hsCode,
+                                                             @RequestParam(required = false) String domain,
                                                              Authentication authentication) {
         Long userId = parseUserId(authentication);
-        return ResponseEntity.ok(dppRegistryService.search(userId, q, orgName, hsCode));
+        return ResponseEntity.ok(dppRegistryService.search(userId, q, orgName, productName, hsCode, domain));
+    }
+
+    /**
+     * 규제기관 전용 상세 열람(2026-09-28 강 요청) - 개인 QR 조회보다 넓은 범위
+     * (제조사 신원·공급망 참여자·증빙서류·ZKP·블록체인 앵커·통관 이력 + RESTRICTED 항목).
+     */
+    @GetMapping("/verify/dpp/{publicUuid}/detail")
+    public ResponseEntity<RegulatorDppDetailDto> detail(@PathVariable String publicUuid,
+                                                        Authentication authentication) {
+        return ResponseEntity.ok(dppRegistryService.detail(parseUserId(authentication), publicUuid));
     }
 
     private Long parseUserId(Authentication authentication) {

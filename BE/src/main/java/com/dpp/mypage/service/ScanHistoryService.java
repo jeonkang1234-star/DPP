@@ -28,11 +28,12 @@ import java.util.Set;
 public class ScanHistoryService {
 
     /**
-     * 화면에 보여줄 최근 조회 기록 건수(2026-08-23 강 요청 "최근 5개 정도로").
+     * 화면에 보여줄 최근 조회 기록 건수(2026-08-23 강 요청 "최근 5개 정도로" →
+     * 2026-09-28 강 요청으로 화면은 10건만 보이고 나머지는 스크롤이라 50건까지 내려준다).
      * DB 행을 지우는 게 아니라 응답만 자른다 - 사용자가 직접 삭제한 것(removed_at)과
      * "오래돼서 안 보이는 것"은 다른 개념이라 기록 자체는 남겨둔다.
      */
-    private static final int RECENT_LIMIT = 5;
+    private static final int RECENT_LIMIT = 50;
 
     /**
      * 이 글자 수 미만이면 검색 자체를 하지 않는다. 한 글자만으로도 ILIKE '%ㄱ%'가
