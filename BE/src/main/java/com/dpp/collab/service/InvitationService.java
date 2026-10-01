@@ -3,6 +3,7 @@ package com.dpp.collab.service;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.collab.dto.InvitationDto;
+import com.dpp.collab.dto.PartnerDirectoryDto;
 import com.dpp.collab.dto.SendInviteRequest;
 import com.dpp.collab.entity.Invitation;
 import com.dpp.collab.repository.InvitationRepository;
@@ -10,6 +11,7 @@ import com.dpp.dpp.entity.Dpp;
 import com.dpp.dpp.entity.DppParticipant;
 import com.dpp.dpp.repository.DppParticipantRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
+import com.dpp.mypage.entity.OrgApprovalStatus;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
 import com.dpp.notify.entity.Notification;
@@ -23,9 +25,13 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * "협력사 초대" 화면(FE makerVals.js에 하드코딩돼 있던 invites 6건 + sendInvite/resend
@@ -98,6 +104,57 @@ public class InvitationService {
                 ? invitationRepository.findByInviterOrgIdAndDppIdOrderByCreatedAtDesc(orgId, dppId)
                 : invitationRepository.findByInviterOrgIdOrderByCreatedAtDesc(orgId);
         return invitations.stream().map(this::toDto).toList();
+    }
+
+    /**
+     * 초대 화면 "협력사명" 드롭다운 목록(2026-10-01 강 요청). 예전엔 협력사명·이메일을 손으로
+     * 쳐야 했는데, 초대는 어차피 가입된 계정 이메일만 받으므로(requireRegisteredPartnerEmail)
+     * 시스템에 가입·승인(ACTIVE)된 협력사 조직을 전부 내려주고 FE가 선택한 역할(org_type)로
+     * 걸러 보여준다. 선택하면 email이 그대로 초대 이메일 칸에 채워진다.
+     *
+     * 가입 계정이 하나도 없는 조직(시드로만 만들어진 조직 등)은 초대해도 받을 사람이 없어서 뺀다.
+     * 자기 조직은 제외.
+     */
+    @Transactional(readOnly = true)
+    public List<PartnerDirectoryDto> partnerDirectory(Long userId) {
+        Long myOrgId = resolveOrgId(userId);
+        List<Organization> orgs = organizationRepository
+                .findByOrgTypeInAndApprovalStatusAndDeletedAtIsNull(ALLOWED_ROLE_CODES, OrgApprovalStatus.ACTIVE)
+                .stream()
+                .filter(o -> !myOrgId.equals(o.getOrgId()))
+                .toList();
+        if (orgs.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, List<UserAccount>> usersByOrg = userAccountRepository
+                .findByOrgIdInAndDeletedAtIsNull(orgs.stream().map(Organization::getOrgId).toList())
+                .stream()
+                .filter(u -> u.getEmail() != null && !u.getEmail().isBlank())
+                .collect(Collectors.groupingBy(UserAccount::getOrgId));
+
+        List<PartnerDirectoryDto> result = new ArrayList<>();
+        for (Organization org : orgs) {
+            List<UserAccount> members = usersByOrg.getOrDefault(org.getOrgId(), List.of());
+            if (members.isEmpty()) {
+                continue;
+            }
+            String contact = org.getContactEmail() == null ? "" : org.getContactEmail().trim();
+            String email = members.stream()
+                    .map(UserAccount::getEmail)
+                    .filter(e -> e.equalsIgnoreCase(contact))
+                    .findFirst()
+                    .orElseGet(() -> members.stream()
+                            .min(Comparator.comparing(UserAccount::getUserId))
+                            .map(UserAccount::getEmail)
+                            .orElse(null));
+            if (email == null) {
+                continue;
+            }
+            result.add(new PartnerDirectoryDto(org.getOrgId(), org.getOrgName(), org.getOrgType(),
+                    org.getDomain(), org.getCountryCode(), email));
+        }
+        result.sort(Comparator.comparing(PartnerDirectoryDto::orgName, String.CASE_INSENSITIVE_ORDER));
+        return result;
     }
 
     @Transactional
@@ -357,6 +414,14 @@ public class InvitationService {
                 EXPIRY_DAYS);
         try {
             mailSender.sendInvite(invite);
+            if (!mailSender.delivers()) {
+                // 콘솔 발송기 - 실제로는 아무 메일도 안 나갔다. 성공으로 보고하면 화면에
+                // "발송했습니다"가 떠서 SMTP 미설정을 알아챌 수 없다(2026-10-01 강 리포트).
+                log.warn("초대 메일 미발송(app.mail.enabled=false, 콘솔 출력만 함): to={} invitationId={}",
+                        invitation.getInviteeEmail(), invitation.getInvitationId());
+                return "서버의 메일 발송이 꺼져 있습니다(APP_MAIL_ENABLED·MAIL_* 미설정). "
+                        + "초대는 등록됐고 협력사 알림센터로는 전달됩니다.";
+            }
             log.info("초대 메일 발송 완료: to={} dppId={} invitationId={}",
                     invitation.getInviteeEmail(), invitation.getDppId(), invitation.getInvitationId());
             return null;

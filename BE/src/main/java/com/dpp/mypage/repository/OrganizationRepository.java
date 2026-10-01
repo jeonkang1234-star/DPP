@@ -4,6 +4,7 @@ import com.dpp.mypage.entity.OrgApprovalStatus;
 import com.dpp.mypage.entity.Organization;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -32,4 +33,8 @@ public interface OrganizationRepository extends JpaRepository<Organization, Long
      */
     List<Organization> findByOrgTypeAndApprovalStatusAndDeletedAtIsNull(
             String orgType, OrgApprovalStatus approvalStatus);
+
+    /** 협력사 초대 화면의 협력사 선택 드롭다운(InvitationService.partnerDirectory) - 여러 org_type을 한 번에. */
+    List<Organization> findByOrgTypeInAndApprovalStatusAndDeletedAtIsNull(
+            Collection<String> orgTypes, OrgApprovalStatus approvalStatus);
 }

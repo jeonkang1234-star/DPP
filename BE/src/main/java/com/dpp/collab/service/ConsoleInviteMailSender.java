@@ -18,6 +18,11 @@ public class ConsoleInviteMailSender implements InviteMailSender {
     private static final Logger log = LoggerFactory.getLogger(ConsoleInviteMailSender.class);
 
     @Override
+    public boolean delivers() {
+        return false;
+    }
+
+    @Override
     public void sendInvite(Invite invite) {
         log.info("[개발용 콘솔 발송 - 실제 메일 아님] app.mail.enabled=true 로 바꾸면 SMTP로 실제 발송됨\n"
                         + "받는사람: {}\n제목: {}\n---\n{}\n---",

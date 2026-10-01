@@ -4,6 +4,7 @@ import com.dpp.auth.entity.AccountType;
 import com.dpp.auth.entity.UserAccount;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,6 +39,9 @@ public interface UserAccountRepository extends JpaRepository<UserAccount, Long> 
 
     /** 협력사 제출 완료 알림 등 - 소유 조직에 속한 모든 계정에게 알려야 할 때 사용. */
     List<UserAccount> findByOrgId(Long orgId);
+
+    /** 협력사 초대 드롭다운 - 여러 조직의 가입 계정을 한 번에(조직마다 따로 조회하는 N+1 방지). */
+    List<UserAccount> findByOrgIdInAndDeletedAtIsNull(Collection<Long> orgIds);
 
     /** 운영자 전원 - 새 가입 신청처럼 관리자에게 알려야 할 때 사용(2026-08-22 강 요청). */
     List<UserAccount> findByAccountType(AccountType accountType);

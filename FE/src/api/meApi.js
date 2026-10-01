@@ -302,6 +302,15 @@ export function sendInvitation(orgName, email, dppId, roleCode) {
   return authedFetch('/me/invitations', { method: 'POST', body: JSON.stringify({ orgName, email, dppId, roleCode }) });
 }
 
+/**
+ * 초대 화면 "협력사명" 드롭다운 - 시스템에 가입·승인된 협력사 조직 전체(2026-10-01).
+ * [{ orgId, orgName, orgType(RAW_SUPPLIER/TEST_LAB/RECYCLER), domain, countryCode, email }]
+ * email은 그 조직의 가입 계정 이메일이라 선택하면 그대로 초대 이메일로 쓴다.
+ */
+export function fetchPartnerDirectory() {
+  return authedFetch('/me/invitations/partners');
+}
+
 /** 초대 재발송 - 이미 수락(ACCEPTED)된 초대는 백엔드가 400으로 거부한다. */
 export function resendInvitation(invitationId) {
   return authedFetch(`/me/invitations/${invitationId}/resend`, { method: 'POST' });

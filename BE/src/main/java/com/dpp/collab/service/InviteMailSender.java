@@ -14,6 +14,15 @@ package com.dpp.collab.service;
 public interface InviteMailSender {
 
     /**
+     * 실제로 메일이 나가는 발송기인가. 콘솔 발송기는 false - 로그만 찍고 성공한 것처럼
+     * 끝나서, 서버에 메일 설정이 없으면(EC2에 docker/.env 메일 값 미설정 등) 화면에는
+     * "발송했습니다"가 뜨는데 실제로는 아무 메일도 안 가는 상태였다(2026-10-01 강 리포트).
+     */
+    default boolean delivers() {
+        return true;
+    }
+
+    /**
      * @param toEmail        받는 사람
      * @param inviterOrgName 초대한 조직명(제조사)
      * @param dppLabel       대상 DPP를 사람이 알아볼 이름(사용자 지정 이름 > 제품명 > DPP #id)
