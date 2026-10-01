@@ -1406,13 +1406,58 @@ export function makerVals(ctx) {
       // 데이터이므로 문구를 그쪽으로 맞춘다.
       { value: 'RECYCLER', label: '재활용 처리업체 (회수율·해체 절차 데이터 입력)' }
     ],
-    inviteRows: (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((row, idx, arr) => ({
-      key: idx, orgName: row.orgName, email: row.email, roleCode: row.roleCode || 'RAW_SUPPLIER', canRemove: arr.length > 1,
-      onOrgName: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((r, i) => i === idx ? { ...r, orgName: e.target.value } : r) })),
-      onEmail: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((r, i) => i === idx ? { ...r, email: e.target.value } : r) })),
-      onRoleCode: e => setState(s => ({ inviteRows: (s.inviteRows || [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).map((r, i) => i === idx ? { ...r, roleCode: e.target.value } : r) })),
-      remove: () => setState(s => ({ inviteRows: (s.inviteRows || []).filter((_, i) => i !== idx) }))
-    })),
+    // 2026-10-01 강 요청: 협력사명을 손으로 치지 않고, 시스템에 가입한 협력사 중 선택한
+    // 역할(org_type)과 같은 곳만 드롭다운으로 고르게 한다. 고르면 그 조직의 가입 이메일이
+    // 초대 이메일 칸에 자동으로 채워진다(초대는 어차피 가입 계정 이메일만 받는다).
+    // 이 DPP와 같은 분야(domain)의 협력사를 맨 위 그룹으로 올린다. 역할을 바꾸면 목록이
+    // 달라지므로 선택을 비운다.
+    inviteRows: (() => {
+      const blank = { orgId: null, orgName: '', email: '', roleCode: 'RAW_SUPPLIER' };
+      const dir = Array.isArray(ctx.partnerDirData) ? ctx.partnerDirData : [];
+      const selDpp = dash && dash.dpps.find(d => d.dppId === state.partnersDppId);
+      const dppDomain = selDpp ? selDpp.domain : null;
+      const invited = new Set((ctx.invitesData || [])
+        .filter(i => i.dppId === state.partnersDppId)
+        .map(i => (i.email || '').toLowerCase() + '|' + i.roleCode));
+      const rows = state.inviteRows && state.inviteRows.length ? state.inviteRows : [blank];
+      const patch = (idx, fn) => setState(s => ({
+        inviteRows: (s.inviteRows && s.inviteRows.length ? s.inviteRows : [blank]).map((r, i) => i === idx ? fn(r) : r)
+      }));
+      return rows.map((row, idx, arr) => {
+        const roleCode = row.roleCode || 'RAW_SUPPLIER';
+        const pool = dir.filter(p => p.orgType === roleCode);
+        const domains = [...new Set(pool.map(p => p.domain || ''))]
+          .sort((a, b) => (a === dppDomain ? -1 : b === dppDomain ? 1 : a.localeCompare(b)));
+        const partnerGroups = domains.map(dm => ({
+          key: dm || 'none',
+          label: (DOMAIN_LABEL[dm] || (dm || '분야 미지정')) + (dm && dm === dppDomain ? ' · 이 DPP 분야' : ''),
+          options: pool.filter(p => (p.domain || '') === dm).map(p => ({
+            value: String(p.orgId),
+            label: p.orgName
+              + (p.countryCode && p.countryCode !== 'KR' ? ' (' + p.countryCode + ')' : '')
+              + (invited.has((p.email || '').toLowerCase() + '|' + roleCode) ? ' · 이미 초대함' : '')
+          }))
+        }));
+        return {
+          key: idx, orgId: row.orgId ? String(row.orgId) : '', orgName: row.orgName, email: row.email, roleCode,
+          canRemove: arr.length > 1,
+          partnerGroups,
+          partnerEmpty: pool.length === 0,
+          partnerPlaceholder: pool.length ? ('협력사를 선택하세요 (' + pool.length + '곳)') : '이 역할로 가입한 협력사가 없습니다',
+          partnerSelectStyle: {
+            height: '44px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px',
+            background: pool.length ? '#fff' : '#F7F9FD', color: row.orgId ? '#0B1B33' : '#8494AC'
+          },
+          onPartner: e => {
+            const p = dir.find(x => String(x.orgId) === e.target.value);
+            patch(idx, r => ({ ...r, orgId: p ? p.orgId : null, orgName: p ? p.orgName : '', email: p ? p.email : '' }));
+          },
+          onEmail: e => patch(idx, r => ({ ...r, email: e.target.value })),
+          onRoleCode: e => patch(idx, r => ({ ...r, roleCode: e.target.value, orgId: null, orgName: '', email: '' })),
+          remove: () => setState(s => ({ inviteRows: (s.inviteRows || []).filter((_, i) => i !== idx) }))
+        };
+      });
+    })(),
     addInviteRow: () => setState(s => ({ inviteRows: (s.inviteRows && s.inviteRows.length ? s.inviteRows : [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]).concat([{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }]) })),
     inviteSendLabel: (state.inviteRows || []).length > 1 ? `초대 발송 (${state.inviteRows.length}건)` : '초대 발송',
     sendInvite: async () => {
@@ -1421,7 +1466,7 @@ export function makerVals(ctx) {
       const rows = (state.inviteRows && state.inviteRows.length ? state.inviteRows : [{ orgName: '', email: '', roleCode: 'RAW_SUPPLIER' }])
         .map(r => ({ orgName: (r.orgName || '').trim(), email: (r.email || '').trim(), roleCode: r.roleCode || 'RAW_SUPPLIER' }))
         .filter(r => r.orgName && r.email);
-      if (rows.length === 0) { ctx.say('협력사명과 이메일을 입력해 주세요.'); return; }
+      if (rows.length === 0) { ctx.say('초대할 협력사를 선택해 주세요.'); return; }
       let successCount = 0;
       const created = [];
       for (const row of rows) {

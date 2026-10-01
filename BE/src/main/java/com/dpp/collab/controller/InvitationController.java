@@ -1,6 +1,7 @@
 package com.dpp.collab.controller;
 
 import com.dpp.collab.dto.InvitationDto;
+import com.dpp.collab.dto.PartnerDirectoryDto;
 import com.dpp.collab.dto.SendInviteRequest;
 import com.dpp.collab.service.InvitationService;
 import org.springframework.http.HttpStatus;
@@ -30,6 +31,12 @@ public class InvitationController {
     public ResponseEntity<List<InvitationDto>> list(Authentication authentication,
                                                       @RequestParam(required = false) Long dppId) {
         return ResponseEntity.ok(invitationService.list(parseUserId(authentication), dppId));
+    }
+
+    /** 초대 화면 "협력사명" 드롭다운 - 가입·승인된 협력사 조직 전체와 초대에 쓸 가입 이메일. */
+    @GetMapping("/me/invitations/partners")
+    public ResponseEntity<List<PartnerDirectoryDto>> partners(Authentication authentication) {
+        return ResponseEntity.ok(invitationService.partnerDirectory(parseUserId(authentication)));
     }
 
     @PostMapping("/me/invitations")

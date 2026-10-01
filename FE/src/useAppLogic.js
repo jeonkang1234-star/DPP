@@ -15,7 +15,7 @@ import {
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
 import { fetchMe, fetchScans, deleteScan, searchProducts, recordScan, fetchCatalog, fetchCatalogBrands, fetchNotificationCategories, fetchNotifications,
-  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, resolveCrossCheck, fetchInvitations, sendInvitation, resendInvitation, fetchParticipations, acceptParticipation, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
+  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, resolveCrossCheck, fetchInvitations, fetchPartnerDirectory, sendInvitation, resendInvitation, fetchParticipations, acceptParticipation, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
   // 도메인 확장(2026-08-22) - 마이페이지 신청 / 관리자 심사 / DPP 생성 도메인 선택기.
   fetchMyDomains, requestDomainGrant, fetchDomainGrants, approveDomainGrant, rejectDomainGrant,
   fetchDomainGrantEvidenceBlob,
@@ -264,6 +264,8 @@ export function useAppLogic(userProps) {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogBrands, setCatalogBrands] = useState(null);
   const [invitesData, setInvitesData] = useState([]);
+  // 초대 화면 협력사 드롭다운 목록(GET /me/invitations/partners, 2026-10-01).
+  const [partnerDirData, setPartnerDirData] = useState([]);
   const [participationsData, setParticipationsData] = useState([]);
   const [notifCatsData, setNotifCatsData] = useState([]);
   const [notifsData, setNotifsData] = useState([]);
@@ -383,6 +385,8 @@ export function useAppLogic(userProps) {
     fetchDashboard().then((res) => { if (alive) setDashboardData(res); }).catch(() => {});
     fetchScans().then((res) => { if (alive) setScansData(res || []); }).catch(() => {});
     fetchInvitations().then((res) => { if (alive) setInvitesData(res || []); }).catch(() => {});
+    // 조직 없는 계정은 400 - 빈 목록으로 둔다.
+    fetchPartnerDirectory().then((res) => { if (alive) setPartnerDirData(res || []); }).catch(() => { if (alive) setPartnerDirData([]); });
     fetchParticipations().then((res) => { if (alive) setParticipationsData(res || []); }).catch(() => {});
     fetchNotificationCategories().then((res) => { if (alive) setNotifCatsData(res || []); }).catch(() => {});
     fetchNotifications().then((res) => { if (alive) setNotifsData(res || []); }).catch(() => {});
@@ -1043,6 +1047,7 @@ export function useAppLogic(userProps) {
     setCatalogBy('brand'); setCatalogInput(''); setCatalogQ(''); setCatalogDomain(''); setCatalogBrand('');
     setCatalogItems([]); setCatalogTotal(0); setCatalogPage(0); setCatalogBrands(null);
     setInvitesData([]);
+    setPartnerDirData([]);
     setParticipationsData([]);
     setNotifCatsData([]);
     setNotifsData([]);
@@ -1947,7 +1952,7 @@ export function useAppLogic(userProps) {
     oekotexResult, setOekotexResult, uploadOekotexLabel,
     batteryCarbonResult, setBatteryCarbonResult, uploadBatteryCarbonReport,
     recyclingResult, setRecyclingResult, uploadRecyclingReport,
-    invitesData, setInvitesData, sendInvitation, resendInvitation, fmtDate, fmtDateTime,
+    invitesData, setInvitesData, partnerDirData, sendInvitation, resendInvitation, fmtDate, fmtDateTime,
     participationsData, setParticipationsData, acceptParticipation,
     accounts, domainHint, roleFromEmail, firstTab, say, go, goToLink, profile, tabList, compData, resetSession,
     pill, roleCard, pillDot, domainCard, tabStyle,

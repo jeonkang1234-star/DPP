@@ -1590,13 +1590,22 @@ export default function AppView(v) {
                     <span style={{ fontSize: '11.5px', fontWeight: '600', color: '#8494AC' }}>협력사 {$index + 1}</span>
                     {row.canRemove ? (<button onClick={row.remove} style={{ border: '0', background: 'transparent', color: '#8494AC', fontSize: '12px', cursor: 'pointer' }}>삭제</button>) : null}
                   </div>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span><input placeholder="예) 우진메탈" value={row.orgName} onChange={row.onOrgName} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="partner@company.co.kr" value={row.email} onChange={row.onEmail} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px' }} /></label>
+                  {/* 2026-10-01: 역할을 먼저 고르면 그 역할로 가입한 협력사만 협력사명 드롭다운에 뜨고,
+                      협력사를 고르면 초대 이메일이 자동으로 채워진다. */}
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>역할(제출 항목)</span>
                     <select value={row.roleCode} onChange={row.onRoleCode} style={{ height: '44px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '13.5px', background: '#fff' }}>
                       {(inviteRoleOptions || []).map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
                     </select>
                   </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span>
+                    <select value={row.orgId} onChange={row.onPartner} disabled={row.partnerEmpty} style={row.partnerSelectStyle}>
+                      <option value="">{row.partnerPlaceholder}</option>
+                      {(row.partnerGroups || []).map(g => (<optgroup key={g.key} label={g.label}>
+                        {g.options.map(o => (<option key={o.value} value={o.value} style={{ color: '#0B1B33' }}>{o.label}</option>))}
+                      </optgroup>))}
+                    </select>
+                  </label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="협력사를 선택하면 가입 이메일이 자동으로 입력됩니다" value={row.email} onChange={row.onEmail} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px', background: row.orgId ? '#F7F9FD' : '#fff' }} /></label>
                 </div>
                 </React.Fragment>))}
                 <button onClick={addInviteRow} style={{ height: '40px', border: '1px dashed rgba(0,69,169,.34)', borderRadius: '11px', background: 'rgba(0,69,169,.035)', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>+ 협력사 추가</button>
@@ -1660,7 +1669,8 @@ export default function AppView(v) {
             </div>
             {(products || []).map((p, $index) => (<React.Fragment key={$index}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1.4fr 1fr 1fr .9fr 1fr 184px', gap: '12px', padding: '0 14px', height: '60px', alignItems: 'center', borderBottom: '1px solid rgba(16,32,64,.06)' }}>
-              <span style={{ display: 'flex', flexDirection: 'column', lineHeight: '1.35' }}><span style={{ fontSize: '14.5px', fontWeight: '700', color: '#0B1B33' }}>{p.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{p.spec}</span></span>
+              {/* 2026-10-01 강 요청: DPP 식별자뿐 아니라 제품명/규격을 눌러도 이어서 작성(입력 화면)으로 이동 */}
+              <button onClick={p.resume} title="이어서 작성" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: '1.35', border: '0', background: 'transparent', padding: '0', textAlign: 'left', cursor: 'pointer', minWidth: '0' }}><span style={{ fontSize: '14.5px', fontWeight: '700', color: '#0B1B33' }}>{p.name}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{p.spec}</span></button>
               <button onClick={p.resume} title="이어서 작성" style={{ border: '0', background: 'transparent', padding: '0', textAlign: 'left', fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', fontWeight: '600', color: '#6B7A93', cursor: 'pointer' }}>{p.id}</button>
               <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{p.lot}</span>
               <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F' }}>{p.at}</span>
