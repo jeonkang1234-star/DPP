@@ -396,6 +396,34 @@ public class FieldFormService {
     }
 
     /**
+     * 제품 조회 화면의 휴지통 버튼(2026-10-04 강 요청). 예전엔 FE가 화면 목록에서만 숨기고
+     * 서버엔 아무 요청도 안 보내서, 새로고침하면 그대로 다시 나타났다.
+     *
+     * 발급이 끝난 DPP(status ACTIVE 이상 또는 issued_at 있음)는 지울 수 없다 - 이미 블록체인
+     * 앵커링·세관 큐·공개 QR로 외부에 나간 여권이라, 지우면 그 이력이 끊긴다. 발급 전
+     * 초안(DRAFT/PENDING)만 소프트 삭제(deleted_at)한다. 대시보드/목록 조회는 전부
+     * deleted_at IS NULL 조건이라 바로 빠진다.
+     */
+    @Transactional
+    public void deleteDraft(Long userId, Long dppId) {
+        Long orgId = resolveOrgId(userId);
+        Dpp dpp = dppRepository.findById(dppId)
+                .filter(d -> d.getDeletedAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DPP를 찾을 수 없습니다."));
+        if (!orgId.equals(dpp.getOwnerOrgId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP를 삭제할 권한이 없습니다.");
+        }
+        String st = dpp.getStatus();
+        if (dpp.getIssuedAt() != null || !("DRAFT".equals(st) || "PENDING".equals(st))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "발급 완료된 DPP는 삭제할 수 없습니다.");
+        }
+        dpp.setDeletedAt(OffsetDateTime.now());
+        dppRepository.save(dpp);
+        auditLogService.record(userId, "DELETE", "DPP", dpp.getDppId(),
+                String.valueOf(dpp.getPublicUuid()), "성공", null);
+    }
+
+    /**
      * 문서 업로드 시점 앵커링(DocumentIngestService, target_type='DOCUMENT'/'EVENT')과
      * 이 발급 시점 앵커링(target_type='DPP_SNAPSHOT')은 서로 대체 관계가 아니라 각자 다른
      * 질문에 답한다 - 전자는 "이 개별 문서/증명이 그 시점에 존재·검증됐는가"(문서 단위

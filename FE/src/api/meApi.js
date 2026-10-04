@@ -182,6 +182,11 @@ export function resolveCrossCheck(dppId, checkId, resolution) {
 }
 
 /** DPP 발급 제출 - status를 PENDING으로 바꾸고 issued_at을 찍는다(블록체인 앵커링은 별도 문서 업로드 플로우의 몫). */
+/** 발급 전 DPP 초안 삭제(소프트 삭제). 발급 완료건은 서버가 409로 막는다(2026-10-04). */
+export function deleteDppDraft(dppId) {
+  return authedFetch(`/me/field-form/${dppId}`, { method: 'DELETE' });
+}
+
 export function issueFieldFormDpp(dppId) {
   return authedFetch(`/me/field-form/${dppId}/issue`, { method: 'POST' });
 }
