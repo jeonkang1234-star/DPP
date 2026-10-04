@@ -45,8 +45,18 @@ public class InvitationController {
     }
 
     @PostMapping("/me/invitations/{invitationId}/resend")
-    public ResponseEntity<InvitationDto> resend(Authentication authentication, @PathVariable Long invitationId) {
-        return ResponseEntity.ok(invitationService.resend(parseUserId(authentication), invitationId));
+    public ResponseEntity<InvitationDto> resend(Authentication authentication, @PathVariable Long invitationId,
+                                                @RequestParam(required = false) String linkBaseUrl) {
+        return ResponseEntity.ok(invitationService.resend(parseUserId(authentication), invitationId, linkBaseUrl));
+    }
+
+    /**
+     * 초대 메일 링크 진입 화면(/invite/{token})용 - 로그인 없이 호출된다(/public/** permitAll,
+     * nginx /public/ location 기존 블록이 커버). 2026-10-04.
+     */
+    @GetMapping("/public/invite/{token}")
+    public ResponseEntity<com.dpp.collab.dto.InvitePreviewDto> preview(@PathVariable String token) {
+        return ResponseEntity.ok(invitationService.preview(token));
     }
 
     private Long parseUserId(Authentication authentication) {

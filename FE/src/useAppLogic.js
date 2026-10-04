@@ -8,7 +8,7 @@ import {
   badgeText3d, segStyle3D, groove3d,
 } from './uiStyles.js';
 import { fetchAppData } from './api/mockApi.js';
-import { loadSession, saveSession, loadDraftDppId, saveDraftDppId, loadDraftInputs, saveDraftInputs, clearDraftInputs } from './api/session.js';
+import { loadSession, saveSession, loadDraftDppId, saveDraftDppId, loadDraftInputs, saveDraftInputs, clearDraftInputs, peekInviteTarget, clearInviteTarget } from './api/session.js';
 import {
   login, requestBusinessSignupCode, verifyBusinessSignupCode,
   requestBusinessSignupPhoneCode, verifyBusinessSignupPhoneCode, completeBusinessSignup,
@@ -314,6 +314,9 @@ export function useAppLogic(userProps) {
       obOpen: false, obStep: 1, obDomain: 'steel',
       notifOpen: false, notifCat: 'all',
       dppOpen: false, dppId: null, pubId: null,
+      // 초대 메일 링크로 로그인해 들어왔으면 그 DPP를 바로 연다(2026-10-04, InviteLanding).
+      // 협력사 화면에서만 의미가 있다 - 다른 역할이면 무시된다.
+      partnerAssignedDppId: initialRole === 'partner' ? peekInviteTarget() : null,
       issueMode: 'single',
       removedScans: [],
       removedProducts: [],
@@ -944,6 +947,9 @@ export function useAppLogic(userProps) {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
+
+  /* 초대 링크 대상 DPP는 첫 화면에서 한 번만 쓰고 지운다(새로고침해도 다시 열리지 않게). */
+  useEffect(() => { clearInviteTarget(); }, []);
 
   /* SNS 콜백이 실패로 돌아왔으면 마운트 직후 한 번 토스트로 알려준다. */
   useEffect(() => {

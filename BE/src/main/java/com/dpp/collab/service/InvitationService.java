@@ -3,6 +3,7 @@ package com.dpp.collab.service;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.collab.dto.InvitationDto;
+import com.dpp.collab.dto.InvitePreviewDto;
 import com.dpp.collab.dto.PartnerDirectoryDto;
 import com.dpp.collab.dto.SendInviteRequest;
 import com.dpp.collab.entity.Invitation;
@@ -19,6 +20,7 @@ import com.dpp.notify.entity.NotificationCategory;
 import com.dpp.notify.repository.NotificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,6 +82,12 @@ public class InvitationService {
     private final DppParticipantRepository participantRepository;
     private final NotificationRepository notificationRepository;
     private final InviteMailSender mailSender;
+    /** FE가 링크 주소를 안 보냈을 때 쓰는 기본값(app.invite.link-base-url). */
+    private final String defaultLinkBaseUrl;
+
+    /** 링크 앞부분은 scheme+host(+port)만 허용 - 경로·쿼리를 끼워 넣어 엉뚱한 곳으로 보내지 못하게. */
+    private static final java.util.regex.Pattern ORIGIN =
+            java.util.regex.Pattern.compile("^https?://[A-Za-z0-9.\\-]+(:[0-9]{1,5})?$");
 
     public InvitationService(UserAccountRepository userAccountRepository,
                               OrganizationRepository organizationRepository,
@@ -87,7 +95,8 @@ public class InvitationService {
                               DppQueryRepository dppRepository,
                               DppParticipantRepository participantRepository,
                               NotificationRepository notificationRepository,
-                              InviteMailSender mailSender) {
+                              InviteMailSender mailSender,
+                              @Value("${app.invite.link-base-url:http://localhost}") String defaultLinkBaseUrl) {
         this.userAccountRepository = userAccountRepository;
         this.organizationRepository = organizationRepository;
         this.invitationRepository = invitationRepository;
@@ -95,6 +104,36 @@ public class InvitationService {
         this.participantRepository = participantRepository;
         this.notificationRepository = notificationRepository;
         this.mailSender = mailSender;
+        this.defaultLinkBaseUrl = defaultLinkBaseUrl;
+    }
+
+    /**
+     * 초대 메일 링크(/invite/{token}) 진입 화면용 공개 조회(2026-10-04 강 요청).
+     * 로그인 전에 "누가 어느 DPP의 무슨 자료를 요청했는지"와 초대받은 이메일을 보여주고,
+     * 로그인하면 그 DPP로 바로 보낸다. 토큰(UUID)을 아는 사람만 볼 수 있다.
+     */
+    @Transactional(readOnly = true)
+    public InvitePreviewDto preview(String token) {
+        Invitation inv = (token == null || token.isBlank()) ? null
+                : invitationRepository.findByToken(token.trim()).orElse(null);
+        if (inv == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "유효하지 않은 초대 링크입니다. 초대가 재발송됐다면 가장 최근 메일의 링크를 사용해 주세요.");
+        }
+        String inviterOrgName = organizationRepository.findById(inv.getInviterOrgId())
+                .map(Organization::getOrgName).orElse("제조사");
+        boolean expired = inv.getExpiresAt() != null && inv.getExpiresAt().isBefore(OffsetDateTime.now());
+        return new InvitePreviewDto(inviterOrgName, inv.getInviteeOrgName(), inv.getInviteeEmail(),
+                inv.getDppId(), dppLabel(inv.getDppId()), roleLabel(inv.getRoleCode()), inv.getStatus(),
+                expired, inv.getExpiresAt() == null ? null : inv.getExpiresAt().toLocalDate().toString());
+    }
+
+    private String inviteLink(String requestedBase, String token) {
+        String base = requestedBase == null ? "" : requestedBase.trim().replaceAll("/+$", "");
+        if (!ORIGIN.matcher(base).matches()) {
+            base = defaultLinkBaseUrl == null ? "" : defaultLinkBaseUrl.trim().replaceAll("/+$", "");
+        }
+        return base.isEmpty() ? null : base + "/invite/" + token;
     }
 
     @Transactional(readOnly = true)
@@ -190,7 +229,7 @@ public class InvitationService {
 
         upsertParticipant(dpp.getDppId(), email, roleCode);
         linkIfAlreadyRegistered(invitation);
-        String mailError = sendMail(invitation, orgId);
+        String mailError = sendMail(invitation, orgId, request.linkBaseUrl());
         return toDto(invitation, mailError == null, mailError);
     }
 
@@ -339,7 +378,7 @@ public class InvitationService {
     }
 
     @Transactional
-    public InvitationDto resend(Long userId, Long invitationId) {
+    public InvitationDto resend(Long userId, Long invitationId, String linkBaseUrl) {
         Long orgId = resolveOrgId(userId);
         Invitation invitation = invitationRepository.findById(invitationId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "초대 내역을 찾을 수 없습니다."));
@@ -359,7 +398,7 @@ public class InvitationService {
         // 남아있던 예전 데이터라면(2026-08-15 수정 이전에 보낸 초대) 재발송 버튼 한 번으로
         // 자동 복구된다.
         linkIfAlreadyRegistered(invitation);
-        String mailError = sendMail(invitation, orgId);
+        String mailError = sendMail(invitation, orgId, linkBaseUrl);
         return toDto(invitation, mailError == null, mailError);
     }
 
@@ -401,7 +440,7 @@ public class InvitationService {
      *
      * @return 성공이면 null, 실패면 화면에 보여줄 원인 한 줄.
      */
-    private String sendMail(Invitation invitation, Long orgId) {
+    private String sendMail(Invitation invitation, Long orgId, String linkBaseUrl) {
         String inviterOrgName = organizationRepository.findById(orgId)
                 .map(Organization::getOrgName)
                 .orElse("IEUM");
@@ -411,7 +450,8 @@ public class InvitationService {
                 dppLabel(invitation.getDppId()),
                 roleLabel(invitation.getRoleCode()),
                 invitation.getToken(),
-                EXPIRY_DAYS);
+                EXPIRY_DAYS,
+                inviteLink(linkBaseUrl, invitation.getToken()));
         try {
             mailSender.sendInvite(invite);
             if (!mailSender.delivers()) {

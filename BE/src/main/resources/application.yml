@@ -104,6 +104,10 @@ app:
     # Gmail 등 대부분의 SMTP는 From이 인증 계정과 같아야 발송을 허용한다 - 그래서 기본값을
     # MAIL_USERNAME으로 둔다. 따로 지정하고 싶을 때만 APP_MAIL_FROM을 채운다.
     from: "${APP_MAIL_FROM:${MAIL_USERNAME:no-reply@ieum.io}}"
+  # 협력사 초대 메일 링크(/invite/{token})의 기본 주소. 보통은 FE가 지금 접속한 주소를 같이
+  # 보내서 그걸 쓰고, 이 값은 그게 없을 때(구버전 FE 등)의 폴백이다(2026-10-04).
+  invite:
+    link-base-url: "${INVITE_LINK_BASE_URL:http://localhost}"
   # 회원가입 전화번호 인증코드 발송. 기본은 false라 콘솔 로그로만 찍힌다(ConsoleSignupSmsSender).
   # 실제 SMS로 보내려면 true로 바꾸고 아래 ncp.sens.* 값을 application-local.yml에 채우세요.
   # (네이버클라우드 콘솔에서 발신번호 사전등록·심사 승인이 끝나야 실제 발송이 됩니다.)

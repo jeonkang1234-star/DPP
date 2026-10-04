@@ -13,6 +13,13 @@ public record SendInviteRequest(
         String orgName,
         String email,
         Long dppId,
-        String roleCode
+        String roleCode,
+        /**
+         * 초대 메일 링크의 앞부분(scheme+host) - 2026-10-04. FE가 지금 접속한 주소
+         * (window.location.origin)를 보낸다. 로컬은 http://localhost, EC2는 그 서버 주소가
+         * 되어 링크가 항상 "이 초대가 저장된 서버"를 가리킨다. 비어 있으면 서버 설정값
+         * (app.invite.link-base-url)을 쓴다.
+         */
+        String linkBaseUrl
 ) {
 }

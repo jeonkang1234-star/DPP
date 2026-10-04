@@ -11,6 +11,25 @@ import { loadSession } from './session.js';
  * 항상 성공한다.
  */
 
+/**
+ * 초대 메일 링크(/invite/{token}) 진입 화면용 - 누가 어느 DPP의 무슨 자료를 요청했는지(2026-10-04).
+ * 로그인 전 화면이라 토큰을 붙이지 않는다.
+ */
+export async function fetchInvitePreview(token) {
+  const res = await fetch(`/public/invite/${encodeURIComponent(token)}`, { cache: 'no-store' });
+  if (!res.ok) {
+    let message = res.status === 404 ? '유효하지 않은 초대 링크입니다.' : '초대 정보를 불러오지 못했습니다.';
+    try {
+      const data = await res.json();
+      if (data && data.message) message = data.message;
+    } catch {
+      /* 본문 없는 에러 응답은 무시 */
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
 export async function fetchPublicPassport(publicUuid) {
   let token = null;
   try {
