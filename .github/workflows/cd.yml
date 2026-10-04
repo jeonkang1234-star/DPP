@@ -6,6 +6,12 @@ on:
     types: [closed]
     branches: [main]
 
+# PR 두 개를 연달아 머지하면 CD가 동시에 두 번 돌아 prune 충돌·SG 22번 개폐가 서로 꼬였다(2026-10-04).
+# 같은 그룹은 한 번에 하나만 실행하고, 뒤에 온 실행은 앞의 것이 끝날 때까지 기다린다.
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -81,7 +87,8 @@ jobs:
             docker compose $COMPOSE_FILES up -d --remove-orphans \
               || (echo "up 1차 실패 - 5초 대기 후 재시도" && sleep 5 \
                   && docker compose $COMPOSE_FILES up -d --remove-orphans)
-            docker image prune -f
+            # 다른 배포가 동시에 prune 중이면 실패하는데, 정리 단계라 배포 실패로 보지 않는다(2026-10-04).
+            docker image prune -f || true
 
       - name: Health check
         uses: appleboy/ssh-action@v1.0.3
