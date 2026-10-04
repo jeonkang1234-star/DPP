@@ -71,19 +71,22 @@ public class CustomsClearanceService {
     private final OrganizationRepository organizationRepository;
     private final UserAccountRepository userAccountRepository;
     private final AuditLogService auditLogService;
+    private final CustomsComplianceBasisService complianceBasisService;
 
     public CustomsClearanceService(CustomsClearanceRepository customsClearanceRepository,
                                     CustomsCaseReadRepository customsCaseReadRepository,
                                     DppRepository dppRepository,
                                     OrganizationRepository organizationRepository,
                                     UserAccountRepository userAccountRepository,
-                                    AuditLogService auditLogService) {
+                                    AuditLogService auditLogService,
+                                    CustomsComplianceBasisService complianceBasisService) {
         this.customsClearanceRepository = customsClearanceRepository;
         this.customsCaseReadRepository = customsCaseReadRepository;
         this.dppRepository = dppRepository;
         this.organizationRepository = organizationRepository;
         this.userAccountRepository = userAccountRepository;
         this.auditLogService = auditLogService;
+        this.complianceBasisService = complianceBasisService;
     }
 
     /**
@@ -410,7 +413,13 @@ public class CustomsClearanceService {
         checks.add(checkEoriFormat(row.getImporterEori()));
         boolean overallPass = checks.stream().allMatch(CustomsCheckDto::pass);
 
-        return new CustomsCaseDetailDto(toSummary(row), overallPass, checks, row.getReason());
+        // 규정별 적합성 근거(2026-10-04 강 요청) - "적합성 요건 충족" 한 줄 대신 어떤 규정의
+        // 어떤 기준을 얼마나 넘겼는지. 종합 판정(overallPass)에는 섞지 않는다 - 기존 6개
+        // 확인 항목의 의미를 바꾸지 않고, 화면에 근거만 덧붙인다.
+        long docCount = modelId == null ? 0 : customsCaseReadRepository.countApprovedDocuments(modelId, row.getDppId(), "EU_DOC");
+        long techCount = modelId == null ? 0 : customsCaseReadRepository.countApprovedDocuments(modelId, row.getDppId(), "TECH_FILE");
+        return new CustomsCaseDetailDto(toSummary(row), overallPass, checks, row.getReason(),
+                complianceBasisService.build(row.getDppId(), docCount, techCount));
     }
 
     private CustomsCheckDto checkAnchor(Long dppId) {

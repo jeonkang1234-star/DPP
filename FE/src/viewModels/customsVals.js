@@ -1,6 +1,7 @@
 import React from 'react';
 import QRCode from 'qrcode';
 import { publicPassportUrl } from '../publicUrl.js';
+import { fetchRegulatorDppDetail } from '../api/meApi.js';
 
 /**
  * 세관 통관 검증 화면 - 2026-08-19 강 요청 "실 데이터로 연결해야함... 세관마다 확인해야
@@ -45,6 +46,16 @@ export function customsVals(ctx) {
   const techCheck = checkByLabel('CE 마크');
   const ceOk = !!docCheck && !!techCheck && docCheck.pass && techCheck.pass;
   const loading = !!found && !detail;
+  // 규정별 적합성 근거(2026-10-04 강 요청) - BE CustomsComplianceBasisService.
+  const compliance = (detail && detail.compliance) || [];
+  const cntBy = (vd) => compliance.filter((c) => c.verdict === vd).length;
+  const regCount = new Set(compliance.filter((c) => c.verdict === 'PASS').map((c) => c.regulation)).size;
+  const VERDICT_UI = {
+    PASS: { label: '충족', fg: '#0E7A3D', bg: 'rgba(18,161,80,.10)' },
+    FAIL: { label: '미달', fg: '#C22B2B', bg: 'rgba(224,59,59,.09)' },
+    INFO: { label: '신고', fg: '#0045A9', bg: 'rgba(0,69,169,.08)' },
+    NA: { label: '해당 없음', fg: '#6B7A93', bg: 'rgba(16,32,64,.06)' },
+  };
 
   const openCase = (clearanceId) => {
     setState({ customsSearched: true, customsId: clearanceId });
@@ -100,7 +111,44 @@ export function customsVals(ctx) {
     cDeclared: summary ? (summary.clearanceSide === 'EXPORT' ? '수출측 심사' : summary.clearanceSide === 'IMPORT' ? '수입측 심사' : '—') : '',
     // 수량 대신 신청일 - 마찬가지로 수량 데이터가 없어 실제로 있는 값으로 대체.
     cQty: summary && summary.createdAtIso ? summary.createdAtIso.slice(0, 10) : '—',
-    cCeNote: docCheck ? docCheck.detail : '',
+    cCeNote: compliance.length
+      ? (regCount + '개 규정 · ' + cntBy('PASS') + '개 항목 기준 충족'
+        + (cntBy('FAIL') ? ' · ' + cntBy('FAIL') + '개 항목 미달' : '')
+        + (cntBy('INFO') ? ' · 신고 의무 ' + cntBy('INFO') + '건' : ''))
+      : (docCheck ? docCheck.detail : ''),
+    cCompliance: compliance.map((c, i) => {
+      const ui = VERDICT_UI[c.verdict] || VERDICT_UI.NA;
+      return {
+        key: i,
+        regulation: c.regulation, reference: c.reference, item: c.item,
+        requirement: c.requirement, actual: c.actual, margin: c.margin || '', note: c.note || '',
+        verdictLabel: ui.label,
+        verdictStyle: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 24, padding: '0 10px', borderRadius: 999, background: ui.bg, color: ui.fg, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap' },
+        actualStyle: { fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 600, color: c.verdict === 'FAIL' ? '#C22B2B' : '#0B1B33', overflowWrap: 'anywhere' },
+      };
+    }),
+    cComplianceEmpty: !!detail && compliance.length === 0,
+    // "제품 정보 보기"(2026-10-04 강 요청) - DPP 레지스트리 조회의 규제기관 상세 모달
+    // (euVals.regDetail, GET /verify/dpp/{uuid}/detail)을 그대로 연다. 세관(CUSTOMS)도 이
+    // 엔드포인트 권한이 있다(DppRegistryService.REGULATOR_ORG_TYPES).
+    cOpenProductInfo: async () => {
+      if (!summary || !summary.publicUuid) return;
+      const uuid = summary.publicUuid;
+      const title = summary.modelName || 'DPP';
+      const sub = summary.exporterOrgName || '';
+      setState({ regDetail: { loading: true, title, sub, uuid, data: null, error: null, qr: '', url: '' }, regDetailTab: 'fields' });
+      const url = publicPassportUrl(uuid) || '';
+      let qr = '';
+      try {
+        if (url) qr = await QRCode.toDataURL(url, { width: 320, margin: 1, errorCorrectionLevel: 'M' });
+      } catch { /* QR 없이도 본문은 보여준다 */ }
+      try {
+        const data = await fetchRegulatorDppDetail(uuid);
+        setState({ regDetail: { loading: false, title, sub, uuid, data, error: null, qr, url } });
+      } catch (e) {
+        setState({ regDetail: { loading: false, title, sub, uuid, data: null, error: (e && e.message) || '조회에 실패했습니다.', qr, url } });
+      }
+    },
     cDoc: 'EU 적합성 선언서 · 기술문서',
     cTech: techCheck ? techCheck.detail : '',
     cCeOk: ceOk,
