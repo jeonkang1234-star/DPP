@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { useAppLogic } from './useAppLogic.js';
 import AppView from './AppView.jsx';
 import PublicPassport from './screens/PublicPassport.jsx';
+import InviteLanding from './screens/InviteLanding.jsx';
 import { DEFAULT_PATH, ROUTES } from './routes.js';
 import loadingWhaleImg from './assets/loading-whale.png';
 
@@ -72,6 +73,8 @@ export default function App() {
           먼저 매칭시킬 필요는 없다 - path가 겹치지 않는다.
         */}
         <Route path="/p/:publicUuid" element={<PublicPassport />} />
+        {/* 협력사 초대 메일 링크(2026-10-04) - 로그인 후 해당 DPP 자료 제출 화면으로 보낸다. */}
+        <Route path="/invite/:token" element={<InviteLanding />} />
         {ROUTES.map((r) => (
           <Route key={r.path} path={r.path} element={<Screen />} />
         ))}

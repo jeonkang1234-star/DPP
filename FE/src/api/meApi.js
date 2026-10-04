@@ -8,6 +8,7 @@
  */
 
 import { loadSession, clearSession } from './session.js';
+import { publicBaseUrl } from '../publicUrl.js';
 
 // 여러 /me/* 요청이 한꺼번에 401을 맞아도(페이지 로드 시 병렬 fetch) 리다이렉트를 한
 // 번만 하기 위한 플래그 - 안 하면 clearSession()이 여러 번 불려도 무해하지만
@@ -299,7 +300,9 @@ export function fetchInvitations() {
  * 둘로 나뉘어서 초대 시점에 역할을 지정해야 협력사가 맞는 항목을 볼 수 있다).
  */
 export function sendInvitation(orgName, email, dppId, roleCode) {
-  return authedFetch('/me/invitations', { method: 'POST', body: JSON.stringify({ orgName, email, dppId, roleCode }) });
+  // linkBaseUrl: 초대 메일의 "자료 제출하러 가기" 링크 앞부분(2026-10-04). 지금 접속한 서버
+  // 주소라 링크가 이 초대가 저장된 서버를 가리킨다(localhost면 VITE_PUBLIC_BASE_URL 우선).
+  return authedFetch('/me/invitations', { method: 'POST', body: JSON.stringify({ orgName, email, dppId, roleCode, linkBaseUrl: publicBaseUrl() }) });
 }
 
 /**
@@ -313,7 +316,7 @@ export function fetchPartnerDirectory() {
 
 /** 초대 재발송 - 이미 수락(ACCEPTED)된 초대는 백엔드가 400으로 거부한다. */
 export function resendInvitation(invitationId) {
-  return authedFetch(`/me/invitations/${invitationId}/resend`, { method: 'POST' });
+  return authedFetch(`/me/invitations/${invitationId}/resend?linkBaseUrl=${encodeURIComponent(publicBaseUrl())}`, { method: 'POST' });
 }
 
 /** 파트너(협력사) 계정이 참여 요청받은 DPP 목록. */

@@ -113,6 +113,39 @@ export function clearDraftInputs(role, email, dppId) {
 }
 
 /**
+ * 초대 링크로 로그인한 직후 열어 줄 DPP(2026-10-04). InviteLanding이 넣고, 앱이 처음 뜰 때
+ * useAppLogic이 한 번 꺼내 쓰고 지운다. 이 탭의 sessionStorage라 다른 탭과 섞이지 않는다.
+ */
+const INVITE_TARGET_KEY = PREFIX + 'inviteTargetDppId';
+
+export function saveInviteTarget(dppId) {
+  try {
+    if (dppId != null) sessionStorage.setItem(INVITE_TARGET_KEY, String(dppId));
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** 읽기만 한다 - useState 초기화 함수는 StrictMode에서 두 번 불리므로 여기서 지우면 안 된다. */
+export function peekInviteTarget() {
+  try {
+    const raw = sessionStorage.getItem(INVITE_TARGET_KEY);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearInviteTarget() {
+  try {
+    sessionStorage.removeItem(INVITE_TARGET_KEY);
+  } catch {
+    /* 무시 */
+  }
+}
+
+/**
  * 로그아웃 — 이 앱이 만든 저장값을 모두 지웁니다.
  * 'ieum.' 으로 시작하는 키만 지우므로 같은 도메인의 다른 데이터는 건드리지 않습니다.
  * session/draftDppId는 이제 sessionStorage에만 쓰지만, localStorage 쪽도 예전 버전이

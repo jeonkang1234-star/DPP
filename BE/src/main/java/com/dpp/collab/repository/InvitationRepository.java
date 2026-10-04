@@ -4,8 +4,12 @@ import com.dpp.collab.entity.Invitation;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface InvitationRepository extends JpaRepository<Invitation, Long> {
+
+    /** 초대 메일 링크(/invite/{token}) 진입용 - 2026-10-04. */
+    Optional<Invitation> findByToken(String token);
 
     List<Invitation> findByInviterOrgIdOrderByCreatedAtDesc(Long inviterOrgId);
 
