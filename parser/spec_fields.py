@@ -15,6 +15,12 @@ extractor.py 위쪽 주석에 적혀 있듯, 이 프로젝트는 예전에 "완�
 세 조건을 전부 통과한 것만 돌려준다. 못 뽑으면 조용히 빠지는 게 정상이고, 틀린 값을
 채우는 것보다 비는 게 낫다.
 
+■ 문서에서 '판정'하는 항목은 여기 없다
+SOC_PRESENT(우려물질 포함 여부)·SVHC_OVER_THRESHOLD(SVHC 0.1% 초과 여부)는 DB에선
+data_source='PARSER'지만 라벨로 뽑지 않는다. SDS가 이 둘을 직접 적는 일은 드물고, 적혀 있는
+건 물질명·농도다 - BE(DocumentSlotService.deriveSubstanceFlags)가 이 표로 뽑은 SVHC 농도·
+물질명에서 판정해 채운다(2026-10-06).
+
 ■ 이 표를 고치는 방법
 이 파일은 손으로 고치지 말고 requirement_field 시드를 고친 뒤 다시 생성한다. 시드와
 어긋나면 파서가 존재하지 않는 field_code를 채우려 들고, BE가 FK 위반으로 죽는다.
@@ -151,6 +157,11 @@ SPEC_FIELDS = [
     dict(code='SVHC_CONCENTRATION_PCT', domain='STEEL', section='HAZARD', label_ko='SVHC 농도', label_en='SVHC Concentration %', data_type='NUMBER', unit='%'),
     dict(code='ROHS_COMPLIANT_STATUS', domain='STEEL', section='HAZARD', label_ko='RoHS 적합 여부', label_en='RoHS Compliant Status', data_type='BOOLEAN', unit=None),
     dict(code='HEXAVALENT_CHROMIUM_CR6_PRESENCE', domain='STEEL', section='HAZARD', label_ko='6가크롬 함유 여부', label_en='Hexavalent Chromium Cr6 Presence', data_type='BOOLEAN', unit=None),
+    # 2026-10-06 추가(V39): 협력사(RAW_SUPPLIER) 담당인데 수기 입력으로 남아 있던 철강 순환성 2개.
+    # 스크랩 매입증빙·재생원료 확인서(SCRAP_PROOF)에서 뽑는다. aliases는 같은 항목을 문서마다
+    # 다르게 부르는 표기 - 라벨 사전과 같은 관문(정규화·충돌 제거)을 그대로 거친다.
+    dict(code='RECYCLED_SCRAP_RATE', domain='STEEL', section='CIRCULAR', label_ko='재생 스크랩 함유율', label_en='Recycled Scrap Content', data_type='NUMBER', unit='%', aliases=('재생원료 함유율', '재생 원료 함유율', 'Recycled Content')),
+    dict(code='SCRAP_SOURCE', domain='STEEL', section='CIRCULAR', label_ko='스크랩 출처', label_en='Scrap Source', data_type='STRING', unit=None, aliases=('스크랩 공급처', '스크랩 매입처', 'Scrap Supplier')),
     dict(code='CERTIFICATE_OF_ORIGIN_URL', domain='STEEL', section='TRADE', label_ko='원산지증명서 URL', label_en='Certificate of Origin URL', data_type='URL', unit=None),
     dict(code='MILL_TEST_CERTIFICATE_TYPE', domain='STEEL', section='DOCUMENT', label_ko='성적서 종류(EN 10204)', label_en='Mill Test Certificate Type', data_type='CODE', unit=None),
     dict(code='MILL_TEST_CERTIFICATE_DOCUMENT_URL', domain='STEEL', section='DOCUMENT', label_ko='제강 성적서 URL', label_en='Mill Test Certificate Document URL', data_type='URL', unit=None),

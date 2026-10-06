@@ -116,6 +116,8 @@ VALUES["STEEL"] = {
     "SVHC_CONCENTRATION_PCT": "0.00 %",
     "ROHS_COMPLIANT_STATUS": "예",
     "HEXAVALENT_CHROMIUM_CR6_PRESENCE": "아니오",
+    "RECYCLED_SCRAP_RATE": "28 %",
+    "SCRAP_SOURCE": "국내 가공 스크랩 (한빛자원㈜ 외 2개사)",
 
     "CERTIFICATE_OF_ORIGIN_URL": "https://coo.chamber.example.kr/2026/KR-C-2026-0201-STR.pdf",
 }

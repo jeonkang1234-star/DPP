@@ -30,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -380,6 +381,13 @@ public class DocumentSlotService {
         // 판정이 있어야만 채우므로 여기서는 건드리지 않는다(SpecFieldAutoFillService 주석).
         specFieldAutoFillService.apply(dppId, domain, orgId, userId, specFields, documentId, null);
 
+        // SDS에는 SVHC 물질명·농도가 적혀 있지 "우려물질 포함 여부/0.1% 초과 여부" 판정이 적혀
+        // 있지 않다 - 방금 뽑은 값으로 서버가 판정해 채운다(2026-10-06, V39). 아래
+        // sustainability_metrics가 없으면 return 하므로 그보다 앞에 둔다.
+        if ("SOC_SDS".equals(docTypeCode)) {
+            deriveSubstanceFlags(dppId, orgId, userId, documentId);
+        }
+
         fillIfEmpty(dppId, orgId, userId, "GTIN", asTrimmedString(parsed.get("gtin")), documentId);
 
         @SuppressWarnings("unchecked")
@@ -478,8 +486,74 @@ public class DocumentSlotService {
         row.setValueText(value);
         row.setSubmittedByOrg(orgId);
         row.setSubmittedByUser(userId);
+        // 어느 문서에서 온 값인지 남긴다 - 화면의 "문서에서 추출됨" 표시(FieldFormItemDto.
+        // fromDocument)와, 문서가 반려됐을 때 되돌릴 근거가 이 컬럼이다. 전에는 빠져 있었다.
+        if (documentId != null) {
+            row.setSourceDocumentId(documentId);
+        }
         row.setUpdatedAt(OffsetDateTime.now());
         dppFieldValueRepository.save(row);
+    }
+
+    /** REACH Art.33(1) 통지 기준 - 성형품 내 SVHC 0.1% w/w 초과. */
+    private static final BigDecimal SVHC_THRESHOLD_PCT = new BigDecimal("0.1");
+
+    /** SDS가 "SVHC 없음"을 적는 표기들(정규화 후 비교). */
+    private static final Set<String> NONE_MARKERS = Set.of(
+            "해당없음", "해당사항없음", "없음", "미함유", "미검출", "불검출", "none", "nil", "n/a", "na", "-", "notapplicable", "notdetected");
+
+    /**
+     * SDS에서 뽑힌 SVHC 정보로 SOC_PRESENT(우려물질 포함 여부)·SVHC_OVER_THRESHOLD(SVHC 0.1%
+     * 초과 여부)를 판정해 채운다. 사람이 O/X를 손으로 고르는 대신 문서 근거로 정한다(2026-10-06
+     * 강 요청). 이미 값이 있으면 fillIfEmpty 규칙대로 덮어쓰지 않고 교차검증만 남긴다.
+     *
+     *  - 포함 여부: 농도 > 0, 또는 실제 물질명이 있음, 또는 도금층 SVHC/6가크롬이 "예"
+     *  - 0.1% 초과: 농도가 숫자로 읽힐 때만 판정한다. 물질명만 있고 농도가 없으면 모른다 -
+     *    모르는데 "아니오"를 채우는 게 가장 나쁜 거짓말이라 비워둔다.
+     *  - SDS에서 SVHC 관련 값을 하나도 못 뽑았으면 아무것도 안 한다.
+     */
+    private void deriveSubstanceFlags(Long dppId, Long orgId, Long userId, Long documentId) {
+        String concText = currentValue(dppId, "SVHC_CONCENTRATION_PCT");
+        String name = currentValue(dppId, "SVHC_SUBSTANCE_NAME");
+        String coating = currentValue(dppId, "SVHC_PRESENCE_IN_COATING");
+        String cr6 = currentValue(dppId, "HEXAVALENT_CHROMIUM_CR6_PRESENCE");
+        if (concText == null && name == null && coating == null && cr6 == null) {
+            return;
+        }
+        BigDecimal conc = parsePercent(concText);
+        boolean namedSubstance = name != null && !NONE_MARKERS.contains(name.replaceAll("\\s+", "").toLowerCase());
+        boolean present = (conc != null && conc.signum() > 0)
+                || namedSubstance
+                || "true".equalsIgnoreCase(coating)
+                || "true".equalsIgnoreCase(cr6);
+        fillIfEmpty(dppId, orgId, userId, "SOC_PRESENT", String.valueOf(present), documentId);
+        if (conc != null) {
+            fillIfEmpty(dppId, orgId, userId, "SVHC_OVER_THRESHOLD",
+                    String.valueOf(conc.compareTo(SVHC_THRESHOLD_PCT) > 0), documentId);
+        }
+    }
+
+    private String currentValue(Long dppId, String fieldCode) {
+        return dppFieldValueRepository.findByDppIdAndFieldCode(dppId, fieldCode)
+                .map(DppFieldValue::getValueText)
+                .map(String::trim)
+                .filter(v -> !v.isEmpty())
+                .orElse(null);
+    }
+
+    private static BigDecimal parsePercent(String text) {
+        if (text == null) {
+            return null;
+        }
+        String cleaned = text.replace("%", "").replace(",", "").trim();
+        if (cleaned.isEmpty()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(cleaned);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private record Access(boolean owner, String participantRoleCode) {

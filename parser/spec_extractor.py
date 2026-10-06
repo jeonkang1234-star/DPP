@@ -57,7 +57,7 @@ def _build_index():
     domain_only = set()   # 도메인을 알면 갈라지는 라벨
     ambiguous = set()     # 같은 도메인 안에서 충돌 - 사용 불가
     for f in spec_fields.SPEC_FIELDS:
-        for raw in (f["label_ko"], f["label_en"], f["code"]):
+        for raw in (f["label_ko"], f["label_en"], f["code"], *f.get("aliases", ())):
             key = normalize_label(raw)
             if not key or len(key) < 2:
                 continue
