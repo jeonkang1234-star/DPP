@@ -165,7 +165,6 @@ export function partnerVals(ctx) {
         statusLabel: busy ? '문서 분석 중…' : (DOC_STATUS_LABEL[d.status] || d.status),
         dot: ctx.pillDot(busy ? '#0045A9' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
         busy,
-        fills: covered.map(f => f.labelKo).join(', '),
         extractedLabel: covered.length ? ('자동 입력 ' + extracted + ' / ' + covered.length) : '',
         inputId: 'partner-doc-upload-' + d.fieldCode,
         buttonLabel: busy ? '분석 중' : (d.status && d.status !== 'NOT_UPLOADED' ? '다시 올리기' : '업로드'),
@@ -181,11 +180,14 @@ export function partnerVals(ctx) {
             ctx.setDocumentFormData(result);
             const res = await ctx.refreshFieldForm(dppId);
             // refreshFieldForm은 입력값을 서버 값으로 덮는다 - 업로드 전에 사람이 고쳐 놓고
-            // 아직 제출 안 한 값은 살려 둔다.
+            // 아직 제출 안 한 값은 살리되, 이번 문서에서 값이 나온 항목은 문서 값을 쓴다
+            // (2026-10-06: 예전에 손으로 쳐 둔 "3" 같은 미제출 값이 문서 추출값을 가리던 문제).
+            const fresh = Object.fromEntries((res ? (res.fields || []) : []).map(x => [x.fieldCode, x.value || '']));
             ctx.setFieldFormInputs(cur => {
               const next = { ...cur };
               Object.keys(prevInputs).forEach(c => {
-                if ((prevInputs[c] || '') !== (serverValue[c] || '')) next[c] = prevInputs[c];
+                const edited = (prevInputs[c] || '') !== (serverValue[c] || '');
+                if (edited && !fresh[c]) next[c] = prevInputs[c];
               });
               return next;
             });
@@ -221,13 +223,14 @@ export function partnerVals(ctx) {
       else if (doc && !docUploaded) status = 'waiting';
       else if (doc && docUploaded) status = 'missing';
       else status = 'empty';
+      // 배지는 흰 바탕 + 그림자로 띄우고 상태는 글자색(과 점)으로만 구분한다(2026-10-06 강 요청).
       const badge = {
-        doc: { text: '문서에서 추출', color: '#0E7A3D', bg: 'rgba(18,161,80,.10)' },
-        manual: { text: '직접 입력', color: '#44546F', bg: '#EEF2F8' },
-        edited: { text: '수정됨 · 제출 전', color: '#9A6700', bg: 'rgba(227,160,8,.14)' },
-        waiting: { text: '문서 대기', color: '#6B7A93', bg: '#F2F6FC' },
-        missing: { text: '문서에서 찾지 못함', color: '#B42318', bg: 'rgba(224,59,59,.10)' },
-        empty: { text: '입력 필요', color: '#6B7A93', bg: '#F2F6FC' }
+        doc: { text: '문서에서 추출', color: '#0E7A3D' },
+        manual: { text: '직접 입력', color: '#44546F' },
+        edited: { text: '수정됨 · 제출 전', color: '#B26B00' },
+        waiting: { text: '문서 대기', color: '#8494AC' },
+        missing: { text: '문서에서 찾지 못함', color: '#C0362C' },
+        empty: { text: '입력 필요', color: '#8494AC' }
       }[status];
       const showInput = isEditing || status === 'missing' || status === 'empty';
       const setValue = v => ctx.setFieldFormInputs(prev => ({ ...prev, [code]: v }));
