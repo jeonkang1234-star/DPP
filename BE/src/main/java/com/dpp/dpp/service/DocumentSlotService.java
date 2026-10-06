@@ -290,42 +290,69 @@ public class DocumentSlotService {
             }
         });
 
-        String originalName = file.getOriginalFilename();
-        String ext = (originalName != null && originalName.contains("."))
-                ? originalName.substring(originalName.lastIndexOf('.')) : ".pdf";
-        String storedFileName = UUID.randomUUID() + ext;
-        Path uploadDir = Path.of(properties.getUploadDir());
-        Path storedPath = uploadDir.resolve(storedFileName);
         byte[] bytes;
         try {
             bytes = file.getBytes();
-            Files.createDirectories(uploadDir);
-            Files.write(storedPath, bytes);
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "업로드 파일 저장에 실패했습니다.", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "업로드 파일을 읽지 못했습니다.", e);
+        }
+        String contentHash = sha256Hex(bytes);
+
+        // 같은 DPP·같은 문서 유형에 똑같은 파일을 다시 올린 경우(2026-10-06 강 리포트 - "다시
+        // 올리기"를 누르면 ux_document_dedup 위반 SQL 에러가 화면에 그대로 떴다). 새 행을
+        // 만들지 않고 기존 문서를 그대로 쓰되, 파싱·자동 채움은 다시 돌린다 - 재업로드하는
+        // 이유가 대개 "값이 안 채워졌다"이기 때문이다(예: 파서 개선 전에 올렸거나, 시드로
+        // 들어가 파서를 한 번도 안 거친 문서).
+        Document document = documentRepository
+                .findActiveDuplicate("DPP", dppId, docTypeCode, contentHash)
+                .orElse(null);
+        boolean reused = document != null;
+        if (!reused) {
+            String originalName = file.getOriginalFilename();
+            String ext = (originalName != null && originalName.contains("."))
+                    ? originalName.substring(originalName.lastIndexOf('.')) : ".pdf";
+            String storedFileName = UUID.randomUUID() + ext;
+            Path uploadDir = Path.of(properties.getUploadDir());
+            Path storedPath = uploadDir.resolve(storedFileName);
+            try {
+                Files.createDirectories(uploadDir);
+                Files.write(storedPath, bytes);
+            } catch (IOException e) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "업로드 파일 저장에 실패했습니다.", e);
+            }
+
+            document = new Document();
+            document.setDocTypeCode(docTypeCode);
+            document.setOwnerType("DPP");
+            document.setOwnerId(dppId);
+            document.setSubmittedByOrg(orgId);
+            document.setFileName(originalName != null ? originalName : storedFileName);
+            document.setFileUri(storedPath.toString());
+            document.setContentHash(contentHash);
+            document.setMimeType(file.getContentType());
+            document.setFileSize(file.getSize());
+            document.setCreatedBy(userId);
+            // 관리자 승인 화면이 아직 없어서 업로드 즉시 승인 처리한다 - 나중에 REQ-ADMIN 문서
+            // 검수 화면이 생기면 여기를 PENDING으로 되돌리고 그 화면에서 승인/반려하게 바꿀 것.
+            document.setReviewStatus("APPROVED");
+            document = documentRepository.save(document);
         }
 
-        Document document = new Document();
-        document.setDocTypeCode(docTypeCode);
-        document.setOwnerType("DPP");
-        document.setOwnerId(dppId);
-        document.setSubmittedByOrg(orgId);
-        document.setFileName(originalName != null ? originalName : storedFileName);
-        document.setFileUri(storedPath.toString());
-        document.setContentHash(sha256Hex(bytes));
-        document.setMimeType(file.getContentType());
-        document.setFileSize(file.getSize());
-        document.setCreatedBy(userId);
-        // 관리자 승인 화면이 아직 없어서 업로드 즉시 승인 처리한다 - 나중에 REQ-ADMIN 문서
-        // 검수 화면이 생기면 여기를 PENDING으로 되돌리고 그 화면에서 승인/반려하게 바꿀 것.
-        document.setReviewStatus("APPROVED");
-        document = documentRepository.save(document);
-
-        DocumentLink link = new DocumentLink();
-        link.setDocumentId(document.getDocumentId());
-        link.setDppId(dppId);
-        link.setLinkType("DIRECT");
-        documentLinkRepository.save(link);
+        // 재사용하는 문서도 이 DPP와의 링크가 없을 수 있다(시드 데이터 등) - 없을 때만 만든다.
+        final Long documentId = document.getDocumentId();
+        boolean linked = documentLinkRepository.findByDppId(dppId).stream()
+                .anyMatch(l -> documentId.equals(l.getDocumentId()));
+        if (!linked) {
+            DocumentLink link = new DocumentLink();
+            link.setDocumentId(documentId);
+            link.setDppId(dppId);
+            link.setLinkType("DIRECT");
+            documentLinkRepository.save(link);
+        }
+        if (reused) {
+            log.info("dppId={} docTypeCode={} 같은 파일 재업로드 - 기존 documentId={} 재사용, 파싱만 다시 실행",
+                    dppId, docTypeCode, documentId);
+        }
 
         autoFillFieldsFromParsedDocument(dppId, dpp.getDomain(), orgId, userId, docTypeCode, file,
                 document.getDocumentId());
