@@ -6,6 +6,7 @@ import com.dpp.dpp.service.FieldFormService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -56,6 +57,13 @@ public class FieldFormController {
     @PostMapping("/me/field-form/{dppId}/issue")
     public ResponseEntity<FieldFormResponse> issue(Authentication authentication, @PathVariable Long dppId) {
         return ResponseEntity.ok(fieldFormService.issue(parseUserId(authentication), dppId));
+    }
+
+    /** 발급 전 DPP 초안 삭제(소프트). 발급 완료건은 409. */
+    @DeleteMapping("/me/field-form/{dppId}")
+    public ResponseEntity<Void> deleteDraft(Authentication authentication, @PathVariable Long dppId) {
+        fieldFormService.deleteDraft(parseUserId(authentication), dppId);
+        return ResponseEntity.noContent().build();
     }
 
     private Long parseUserId(Authentication authentication) {

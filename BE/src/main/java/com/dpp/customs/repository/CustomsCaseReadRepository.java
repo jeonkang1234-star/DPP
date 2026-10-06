@@ -77,4 +77,28 @@ public interface CustomsCaseReadRepository extends Repository<CustomsClearance, 
     /** 조성 정보 자체가 한 건이라도 등록됐는지 - 없으면 SVHC 결과를 "적합"으로 단정할 근거가 없다. */
     @Query(value = "SELECT COUNT(*) FROM material_composition WHERE dpp_id = :dppId", nativeQuery = true)
     long countMaterialCompositionRows(@Param("dppId") Long dppId);
+
+    // ── 규정별 적합성 근거(CustomsComplianceBasisService, 2026-10-04) ──────────────
+    // "::" 캐스트는 네이티브 쿼리 파라미터 파서가 ":text"를 파라미터로 오인할 수 있어 CAST()를 쓴다.
+
+    /** dpp.domain, dpp.completeness. 행이 없으면 빈 리스트. */
+    @Query(value = "SELECT d.domain, CAST(d.completeness AS TEXT) FROM dpp d WHERE d.dpp_id = :dppId",
+            nativeQuery = true)
+    List<Object[]> findDomainAndCompleteness(@Param("dppId") Long dppId);
+
+    /** 이 DPP의 입력값 전부(field_code, 문자열로 맞춘 값). 영업비밀 항목은 값 대신 '충족'이 들어 있다. */
+    @Query(value = "SELECT fv.field_code, COALESCE(fv.value_text, CAST(fv.value_num AS TEXT), CAST(fv.value_bool AS TEXT)) "
+            + "FROM dpp_field_value fv WHERE fv.dpp_id = :dppId", nativeQuery = true)
+    List<Object[]> findFieldValues(@Param("dppId") Long dppId);
+
+    /** 회로별 최신 ZKP 증명(circuit_name, status, public_signals JSON 문자열). */
+    @Query(value = "SELECT DISTINCT ON (z.circuit_name) z.circuit_name, z.status, CAST(z.public_signals AS TEXT) "
+            + "FROM zkp_proof z WHERE z.dpp_id = :dppId AND z.circuit_name IS NOT NULL "
+            + "ORDER BY z.circuit_name, z.created_at DESC", nativeQuery = true)
+    List<Object[]> findLatestProofsByCircuit(@Param("dppId") Long dppId);
+
+    /** 조성표(material_composition)상 SVHC로 표시된 물질의 최대 함유율(중량%). 없으면 null. */
+    @Query(value = "SELECT CAST(MAX(content_rate) AS TEXT) FROM material_composition "
+            + "WHERE dpp_id = :dppId AND svhc_flag = TRUE", nativeQuery = true)
+    String findMaxSvhcRate(@Param("dppId") Long dppId);
 }

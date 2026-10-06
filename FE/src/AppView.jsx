@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AppHeader from './components/AppHeader.jsx';
+import DropdownSelect from './components/DropdownSelect.jsx';
 import MyPage from './screens/MyPage.jsx';
 import './hover.css';
 import loginSlidePassport from './assets/icons/login-slide-passport.png';
@@ -60,6 +61,8 @@ export default function AppView(v) {
     cResultMode,
     cSearchMode,
     cTech,
+    cCompliance,
+    cOpenProductInfo,
     cancelProfileEdit,
     careItems,
     closeDocPreview,
@@ -1592,19 +1595,12 @@ export default function AppView(v) {
                   </div>
                   {/* 2026-10-01: 역할을 먼저 고르면 그 역할로 가입한 협력사만 협력사명 드롭다운에 뜨고,
                       협력사를 고르면 초대 이메일이 자동으로 채워진다. */}
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>역할(제출 항목)</span>
-                    <select value={row.roleCode} onChange={row.onRoleCode} style={{ height: '44px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '13.5px', background: '#fff' }}>
-                      {(inviteRoleOptions || []).map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span>
-                    <select value={row.orgId} onChange={row.onPartner} disabled={row.partnerEmpty} style={row.partnerSelectStyle}>
-                      <option value="">{row.partnerPlaceholder}</option>
-                      {(row.partnerGroups || []).map(g => (<optgroup key={g.key} label={g.label}>
-                        {g.options.map(o => (<option key={o.value} value={o.value} style={{ color: '#0B1B33' }}>{o.label}</option>))}
-                      </optgroup>))}
-                    </select>
-                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>역할(제출 항목)</span>
+                    <DropdownSelect value={row.roleCode} onChange={row.onRoleCode} options={inviteRoleOptions || []} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span>
+                    <DropdownSelect value={row.orgId} onChange={row.onPartner} disabled={row.partnerEmpty} groups={row.partnerGroups || []} placeholder={row.partnerPlaceholder} />
+                  </div>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="협력사를 선택하면 가입 이메일이 자동으로 입력됩니다" value={row.email} onChange={row.onEmail} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px', background: row.orgId ? '#F7F9FD' : '#fff' }} /></label>
                 </div>
                 </React.Fragment>))}
@@ -1683,7 +1679,7 @@ export default function AppView(v) {
                     동일한 핸들러라 그대로 재사용한다(steel은 입력 화면으로, 실 입력
                     화면이 아직 없는 도메인은 상세 패널로 폴백). */}
                 <button onClick={p.resume} title="DPP 데이터 수정" style={{ height: '32px', padding: '0 14px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '9px', background: 'rgba(0,69,169,.06)', fontSize: '12px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }} className="hv22b">수정</button>
-                <button onClick={p.remove} title="DPP 삭제" style={{ width: '32px', height: '32px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: '#fff', color: '#8494AC', cursor: 'pointer', flex: 'none' }} className="hv23"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
+                <button onClick={p.remove} disabled={!p.canDelete} title={p.canDelete ? 'DPP 삭제' : '발급 완료된 DPP는 삭제할 수 없습니다'} style={{ width: '32px', height: '32px', display: 'grid', placeItems: 'center', border: '1px solid rgba(16,32,64,.12)', borderRadius: '9px', background: p.canDelete ? '#fff' : '#F3F5F9', color: p.canDelete ? '#8494AC' : '#C3CCDA', cursor: p.canDelete ? 'pointer' : 'not-allowed', flex: 'none' }} className={p.canDelete ? 'hv23' : undefined}><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M7.5 2.8h5v1.4h4v1.7h-1.3l-.8 10a1.6 1.6 0 0 1-1.6 1.5H7.2a1.6 1.6 0 0 1-1.6-1.5l-.8-10H3.5V4.2h4V2.8Zm-.9 3.1.8 9.8h5.2l.8-9.8H6.6Zm2.1 1.5h1.5v6.6H8.7V7.4Zm2.6 0h1.5v6.6h-1.5V7.4Z" /></svg></button>
               </span>
             </div>
             </React.Fragment>))}
@@ -2093,12 +2089,11 @@ export default function AppView(v) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', maxWidth: '1120px', margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <button onClick={resetCustomsSearch} style={{ height: '44px', padding: '0 18px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '13px', background: '#fff', fontSize: '13.5px', fontWeight: '600', color: '#44546F', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }} className="hv31">← 검색으로</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1', height: '52px', padding: '0 8px 0 18px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>
-              <span style={{ width: '14px', height: '14px', border: '1.8px solid #9AA8BE', borderRadius: '8px', flex: 'none' }}></span>
-              <input value={cQuery} onChange={onCustomsQuery} placeholder="DPP 식별자 · 수입신고번호 · EORI 번호" style={{ flex: '1', border: '0', background: 'transparent', fontSize: '14.5px' }} />
-              <button onClick={runCustomsSearch} style={{ height: '36px', padding: '0 16px', border: '0', borderRadius: '11px', background: '#F2F6FC', color: '#44546F', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer' }}>검색</button>
-            </div>
+            {/* 2026-10-04 강 요청: 통관 대기 목록에서 들어온 상세 화면에서는 검색창을 치운다. */}
+            <div style={{ flex: '1' }}></div>
             <button onClick={showQr} style={{ height: '52px', padding: '0 20px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '15px', background: '#fff', color: '#0045A9', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>QR 보기</button>
+            {/* 2026-10-04 강 요청: DPP 레지스트리 조회처럼 이 제품의 전체 정보를 상세 모달로 */}
+            <button onClick={cOpenProductInfo} style={{ height: '52px', padding: '0 20px', border: '0', borderRadius: '15px', background: '#0045A9', color: '#fff', fontSize: '14.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none', boxShadow: '0 8px 18px rgba(0,69,169,.22)' }}>제품 정보 보기</button>
           </div>
 
           {/* 오른쪽 "검증 항목" 컬럼을 지우면서 1열로(2026-08-21 강 요청). */}
@@ -2134,9 +2129,28 @@ export default function AppView(v) {
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}><span style={{ fontSize: '14px', fontWeight: '700', color: '#C22B2B' }}>적합성 요건 미충족</span><span style={{ fontSize: '12.5px', color: '#44546F' }}>{cCeNote}</span></span>
                 </div>
                 </>) : null}
+                {/* 2026-10-04 강 요청: "적합성 요건 충족"으로 뭉뚱그리지 말고, 어떤 규정의 어떤
+                    기준을 얼마만큼 넘겼는지 항목별로 보여준다(BE CustomsComplianceBasisService). */}
+                {(cCompliance || []).length > 0 ? (
+                <div style={{ border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', overflow: 'hidden' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1.25fr 1fr 1.35fr 76px', gap: '12px', padding: '10px 16px', background: '#F5F8FC', fontSize: '11.5px', fontWeight: '700', color: '#6B7A93' }}>
+                    <span>규정 · 조항</span><span>항목</span><span>법정 기준</span><span>실측 · 신고값</span><span style={{ textAlign: 'center' }}>판정</span>
+                  </div>
+                  {(cCompliance || []).map((c) => (<React.Fragment key={c.key}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1.25fr 1fr 1.35fr 76px', gap: '12px', padding: '12px 16px', borderTop: '1px solid rgba(16,32,64,.06)', alignItems: 'center' }}>
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '0' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#0B1B33', overflowWrap: 'anywhere' }}>{c.regulation}</span><span style={{ fontSize: '11px', color: '#8494AC', overflowWrap: 'anywhere' }}>{c.reference}</span></span>
+                    <span style={{ fontSize: '12.5px', color: '#2A3A55', overflowWrap: 'anywhere' }}>{c.item}</span>
+                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '12px', color: '#44546F', overflowWrap: 'anywhere' }}>{c.requirement}</span>
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '0' }}><span style={c.actualStyle}>{c.actual}</span>{c.margin ? (<span style={{ fontSize: '11px', color: '#0E7A3D', fontWeight: '600' }}>{c.margin}</span>) : null}{c.note ? (<span style={{ fontSize: '11px', color: '#8494AC' }}>{c.note}</span>) : null}</span>
+                    <span style={{ display: 'flex', justifyContent: 'center' }}><span style={c.verdictStyle}>{c.verdictLabel}</span></span>
+                  </div>
+                  </React.Fragment>))}
+                </div>
+                ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', alignItems: 'center', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE' }}>
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}><span style={{ fontSize: '13.5px', fontWeight: '600' }}>{cDoc}</span><span style={{ fontSize: '11.5px', color: '#8494AC' }}>{cTech}</span></span>
                 </div>
+                )}
               </div>
             </div>
           </div>

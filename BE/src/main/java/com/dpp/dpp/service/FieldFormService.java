@@ -187,8 +187,15 @@ public class FieldFormService {
         // 요청을 조작해서 다른 도메인 필드를 끼워 보는 걸 막는다.
         String domain = dpp.getDomain();
 
-        Map<String, String> existingValues = fieldValueRepository.findByDppId(dpp.getDppId()).stream()
+        List<DppFieldValue> existingRows = fieldValueRepository.findByDppId(dpp.getDppId());
+        Map<String, String> existingValues = existingRows.stream()
+                .filter(v -> v.getValueText() != null)
                 .collect(Collectors.toMap(DppFieldValue::getFieldCode, DppFieldValue::getValueText, (a, b) -> b));
+        // 문서에서 추출된 값(source_document_id 있음) - 화면에서 "문서에서 추출됨"으로 표시.
+        Set<String> documentSourced = existingRows.stream()
+                .filter(v -> v.getSourceDocumentId() != null && v.getValueText() != null && !v.getValueText().isBlank())
+                .map(DppFieldValue::getFieldCode)
+                .collect(Collectors.toSet());
 
         // 수락한 협력사가 있는 역할은 그 협력사 전용이 된다(2026-08-23). 소유 조직 화면에서만
         // 잠금 라벨을 붙인다 - 협력사 본인은 애초에 자기 담당 필드만 받으므로 잠글 게 없다.
@@ -205,7 +212,8 @@ public class FieldFormService {
         List<FieldFormItemDto> fields = fieldsFor(fieldDomains(domain), access.participantRoleCode()).stream()
                 .filter(f -> applicable == null || applicable.contains(f.getFieldCode()))
                 .map(f -> toItem(f, existingValues.get(f.getFieldCode()),
-                        partnerAssignmentService.lockLabelFor(lockedRoles, f.getResponsibleRole())))
+                        partnerAssignmentService.lockLabelFor(lockedRoles, f.getResponsibleRole()),
+                        documentSourced.contains(f.getFieldCode())))
                 .toList();
 
         // dpp 엔티티가 아니라 별도 스칼라 프로젝션으로 다시 읽는다 - saveDraft/issue가 같은
@@ -396,6 +404,34 @@ public class FieldFormService {
     }
 
     /**
+     * 제품 조회 화면의 휴지통 버튼(2026-10-04 강 요청). 예전엔 FE가 화면 목록에서만 숨기고
+     * 서버엔 아무 요청도 안 보내서, 새로고침하면 그대로 다시 나타났다.
+     *
+     * 발급이 끝난 DPP(status ACTIVE 이상 또는 issued_at 있음)는 지울 수 없다 - 이미 블록체인
+     * 앵커링·세관 큐·공개 QR로 외부에 나간 여권이라, 지우면 그 이력이 끊긴다. 발급 전
+     * 초안(DRAFT/PENDING)만 소프트 삭제(deleted_at)한다. 대시보드/목록 조회는 전부
+     * deleted_at IS NULL 조건이라 바로 빠진다.
+     */
+    @Transactional
+    public void deleteDraft(Long userId, Long dppId) {
+        Long orgId = resolveOrgId(userId);
+        Dpp dpp = dppRepository.findById(dppId)
+                .filter(d -> d.getDeletedAt() == null)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "DPP를 찾을 수 없습니다."));
+        if (!orgId.equals(dpp.getOwnerOrgId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP를 삭제할 권한이 없습니다.");
+        }
+        String st = dpp.getStatus();
+        if (dpp.getIssuedAt() != null || !("DRAFT".equals(st) || "PENDING".equals(st))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "발급 완료된 DPP는 삭제할 수 없습니다.");
+        }
+        dpp.setDeletedAt(OffsetDateTime.now());
+        dppRepository.save(dpp);
+        auditLogService.record(userId, "DELETE", "DPP", dpp.getDppId(),
+                String.valueOf(dpp.getPublicUuid()), "성공", null);
+    }
+
+    /**
      * 문서 업로드 시점 앵커링(DocumentIngestService, target_type='DOCUMENT'/'EVENT')과
      * 이 발급 시점 앵커링(target_type='DPP_SNAPSHOT')은 서로 대체 관계가 아니라 각자 다른
      * 질문에 답한다 - 전자는 "이 개별 문서/증명이 그 시점에 존재·검증됐는가"(문서 단위
@@ -495,10 +531,10 @@ public class FieldFormService {
     // Enum 선택지가 같이 가야 한다.
 
     private FieldFormItemDto toItem(RequirementField f, String value) {
-        return toItem(f, value, null);
+        return toItem(f, value, null, false);
     }
 
-    private FieldFormItemDto toItem(RequirementField f, String value, String partnerLockLabel) {
+    private FieldFormItemDto toItem(RequirementField f, String value, String partnerLockLabel, boolean fromDocument) {
         // lifecycle_stage 가 비어 있는 기존 필드(철강/섬유 전부)는 제조 단계로 본다 -
         // V36 의 v_dpp_requirement_status 가 COALESCE(...,4) 로 판정하는 것과 같은 기본값을
         // 여기서도 써야 화면과 완성도가 어긋나지 않는다.
@@ -510,7 +546,8 @@ public class FieldFormService {
                 f.getDisclosureScope(), f.getLegalBasis(), f.getT1Condition(),
                 f.getResponsibleRole(), partnerLockLabel,
                 f.getLifecycleStage() == null ? null : Integer.valueOf(stage),
-                stage <= ISSUE_GATE_MAX_STAGE);
+                stage <= ISSUE_GATE_MAX_STAGE,
+                fromDocument);
     }
 
     /**
@@ -814,6 +851,11 @@ public class FieldFormService {
                         v.setFieldCode(entry.getKey());
                         return v;
                     });
+            // 사람이 문서 추출값과 다른 값으로 고쳐 저장하면 더 이상 "문서에서 온 값"이 아니다 -
+            // 출처 문서 표시를 떼어 화면에서 "직접 입력"으로 보이게 한다(같은 값이면 유지).
+            if (value.getSourceDocumentId() != null && !text.equals(value.getValueText())) {
+                value.setSourceDocumentId(null);
+            }
             value.setValueText(text);
             value.setSubmittedByOrg(orgId);
             value.setSubmittedByUser(userId);

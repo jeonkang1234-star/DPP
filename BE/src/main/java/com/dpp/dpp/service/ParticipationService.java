@@ -98,7 +98,10 @@ public class ParticipationService {
         }
 
         List<DppParticipant> participations = participantRepository.findByOrgId(user.getOrgId());
-        return participations.stream().map(this::toDto).toList();
+        // 제조사가 삭제한(소프트 삭제) DPP는 협력사 참여 목록에서도 뺀다(2026-10-04).
+        return participations.stream()
+                .filter(p -> dppRepository.findById(p.getDppId()).map(d -> d.getDeletedAt() == null).orElse(false))
+                .map(this::toDto).toList();
     }
 
     /**

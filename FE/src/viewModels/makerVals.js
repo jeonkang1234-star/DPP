@@ -1,7 +1,7 @@
 import React from 'react';
 import QRCode from 'qrcode';
 import { publicPassportUrl } from '../publicUrl.js';
-import { updateOrganization } from '../api/meApi.js';
+import { updateOrganization, deleteDppDraft } from '../api/meApi.js';
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 function nowStamp() {
@@ -1529,26 +1529,30 @@ export function makerVals(ctx) {
         resume: r === 'steel'
           ? () => setState({ tab: 'input', fieldFormDppId: id })
           : () => setState({ dppOpen: true, dppId: id }),
-        remove: () => setState({
-          confirm: done === 100
-            ? {
-                title: '발급 완료된 DPP는 삭제할 수 없습니다',
-                body: name + ' 은(는) 이미 블록체인에 앵커링되어 DPP 레지스트리에 등록되었습니다. 잘못된 정보라면 폐기 신청으로 무효화 이력을 남길 수 있습니다.',
-                label: '폐기 신청',
-                danger: false,
-                run: () => { setState({ confirm: null }); ctx.say('폐기 신청을 접수했습니다. 관리자 승인 후 무효 처리됩니다.'); }
+        // 2026-10-04 강 요청: 휴지통이 화면 목록에서만 숨기고 서버엔 요청을 안 보내서
+        // 새로고침하면 되살아났다. 이제 DELETE /me/field-form/{id}(소프트 삭제)를 실제로
+        // 부른다. 발급 완료건은 버튼 자체를 비활성화(AppView)하고, 서버도 409로 막는다.
+        remove: () => {
+          if (issued) return;
+          setState({
+            confirm: {
+              title: 'DPP를 삭제할까요?',
+              body: name + ' (' + (d.internalSku || ('DPP-' + id)) + ') 의 작성 중 데이터와 업로드한 문서가 함께 삭제됩니다. 되돌릴 수 없습니다.',
+              label: '삭제',
+              danger: true,
+              run: () => {
+                setState({ confirm: null });
+                deleteDppDraft(id)
+                  .then(() => {
+                    setState(s => ({ removedProducts: s.removedProducts.concat(id) }));
+                    ctx.say('DPP를 삭제했습니다.');
+                    if (ctx.refreshDashboard) ctx.refreshDashboard();
+                  })
+                  .catch((err) => ctx.say((err && err.message) || 'DPP 삭제에 실패했습니다.'));
               }
-            : {
-                title: 'DPP를 삭제할까요?',
-                body: name + ' (' + id + ') 의 작성 중 데이터와 업로드한 문서가 함께 삭제됩니다. 되돌릴 수 없습니다.',
-                label: '삭제',
-                danger: true,
-                run: () => {
-                  setState(s => ({ removedProducts: s.removedProducts.concat(id), confirm: null }));
-                  ctx.say('DPP를 삭제했습니다.');
-                }
-              }
-        })
+            }
+          });
+        }
       };
     }).filter(p => pStatusFilter === 'all' ? true : pStatusFilter === 'done' ? p.isIssued : !p.isIssued),
     productStatusFilter: pStatusFilter,

@@ -7,6 +7,8 @@ public record CustomsCaseDetailDto(
         CustomsCaseSummaryDto summary,
         boolean overallPass,
         List<CustomsCheckDto> checks,
-        String reason
+        String reason,
+        /** 규정별 적합성 근거(2026-10-04) - CustomsComplianceBasisService 참고. */
+        List<CustomsComplianceItemDto> compliance
 ) {
 }
