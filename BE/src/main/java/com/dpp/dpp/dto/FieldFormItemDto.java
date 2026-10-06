@@ -61,6 +61,12 @@ public record FieldFormItemDto(
          * 재활용 처리 결과·BMS 동적데이터처럼 지금은 존재할 수 없는 항목이 여기 해당한다.
          * 화면은 이 칸을 "추후 제출"로 따로 묶어 보여주고, 완성도 분모에서도 빠진다.
          */
-        boolean issueGate
+        boolean issueGate,
+        /**
+         * 이 값이 업로드된 문서에서 추출된 것인가(dpp_field_value.source_document_id 존재).
+         * 협력사 입력 화면이 "문서에서 추출됨"과 "직접 입력"을 구분해 그리는 데 쓴다
+         * (2026-10-06 강 요청 - 함유 여부를 O/X로 손입력받지 말고 문서에서 뽑을 것).
+         */
+        boolean fromDocument
 ) {
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AppHeader from './components/AppHeader.jsx';
+import DropdownSelect from './components/DropdownSelect.jsx';
 import MyPage from './screens/MyPage.jsx';
 import './hover.css';
 import loginSlidePassport from './assets/icons/login-slide-passport.png';
@@ -1594,19 +1595,12 @@ export default function AppView(v) {
                   </div>
                   {/* 2026-10-01: 역할을 먼저 고르면 그 역할로 가입한 협력사만 협력사명 드롭다운에 뜨고,
                       협력사를 고르면 초대 이메일이 자동으로 채워진다. */}
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>역할(제출 항목)</span>
-                    <select value={row.roleCode} onChange={row.onRoleCode} style={{ height: '44px', padding: '0 12px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '13.5px', background: '#fff' }}>
-                      {(inviteRoleOptions || []).map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                    </select>
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span>
-                    <select value={row.orgId} onChange={row.onPartner} disabled={row.partnerEmpty} style={row.partnerSelectStyle}>
-                      <option value="">{row.partnerPlaceholder}</option>
-                      {(row.partnerGroups || []).map(g => (<optgroup key={g.key} label={g.label}>
-                        {g.options.map(o => (<option key={o.value} value={o.value} style={{ color: '#0B1B33' }}>{o.label}</option>))}
-                      </optgroup>))}
-                    </select>
-                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>역할(제출 항목)</span>
+                    <DropdownSelect value={row.roleCode} onChange={row.onRoleCode} options={inviteRoleOptions || []} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>협력사명</span>
+                    <DropdownSelect value={row.orgId} onChange={row.onPartner} disabled={row.partnerEmpty} groups={row.partnerGroups || []} placeholder={row.partnerPlaceholder} />
+                  </div>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>초대 이메일</span><input type="email" placeholder="협력사를 선택하면 가입 이메일이 자동으로 입력됩니다" value={row.email} onChange={row.onEmail} style={{ height: '44px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '11px', fontSize: '14px', background: row.orgId ? '#F7F9FD' : '#fff' }} /></label>
                 </div>
                 </React.Fragment>))}
