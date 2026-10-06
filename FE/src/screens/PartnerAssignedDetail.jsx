@@ -27,13 +27,15 @@ function seg(active) {
 
 function FieldRow({ r }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px', borderRadius: '13px', border: '1px solid rgba(16,32,64,.08)', background: r.status === 'missing' ? 'rgba(224,59,59,.025)' : '#fff' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px', borderRadius: '13px', border: '1px solid rgba(16,32,64,.08)', background: '#fff', boxShadow: '0 1px 2px rgba(16,32,64,.04)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
         <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#44546F' }}>
           {r.label}{r.unit ? <span style={{ color: '#8494AC', fontWeight: 500 }}> ({r.unit})</span> : null}
           <span style={{ marginLeft: '6px', fontSize: '11px', fontWeight: 500, color: '#9AA8BE' }}>{r.req}</span>
         </span>
-        <span style={{ fontSize: '11px', fontWeight: 600, color: r.badge.color, background: r.badge.bg, borderRadius: '999px', padding: '3px 9px', whiteSpace: 'nowrap' }}>{r.badge.text}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '24px', padding: '0 10px 0 8px', borderRadius: '999px', background: '#fff', boxShadow: '0 1px 3px rgba(11,27,51,.12), 0 0 0 1px rgba(16,32,64,.06)', fontSize: '11px', fontWeight: 600, color: r.badge.color, whiteSpace: 'nowrap', flex: 'none' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '999px', background: r.badge.color }}></span>{r.badge.text}
+        </span>
       </div>
 
       {r.showInput ? (
@@ -69,48 +71,58 @@ export default function PartnerAssignedDetail(v) {
     partnerDocs, partnerDocsEmpty, partnerFieldRows, partnerFieldFilledCount, partnerFieldTotalCount,
     partnerDocFromCount, partnerDirty, partnerUploadBusy, partnerSaveDraft
   } = v;
+
+  const fieldsCard = (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 600 }}><span style={stepNo}>{partnerDocsEmpty ? 1 : 2}</span>{partnerDocsEmpty ? '담당 항목 입력' : '추출 결과 확인'}</span>
+          {!partnerDocsEmpty ? <span style={{ fontSize: '12.5px', color: '#6B7A93', paddingLeft: '32px' }}>문서에서 추출된 값을 확인하고 제출하세요. 틀린 값은 수정할 수 있습니다.</span> : null}
+        </div>
+        <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#44546F', whiteSpace: 'nowrap', paddingTop: '3px' }}>{partnerFieldFilledCount} / {partnerFieldTotalCount}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+        {(partnerFieldRows || []).map(r => <FieldRow key={r.key} r={r} />)}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', paddingTop: '16px', borderTop: '1px solid rgba(16,32,64,.07)', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '12.5px', color: '#8494AC' }}>
+          {partnerFieldFilledCount} / {partnerFieldTotalCount}개 입력 완료{partnerDocFromCount ? ` · 문서에서 ${partnerDocFromCount}개 추출` : ''}{partnerDirty ? ' · 제출 안 한 변경 있음' : ''}
+        </span>
+        <button onClick={partnerSaveDraft} disabled={partnerUploadBusy} style={{ height: '48px', padding: '0 26px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)', opacity: partnerUploadBusy ? 0.6 : 1 }}>제출</button>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <button onClick={partnerAssignedBack} style={{ alignSelf: 'flex-start', border: '0', background: 'transparent', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>← 목록으로</button>
       <span style={{ fontSize: '18px', fontWeight: 700 }}>{partnerAssignedSelectedLabel}</span>
 
-      {!partnerDocsEmpty ? (
-        <div style={card}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 600 }}><span style={stepNo}>1</span>담당 문서 제출</span>
-            <span style={{ fontSize: '12.5px', color: '#6B7A93', paddingLeft: '32px' }}>문서를 올리면 아래 항목이 자동으로 채워집니다. 문서에서 찾지 못한 항목만 직접 입력하면 됩니다.</span>
+      {partnerDocsEmpty ? fieldsCard : (
+        // 제조사 DPP 입력 화면과 같은 배치 - 왼쪽 문서, 오른쪽 데이터(2026-10-06 강 요청).
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) minmax(0, 1.55fr)', gap: '16px', alignItems: 'start' }}>
+          <div style={{ ...card, position: 'sticky', top: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 600 }}><span style={stepNo}>1</span>담당 문서 제출</span>
+              <span style={{ fontSize: '12.5px', color: '#6B7A93', paddingLeft: '32px', lineHeight: 1.55 }}>문서를 올리면 오른쪽 항목이 자동으로 채워집니다.</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {(partnerDocs || []).map(d => (
+                <div key={d.key} style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 16px', borderRadius: '13px', background: '#F7F9FD', border: d.busy ? '1.5px solid rgba(0,69,169,.40)' : '1.5px solid rgba(16,32,64,.07)' }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: '5px', minWidth: 0 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', fontWeight: 600, flexWrap: 'wrap' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: 500, color: '#8494AC' }}>{d.req}</span></span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#8494AC', overflowWrap: 'anywhere' }}><span style={{ ...d.dot, flex: 'none' }}></span>{d.statusLabel}{d.fileName && !d.busy ? (' · ' + d.fileName) : ''}</span>
+                    {d.uploaded && d.extractedLabel && !d.busy ? <span style={{ fontSize: '11.5px', fontWeight: 600, color: '#44546F' }}>{d.extractedLabel}</span> : null}
+                  </span>
+                  <label htmlFor={d.inputId} style={{ alignSelf: 'stretch', height: '38px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: d.uploaded ? '1px solid rgba(0,69,169,.24)' : '0', borderRadius: '10px', background: d.uploaded ? '#fff' : '#0045A9', color: d.uploaded ? '#0045A9' : '#fff', fontSize: '12.5px', fontWeight: 600, cursor: partnerUploadBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: partnerUploadBusy && !d.busy ? 0.5 : 1 }}>{d.buttonLabel}</label>
+                  <input id={d.inputId} type="file" accept="application/pdf,.pdf" disabled={partnerUploadBusy} onChange={d.onFileChange} style={{ display: 'none' }} />
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {(partnerDocs || []).map(d => (
-              <div key={d.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '14px', padding: '14px 16px', borderRadius: '13px', background: '#F7F9FD', border: d.busy ? '1px solid rgba(0,69,169,.35)' : '1px solid rgba(16,32,64,.07)' }}>
-                <span style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13.5px', fontWeight: 600 }}>{d.label}<span style={{ fontSize: '11px', fontWeight: 500, color: '#8494AC' }}>{d.req}</span></span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#8494AC' }}><span style={d.dot}></span>{d.statusLabel}{d.fileName && !d.busy ? (' · ' + d.fileName) : ''}{d.uploaded && d.extractedLabel && !d.busy ? (' · ' + d.extractedLabel) : ''}</span>
-                  {d.fills ? <span style={{ fontSize: '11px', color: '#9AA8BE' }}>채워지는 항목: {d.fills}</span> : null}
-                </span>
-                <label htmlFor={d.inputId} style={{ height: '38px', padding: '0 16px', display: 'inline-flex', alignItems: 'center', border: d.uploaded ? '1px solid rgba(0,69,169,.24)' : '0', borderRadius: '10px', background: d.uploaded ? '#fff' : '#0045A9', color: d.uploaded ? '#0045A9' : '#fff', fontSize: '12.5px', fontWeight: 600, cursor: partnerUploadBusy ? 'default' : 'pointer', whiteSpace: 'nowrap', opacity: partnerUploadBusy && !d.busy ? 0.5 : 1, flex: 'none' }}>{d.buttonLabel}</label>
-                <input id={d.inputId} type="file" accept="application/pdf,.pdf" disabled={partnerUploadBusy} onChange={d.onFileChange} style={{ display: 'none' }} />
-              </div>
-            ))}
-          </div>
+          {fieldsCard}
         </div>
-      ) : null}
-
-      <div style={card}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 600 }}><span style={stepNo}>{partnerDocsEmpty ? 1 : 2}</span>{partnerDocsEmpty ? '담당 항목 입력' : '추출 결과 확인'}</span>
-          {!partnerDocsEmpty ? <span style={{ fontSize: '12.5px', color: '#6B7A93', paddingLeft: '32px' }}>문서에서 추출된 값이 맞는지 확인하고 제출하세요. 값이 틀리면 수정할 수 있습니다.</span> : null}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
-          {(partnerFieldRows || []).map(r => <FieldRow key={r.key} r={r} />)}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', paddingTop: '16px', borderTop: '1px solid rgba(16,32,64,.07)', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12.5px', color: '#8494AC' }}>
-            {partnerFieldFilledCount} / {partnerFieldTotalCount}개 입력 완료{partnerDocFromCount ? ` · 문서에서 ${partnerDocFromCount}개 추출` : ''}{partnerDirty ? ' · 제출 안 한 변경 있음' : ''}
-          </span>
-          <button onClick={partnerSaveDraft} disabled={partnerUploadBusy} style={{ height: '48px', padding: '0 24px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)', opacity: partnerUploadBusy ? 0.6 : 1 }}>제출</button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
