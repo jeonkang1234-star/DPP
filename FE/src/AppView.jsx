@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import AppHeader from './components/AppHeader.jsx';
 import DropdownSelect from './components/DropdownSelect.jsx';
 import MyPage from './screens/MyPage.jsx';
+import PartnerAssignedDetail from './screens/PartnerAssignedDetail.jsx';
 import './hover.css';
 import loginSlidePassport from './assets/icons/login-slide-passport.png';
 import loginSlideDocextract from './assets/icons/login-slide-docextract.png';
@@ -131,7 +132,6 @@ export default function AppView(v) {
     fieldSections,
     documentSlots,
     documentSlotsEmpty,
-    partnerDocumentSlots,
     formTitle,
     dppTitle, onDppTitle, dppTitlePlaceholder,
     productPhotoSrc, productPhotoInputId, onProductPhotoChange, removeProductPhoto,
@@ -180,10 +180,6 @@ export default function AppView(v) {
     partnerAssignedHasSelection,
     partnerAssignedBack,
     partnerAssignedSelectedLabel,
-    partnerFields,
-    partnerFieldFilledCount,
-    partnerFieldTotalCount,
-    partnerSaveDraft,
     scPartnerAssigned,
     isMaker,
     inquiryCategories, inqOpen, inqCategory, inqMessages, inqDraft, inqSending, inqError,
@@ -1695,43 +1691,7 @@ export default function AppView(v) {
           </div>
 
           {partnerAssignedHasSelection ? (<>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <button onClick={partnerAssignedBack} style={{ alignSelf: 'flex-start', border: '0', background: 'transparent', color: '#0045A9', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>← 목록으로</button>
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              <span style={{ fontSize: '15px', fontWeight: '600' }}>{partnerAssignedSelectedLabel} · 담당 항목 입력</span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                {(partnerFields || []).map((f, $index) => (<React.Fragment key={$index}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>{f.label}</span>
-                  <input placeholder={f.ph} value={f.value} onChange={f.onChange} style={{ height: '48px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', background: '#fff' }} />
-                  <span style={{ fontSize: '11px', color: '#8494AC' }}>{f.hint}</span>
-                </label>
-                </React.Fragment>))}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '16px', borderTop: '1px solid rgba(16,32,64,.07)' }}>
-                <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{partnerFieldFilledCount} / {partnerFieldTotalCount}개 입력 완료</span>
-                <button onClick={partnerSaveDraft} style={{ height: '48px', padding: '0 24px', border: '0', borderRadius: '13px', background: '#0045A9', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 18px rgba(0,69,169,.24)' }}>제출</button>
-              </div>
-            </div>
-            {(partnerDocumentSlots || []).length > 0 ? (<>
-            <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', boxShadow: '0 1px 2px rgba(16,32,64,.05)', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <span style={{ fontSize: '15px', fontWeight: '600' }}>담당 문서</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {(partnerDocumentSlots || []).map((d, $index) => (<React.Fragment key={$index}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '13px', background: '#F7F9FD', border: '1px solid rgba(16,32,64,.07)' }}>
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: '600' }}>{d.label}<span style={{ fontSize: '11px', fontWeight: '500', color: '#8494AC' }}>{d.req}</span></span>
-                    {d.labelEn ? (<span style={{ fontSize: '11px', color: '#8494AC' }}>{d.labelEn}</span>) : null}
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: '#8494AC' }}><span style={d.dot}></span>{d.statusLabel}{d.fileName ? (' · ' + d.fileName) : ''}</span>
-                  </span>
-                  <label htmlFor={d.inputId} style={{ height: '36px', padding: '0 14px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '10px', background: '#fff', color: '#0045A9', fontSize: '12.5px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>업로드</label>
-                  <input id={d.inputId} type="file" onChange={d.onFileChange} style={{ display: 'none' }} />
-                </div>
-                </React.Fragment>))}
-              </div>
-            </div>
-            </>) : null}
-          </div>
+          <PartnerAssignedDetail {...v} />
           </>) : (<>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {participationsEmpty ? (<>

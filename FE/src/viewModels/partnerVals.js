@@ -11,6 +11,31 @@
  *
  * @param ctx shared context from useAppLogic
  */
+/**
+ * 담당 항목 -> 그 값을 담고 있는 담당 문서 유형. 화면에서 "어느 문서를 올리면 채워지는지"를
+ * 안내하는 용도다(실제 채움은 서버 파서가 한다 - parser/spec_fields.py + V39).
+ * 지금 협력사 담당 문서가 있는 건 RAW_SUPPLIER(철강)뿐이라 그 둘만 적는다. 매칭이 없으면
+ * 그 항목은 문서와 무관한 직접 입력 항목으로 그린다.
+ */
+function FIELD_DOC_TYPE(code) {
+  if (/^(SOC_|SVHC_|ROHS_|HEXAVALENT_)/.test(code)) return 'SOC_SDS';
+  if (/^(RECYCLED_SCRAP_RATE|SCRAP_SOURCE)$/.test(code)) return 'SCRAP_PROOF';
+  return null;
+}
+
+/** requirement_field.unit은 V4 시절 코드값(PERCENT 등)이 섞여 있다 - 화면엔 기호로. */
+function unitLabel(unit) {
+  if (!unit) return '';
+  return { PERCENT: '%', KGCO2E_T: 'kgCO₂e/t', TON: 't', KG: 'kg' }[unit] || unit;
+}
+
+function displayValue(kind, value, unit) {
+  if (!value) return '';
+  if (kind === 'boolean') return value === 'true' ? '예' : value === 'false' ? '아니오' : value;
+  if (kind === 'number' && unit) return value + ' ' + unit;
+  return value;
+}
+
 export function partnerVals(ctx) {
   const { state, setState } = ctx;
   const isPartner = state.role === 'partner';
@@ -107,49 +132,150 @@ export function partnerVals(ctx) {
       const found = (ctx.participationsData || []).find(p => p.dppId === state.partnerAssignedDppId);
       return found ? found.dppLabel : '';
     })(),
-    partnerFields: ff
-      ? ff.fields.map(f => ({
-          key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
-          req: f.required ? '필수' : '선택', ph: f.helpText || '', value: ffInputs[f.fieldCode] || '',
-          hint: f.helpText || '',
-          onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
-        }))
-      : [],
-    partnerFieldFilledCount: ff ? ff.fields.filter(f => !!ffInputs[f.fieldCode]).length : 0,
-    partnerFieldTotalCount: ff ? ff.fields.length : 0,
-    // 참여 협력사 담당 문서(예: RAW_SUPPLIER의 스크랩 매입증빙) - 백엔드가 자기 role_code
-    // 담당 문서만 내려주므로 FE는 필터링 없이 그대로 보여준다.
-    partnerDocumentSlots: df
-      ? df.documents.map(d => ({
-          key: d.fieldCode, label: d.labelKo, labelEn: d.labelEn || '', req: d.required ? '필수' : '선택',
-          fileName: d.fileName || '',
-          statusLabel: DOC_STATUS_LABEL[d.status] || d.status,
-          dot: ctx.pillDot(DOC_STATUS_COLOR[d.status] || '#9AA8BE'),
-          inputId: 'partner-doc-upload-' + d.fieldCode,
-          onFileChange: async (e) => {
-            const file = e.target.files && e.target.files[0];
-            e.target.value = '';
-            if (!file || !state.partnerAssignedDppId) return;
-            try {
-              const result = await ctx.uploadDocument(state.partnerAssignedDppId, d.docTypeCode, file);
-              ctx.setDocumentFormData(result);
-              ctx.say(d.labelKo + ' 업로드했습니다.');
-            } catch (err) {
-              ctx.say(err.message || '문서 업로드에 실패했습니다.');
-            }
-          }
-        }))
-      : [],
-    partnerSaveDraft: async () => {
-      if (!ff || !ff.dppId) return;
-      try {
-        const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
-        ctx.setFieldFormData(result);
-        ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        ctx.say('제출했습니다.');
-      } catch (e) {
-        ctx.say(e.message || '저장에 실패했습니다.');
-      }
-    }
+    // ── 담당 항목 상세(2026-10-06 개편) ───────────────────────────────────
+    // 협력사가 O/X를 손으로 고르는 게 아니라, 담당 문서(SDS·스크랩 매입증빙 등)를 올리면
+    // 서버가 파싱해서 항목을 채우고 협력사는 결과를 확인만 한다. 문서에서 못 찾은 항목만
+    // 직접 입력한다. 화면 순서도 "1 문서 제출 → 2 추출 결과 확인"으로 바꿨다.
+    ...partnerDetail()
   };
+
+  function partnerDetail() {
+    const docs = df ? (df.documents || []) : [];
+    const fields = ff ? (ff.fields || []) : [];
+    const uploading = state.partnerUploading || null;
+    const editing = state.partnerEditing || {};
+    const docByType = Object.fromEntries(docs.map(d => [d.docTypeCode, d]));
+    const serverValue = Object.fromEntries(fields.map(f => [f.fieldCode, f.value || '']));
+
+    const docTypeFor = code => {
+      const t = FIELD_DOC_TYPE(code);
+      return t && docByType[t] ? t : null;
+    };
+    const fieldsOfDoc = docType => fields.filter(f => docTypeFor(f.fieldCode) === docType);
+
+    const docRows = docs.map(d => {
+      const busy = uploading === d.docTypeCode;
+      const covered = fieldsOfDoc(d.docTypeCode);
+      const extracted = covered.filter(f => f.fromDocument && f.value).length;
+      return {
+        key: d.fieldCode, docTypeCode: d.docTypeCode, label: d.labelKo, labelEn: d.labelEn || '',
+        req: d.required ? '필수' : '선택',
+        uploaded: d.status && d.status !== 'NOT_UPLOADED',
+        fileName: d.fileName || '',
+        statusLabel: busy ? '문서 분석 중…' : (DOC_STATUS_LABEL[d.status] || d.status),
+        dot: ctx.pillDot(busy ? '#0045A9' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
+        busy,
+        fills: covered.map(f => f.labelKo).join(', '),
+        extractedLabel: covered.length ? ('자동 입력 ' + extracted + ' / ' + covered.length) : '',
+        inputId: 'partner-doc-upload-' + d.fieldCode,
+        buttonLabel: busy ? '분석 중' : (d.status && d.status !== 'NOT_UPLOADED' ? '다시 올리기' : '업로드'),
+        onFileChange: async (e) => {
+          const file = e.target.files && e.target.files[0];
+          e.target.value = '';
+          if (!file || !state.partnerAssignedDppId || uploading) return;
+          const dppId = state.partnerAssignedDppId;
+          const prevInputs = { ...ffInputs };
+          setState({ partnerUploading: d.docTypeCode });
+          try {
+            const result = await ctx.uploadDocument(dppId, d.docTypeCode, file);
+            ctx.setDocumentFormData(result);
+            const res = await ctx.refreshFieldForm(dppId);
+            // refreshFieldForm은 입력값을 서버 값으로 덮는다 - 업로드 전에 사람이 고쳐 놓고
+            // 아직 제출 안 한 값은 살려 둔다.
+            ctx.setFieldFormInputs(cur => {
+              const next = { ...cur };
+              Object.keys(prevInputs).forEach(c => {
+                if ((prevInputs[c] || '') !== (serverValue[c] || '')) next[c] = prevInputs[c];
+              });
+              return next;
+            });
+            const after = res ? (res.fields || []) : [];
+            const newly = after.filter(f => f.value && !serverValue[f.fieldCode]).length;
+            ctx.say(newly > 0
+              ? d.labelKo + ' 분석 완료 · ' + newly + '개 항목을 문서에서 채웠습니다. 아래에서 확인해 주세요.'
+              : d.labelKo + ' 업로드 완료 · 문서에서 새로 찾은 항목이 없습니다. 비어 있는 항목은 직접 입력해 주세요.');
+          } catch (err) {
+            ctx.say(err.message || '문서 업로드에 실패했습니다.');
+          } finally {
+            setState({ partnerUploading: null });
+          }
+        }
+      };
+    });
+
+    const fieldRows = fields.map(f => {
+      const code = f.fieldCode;
+      const kind = f.dataType === 'BOOLEAN' ? 'boolean' : f.dataType === 'NUMBER' ? 'number' : 'text';
+      const input = ffInputs[code] != null ? ffInputs[code] : (f.value || '');
+      const saved = f.value || '';
+      const changed = input !== saved;
+      const docType = docTypeFor(code);
+      const doc = docType ? docByType[docType] : null;
+      const docUploaded = !!(doc && doc.status && doc.status !== 'NOT_UPLOADED');
+      const isEditing = !!editing[code];
+      // 상태: doc(문서에서 추출) / manual(직접 입력) / edited(고쳤지만 미제출) / waiting(문서 대기) / missing(문서에 없음) / empty
+      let status;
+      if (changed && input) status = 'edited';
+      else if (input && f.fromDocument) status = 'doc';
+      else if (input) status = 'manual';
+      else if (doc && !docUploaded) status = 'waiting';
+      else if (doc && docUploaded) status = 'missing';
+      else status = 'empty';
+      const badge = {
+        doc: { text: '문서에서 추출', color: '#0E7A3D', bg: 'rgba(18,161,80,.10)' },
+        manual: { text: '직접 입력', color: '#44546F', bg: '#EEF2F8' },
+        edited: { text: '수정됨 · 제출 전', color: '#9A6700', bg: 'rgba(227,160,8,.14)' },
+        waiting: { text: '문서 대기', color: '#6B7A93', bg: '#F2F6FC' },
+        missing: { text: '문서에서 찾지 못함', color: '#B42318', bg: 'rgba(224,59,59,.10)' },
+        empty: { text: '입력 필요', color: '#6B7A93', bg: '#F2F6FC' }
+      }[status];
+      const showInput = isEditing || status === 'missing' || status === 'empty';
+      const setValue = v => ctx.setFieldFormInputs(prev => ({ ...prev, [code]: v }));
+      return {
+        key: code, label: f.labelKo, unit: unitLabel(f.unit), req: f.required ? '필수' : '선택', kind,
+        status, badge, showInput,
+        display: displayValue(kind, input, unitLabel(f.unit)),
+        hint: status === 'waiting' ? (doc.labelKo + '를 올리면 자동으로 채워집니다')
+          : status === 'missing' ? (doc.labelKo + '에 이 항목이 없습니다. 직접 입력해 주세요.')
+          : (status === 'empty' ? (f.helpText || '') : ''),
+        value: input,
+        boolYes: input === 'true', boolNo: input === 'false',
+        setYes: () => setValue('true'), setNo: () => setValue('false'),
+        onChange: e => setValue(e.target.value),
+        canEdit: !showInput,
+        editLabel: status === 'waiting' ? '직접 입력' : '수정',
+        startEdit: () => setState(s => ({ partnerEditing: { ...(s.partnerEditing || {}), [code]: true } })),
+        cancelEdit: () => {
+          setValue(saved);
+          setState(s => { const n = { ...(s.partnerEditing || {}) }; delete n[code]; return { partnerEditing: n }; });
+        },
+        canCancel: isEditing
+      };
+    });
+
+    const filled = fieldRows.filter(r => !!r.value).length;
+    const dirty = fieldRows.some(r => r.status === 'edited') || fieldRows.some(r => r.value && r.value !== (serverValue[r.key] || ''));
+    return {
+      partnerDocs: docRows,
+      partnerDocsEmpty: docRows.length === 0,
+      partnerFieldRows: fieldRows,
+      partnerFieldFilledCount: filled,
+      partnerFieldTotalCount: fieldRows.length,
+      partnerDocFromCount: fieldRows.filter(r => r.status === 'doc').length,
+      partnerDirty: dirty,
+      partnerUploadBusy: !!uploading,
+      partnerSaveDraft: async () => {
+        if (!ff || !ff.dppId) return;
+        try {
+          const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
+          ctx.setFieldFormData(result);
+          ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(x => [x.fieldCode, x.value || ''])));
+          setState({ partnerEditing: {} });
+          ctx.say('제출했습니다.');
+        } catch (e) {
+          ctx.say(e.message || '저장에 실패했습니다.');
+        }
+      }
+    };
+  }
 }
