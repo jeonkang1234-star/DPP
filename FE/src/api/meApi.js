@@ -164,9 +164,11 @@ export function fetchFieldForm(dppId, domain) {
  * 서버가 기존 이름을 유지한다 - 이름 칸을 건드리지 않은 저장이 이름을 지우면 안 된다.
  * 빈 문자열을 보내면 이름을 지운다.
  */
-export function saveFieldFormDraft(dppId, domain, values, displayName) {
+export function saveFieldFormDraft(dppId, domain, values, displayName, passportLevel) {
   const body = { dppId: dppId || null, domain: domain || 'STEEL', values };
   if (displayName !== undefined) body.displayName = displayName;
+  // 발급 단위 MODEL/BATCH/ITEM(2026-10-07). 안 보내면 서버가 기존 값을 그대로 둔다.
+  if (passportLevel) body.passportLevel = passportLevel;
   return authedFetch('/me/field-form/draft', {
     method: 'POST',
     body: JSON.stringify(body),

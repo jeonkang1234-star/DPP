@@ -66,7 +66,8 @@ public class PublicPassportService {
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ISO_LOCAL_DATE;
 
     private static final PublicPassportResponse NOT_ISSUED =
-            new PublicPassportResponse(false, null, null, null, null, List.of(), 0, 0, "PUBLIC", "일반 공개");
+            new PublicPassportResponse(false, null, null, null, null, List.of(), 0, 0, "PUBLIC", "일반 공개",
+                    null, null, null);
 
     /** disclosure_scope가 비어 있는 행(구 시드)은 공개로 본다 - V20이 DEFAULT 'PUBLIC'을 준다. */
     private static final String PUBLIC = "PUBLIC";
@@ -207,7 +208,10 @@ public class PublicPassportService {
                 restricted,
                 tradeSecret,
                 viewerRole,
-                viewerLabel(viewerRole)
+                viewerLabel(viewerRole),
+                dpp.getPassportLevel(),
+                PassportLevel.label(dpp.getPassportLevel()),
+                PassportLevel.keyText(dpp.getPassportLevel(), dpp.getDomain(), values)
         );
     }
 

@@ -43,6 +43,8 @@ public record FieldFormResponse(
         /** 문서 파싱값과 어긋난 입력값(status=MISMATCH 포함 전체 비교 이력). */
         List<CrossCheckDto> crossChecks,
         /** 생애주기 단계별 진행 - 그 단계 귀속 필수 항목이 다 차면 그 단계가 끝난 것. */
-        List<LifecycleStageDto> lifecycle
+        List<LifecycleStageDto> lifecycle,
+        /** 발급 단위 MODEL / BATCH / ITEM (2026-10-07, V40). 새 폼이면 도메인 기본값. */
+        String passportLevel
 ) {
 }

@@ -104,6 +104,8 @@ export default function PublicPassport() {
               <div style={{ display: 'flex', gap: '16px', fontSize: '12.5px', color: '#6B7A93', paddingTop: '4px', borderTop: '1px solid rgba(16,32,64,.06)', marginTop: '6px', flexWrap: 'wrap' }}>
                 <span>도메인 {state.data.domain}</span>
                 <span>발급일 {state.data.issuedAtDate}</span>
+                {/* 발급 단위(ESPR 제9조 모델/배치/개별, 2026-10-07) - 이 여권이 무엇을 대표하는지. */}
+                {state.data.passportLevelLabel ? (<span>발급 단위 <b style={{ color: '#0045A9' }}>{state.data.passportLevelLabel}</b>{state.data.passportUnitKey ? ' · ' + state.data.passportUnitKey : ''}</span>) : null}
                 {/* 같은 QR이라도 로그인한 자격에 따라 보이는 항목이 다르다(2026-08-21).
                     지금 무슨 자격으로 보고 있는지 밝혀야 "왜 항목 수가 다르지?"가 안 생긴다. */}
                 {state.data.viewerLabel ? (<span>열람 자격 {state.data.viewerLabel}</span>) : null}

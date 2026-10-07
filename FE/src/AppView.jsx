@@ -39,7 +39,6 @@ export default function AppView(v) {
     approvals,
     auditLog,
     backToScans,
-    batchBtn,
     cCeFail,
     cCeNote,
     cCeOk,
@@ -191,8 +190,11 @@ export default function AppView(v) {
     adminInqListEmpty, adminInqRows, adminInqThreadTitle, adminInqThreadMessages,
     adminInqSearchQuery, setAdminInqSearchQuery, adminInqStatusTabs, adminInqDomainTabs, adminInqFilteredEmpty,
     isApp,
-    isBatch,
-    batchIssueEnabled,
+    passportLevelShown,
+    passportLevelLocked,
+    passportLevelOptions,
+    passportLevelHint,
+    passportLevelHintWarn,
     isLogin,
     isSignup,
     issueDpp,
@@ -414,14 +416,11 @@ export default function AppView(v) {
     catalogBrandRows, catalogProductRows, catalogSearchNow, catalogSummary, catalogLoading, catalogEmpty, catalogHasMore, catalogMoreLabel, loadMoreCatalog,
     searchRegistry,
     sendInvite,
-    setBatch,
     setCompany,
     setPersonal,
-    setSingle,
     setSuCompany,
     setSuPersonal,
     showTabs,
-    singleBtn,
     snsLogin,
     suBizRegCertName,
     suBizRegNo,
@@ -1199,10 +1198,17 @@ export default function AppView(v) {
               </>) : null}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {batchIssueEnabled ? (<>
-              <div style={{ display: 'flex', gap: '6px', padding: '5px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '14px' }}>
-                <button onClick={setSingle} style={singleBtn}>단일 발급</button>
-                <button onClick={setBatch} style={batchBtn}>배치 대량 발급</button>
+              {/* 발급 단위(2026-10-07) - ESPR 제9조 모델/배치/개별. 예전 "단일/배치 대량 발급" 토글 자리. */}
+              {passportLevelShown ? (<>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 5px 5px 12px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '14px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#6B7A93', whiteSpace: 'nowrap' }}>발급 단위</span>
+                  {(passportLevelOptions || []).map((o) => (
+                    <button key={o.key} type="button" title={o.tip} onClick={o.onClick} disabled={passportLevelLocked}
+                      style={{ ...o.style, height: '34px', padding: '0 14px', fontSize: '13px', cursor: passportLevelLocked ? 'default' : 'pointer', opacity: passportLevelLocked && o.style.background !== '#0045A9' ? 0.55 : 1 }}>{o.label}</button>
+                  ))}
+                </div>
+                {passportLevelHint ? (<span style={{ fontSize: '11.5px', fontWeight: '600', color: passportLevelHintWarn ? '#C22B2B' : '#6B7A93' }}>{passportLevelHint}</span>) : null}
               </div>
               </>) : null}
               <button onClick={toggleDppTitle} style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '46px', padding: '0 16px', border: '1px solid ' + (dppTitleOpen ? '#0045A9' : 'rgba(16,32,64,.10)'), borderRadius: '14px', background: dppTitleOpen ? 'rgba(0,69,169,.06)' : '#fff', color: dppTitleOpen ? '#0045A9' : '#44546F', fontSize: '13.5px', fontWeight: '600', cursor: 'pointer' }}>
@@ -1227,17 +1233,6 @@ export default function AppView(v) {
             </span>
             <input value={dppTitle} onChange={onDppTitle} placeholder={dppTitlePlaceholder} maxLength={120}
               style={{ height: '48px', padding: '0 14px', border: '1.5px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', width: '100%', boxSizing: 'border-box' }} />
-          </div>
-          </>) : null}
-
-          {isBatch ? (<>
-          <div style={{ background: '#fff', border: '1px solid rgba(16,32,64,.07)', borderRadius: '18px', padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: '13px' }}>
-            <span style={{ fontSize: '14px', fontWeight: '600' }}>배치 발급 설정</span>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>배치 번호</span><input defaultValue="B-2607-04" style={{ height: '46px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>발급 수량</span><input defaultValue="240" style={{ height: '46px', padding: '0 14px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14px', fontFamily: '\'JetBrains Mono\',monospace' }} /></label>
-            </div>
-            <div style={{ padding: '13px 14px', borderRadius: '12px', background: 'rgba(227,160,8,.10)', fontSize: '12px', lineHeight: '1.6', color: '#96660A' }}>동일 Heat/Lot 단위로 묶인 제품에만 배치 발급이 허용됩니다.</div>
           </div>
           </>) : null}
 
