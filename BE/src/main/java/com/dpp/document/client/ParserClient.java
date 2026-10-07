@@ -38,10 +38,12 @@ public class ParserClient {
      * 파서의 문서 분류 모델(parser/doc_classifier.py, POST /classify)로 확인한다(2026-10-07).
      *
      * 지금까지 문서 유형은 "어느 칸에 올렸는가"로만 정해졌고 내용은 아무도 보지 않았다 - 일반
-     * 문서 칸에는 아무 PDF나 올려도 '제출 완료'가 됐다. 이제 모델이 다른 문서라고 확신할 때
-     * (verdict=MISMATCH)만 422로 반려한다. 애매하거나(UNSURE) 모델이 모르는 칸이거나
-     * (UNKNOWN_TYPE) 파서가 죽어 있으면 그대로 통과시킨다 - 분류기 때문에 맞는 문서가 막히는
-     * 일은 없어야 한다. app.document.classify-enabled=false로 통째로 끌 수 있다.
+     * 문서 칸에는 아무 PDF나 올려도 '제출 완료'가 됐다. 이제 모델이 "이 칸의 문서가 맞다"고 할
+     * 때만 통과시킨다(verdict=MATCH). 다른 서류든, DPP 서류가 아닌 엉뚱한 파일이든, 글자가 없는
+     * 파일이든 MISMATCH면 전부 422로 반려하고, 사용자에게는 "파일을 잘못 올렸습니다."만
+     * 보여준다(2026-10-07 강 요청 - 무엇으로 판별됐는지는 로그에만 남긴다).
+     * 모델이 모르는 칸(UNKNOWN_TYPE)이거나 파서가 죽어 있으면 판단하지 않고 통과시킨다.
+     * app.document.classify-enabled=false로 통째로 끌 수 있다.
      */
     @SuppressWarnings("unchecked")
     public void requireDocumentType(MultipartFile file, String expectedDocType) {
@@ -73,14 +75,9 @@ public class ParserClient {
         if (result == null || !"MISMATCH".equals(result.get("verdict"))) {
             return;
         }
-        Object expectedLabel = result.get("expected_label");
-        Object predictedLabel = result.get("predicted_label");
-        Object confidence = result.get("confidence");
-        String pct = confidence instanceof Number n ? " (확신도 " + Math.round(n.doubleValue() * 100) + "%)" : "";
-        log.info("문서 유형 불일치로 반려: expected={} predicted={}{}", expectedDocType, result.get("predicted_doc_type"), pct);
-        throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
-                "올린 파일이 '" + expectedLabel + "'이(가) 아니라 '" + predictedLabel + "'(으)로 판별됐습니다"
-                        + pct + ". 이 칸에 맞는 문서를 올려 주세요.");
+        log.info("문서 유형 불일치로 반려: expected={} predicted={} confidence={} reason={}",
+                expectedDocType, result.get("predicted_doc_type"), result.get("confidence"), result.get("reason"));
+        throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "파일을 잘못 올렸습니다.");
     }
 
     public Map<String, Object> parse(MultipartFile file, String registryCode) throws IOException {

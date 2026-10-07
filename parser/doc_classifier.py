@@ -102,10 +102,13 @@ class DocClassifier:
         return self.labels.get(doc_type, doc_type)
 
 
-# 판정 기준. 모델이 다른 유형이라고 '확신'할 때만 반려한다 - 애매하면 통과시킨다.
-# 틀린 문서를 한 번 통과시키는 것보다 맞는 문서를 반려하는 쪽이 사용자에게 훨씬 나쁘다.
-MISMATCH_MIN_TOP_PROB = float(os.environ.get("DOC_CLASSIFIER_MISMATCH_MIN_PROB", "0.6"))
-MISMATCH_MAX_EXPECTED_PROB = float(os.environ.get("DOC_CLASSIFIER_EXPECTED_MAX_PROB", "0.1"))
+# 판정 기준(2026-10-07 강 요청으로 강화): "이 칸의 문서라고 확신할 때만 통과"한다.
+# 처음엔 반대로 "다른 유형이라고 확신할 때만 반려"했는데, 그러면 이력서·청구서처럼 아예 상관없는
+# 파일은 어느 유형으로도 확신이 안 나와서 그대로 통과됐다. 지금은
+#   1순위가 올린 칸의 유형이고 그 확률이 ACCEPT_MIN_PROB 이상 → MATCH(통과)
+#   그 외(다른 서류·DPP 서류가 아닌 문서·애매함·글자가 거의 없음) → MISMATCH(반려)
+# 학습한 문서는 맞는 칸이면 확률이 0.9 이상으로 나온다(목 문서 전부 확인).
+ACCEPT_MIN_PROB = float(os.environ.get("DOC_CLASSIFIER_ACCEPT_MIN_PROB", "0.4"))
 MIN_FEATURES = 15
 
 _model = None
@@ -122,11 +125,11 @@ def check(text: str, expected_doc_type: str = None) -> dict:
     """업로드한 칸(expected_doc_type)과 문서 내용이 맞는지 판정한다.
 
     verdict:
-      MATCH        - 1순위가 기대 유형
-      MISMATCH     - 다른 유형으로 확신(1순위 확률 ≥ 0.6, 기대 유형 확률 < 0.1) → 반려 대상
-      UNSURE       - 1순위가 다르지만 확신이 낮음 → 통과
-      UNKNOWN_TYPE - 기대 유형이 모델이 모르는 유형(학습에 없던 문서 칸) → 통과
-      NO_TEXT      - 텍스트가 거의 없어 판단 불가 → 통과
+      MATCH        - 이 칸의 문서가 맞다 → 통과
+      MISMATCH     - 아니다 → 반려. reason: OTHER_TYPE(다른 DPP 서류) / NOT_DPP_DOCUMENT(DPP
+                     서류가 아닌 문서) / LOW_CONFIDENCE(어느 쪽인지 애매) / NO_TEXT(글자가 거의 없음)
+      UNKNOWN_TYPE - 모델이 모르는 칸(학습에 없던 문서 유형) → 판단하지 않고 통과
+      PREDICT_ONLY - expected_doc_type 없이 호출(유형 예측만)
     """
     model = get_model()
     n_feats = sum(1 for tok in featurize(text) if tok in model.vocab)
@@ -136,21 +139,25 @@ def check(text: str, expected_doc_type: str = None) -> dict:
     if expected_doc_type:
         expected_p = next((p for c, p in probs if c == expected_doc_type), None)
 
-    if n_feats < MIN_FEATURES:
-        verdict = "NO_TEXT"
-    elif not expected_doc_type:
+    reason = None
+    if not expected_doc_type:
         verdict = "PREDICT_ONLY"
     elif expected_p is None:
         verdict = "UNKNOWN_TYPE"
-    elif top_type == expected_doc_type:
+    elif n_feats < MIN_FEATURES:
+        verdict, reason = "MISMATCH", "NO_TEXT"
+    elif top_type == expected_doc_type and expected_p >= ACCEPT_MIN_PROB:
         verdict = "MATCH"
-    elif top_p >= MISMATCH_MIN_TOP_PROB and expected_p < MISMATCH_MAX_EXPECTED_PROB:
-        verdict = "MISMATCH"
+    elif top_type == "OTHER":
+        verdict, reason = "MISMATCH", "NOT_DPP_DOCUMENT"
+    elif top_type != expected_doc_type:
+        verdict, reason = "MISMATCH", "OTHER_TYPE"
     else:
-        verdict = "UNSURE"
+        verdict, reason = "MISMATCH", "LOW_CONFIDENCE"
 
     return {
         "verdict": verdict,
+        "reason": reason,
         "expected_doc_type": expected_doc_type,
         "expected_label": model.label(expected_doc_type) if expected_doc_type else None,
         "expected_prob": round(expected_p, 4) if expected_p is not None else None,

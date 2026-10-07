@@ -2,8 +2,9 @@
 """문서 분류기(doc_classifier) 회귀 테스트 - 저장소에 있는 목 문서로 돈다.
 
 1) 맞는 칸에 올린 목 문서는 전부 MATCH여야 한다(맞는 문서를 반려하면 안 된다).
-2) 다른 칸에 올리면 대부분 MISMATCH로 걸러져야 한다.
-3) 실제 제철소 양식(영문 가로표) 밀시트 텍스트도 제강 성적서로 본다.
+2) 다른 칸에 올리면 전부 MISMATCH로 반려돼야 한다.
+3) DPP 서류가 아닌 엉뚱한 파일(이력서·뉴스·청구서)·글자 없는 파일도 반려돼야 한다.
+4) 실제 제철소 양식(영문 가로표) 밀시트 텍스트도 제강 성적서로 본다.
 """
 import glob
 import os
@@ -43,16 +44,31 @@ def test_right_slot_is_match():
 @pytest.mark.skipif(not DOCS, reason="목 문서 없음")
 def test_wrong_slot_is_mismatch():
     model = doc_classifier.get_model()
-    total = caught = 0
-    for _, lab, text in DOCS:
+    passed = []
+    for path, lab, text in DOCS:
         for slot in model.classes:
-            if slot in (lab, "BIZ_REG_CERT"):
+            if slot in (lab, "BIZ_REG_CERT", "OTHER"):
                 continue
-            total += 1
-            verdict = doc_classifier.check(text, slot)["verdict"]
-            assert verdict != "MATCH"
-            caught += verdict == "MISMATCH"
-    assert caught / total > 0.95, f"{caught}/{total}"
+            if doc_classifier.check(text, slot)["verdict"] != "MISMATCH":
+                passed.append((os.path.basename(path), slot))
+    assert not passed, passed
+
+
+UNRELATED = {
+    "news": "서울시는 7일 내년도 예산안을 발표했다. 시장은 기자회견에서 복지 예산을 늘리고 교통 인프라에 "
+            "투자하겠다고 밝혔다. 야당은 재정 건전성을 우려했다. 시민단체는 환영 입장을 냈다.",
+    "resume": "이력서 성명 홍길동 학력 한국공학대학교 컴퓨터공학과 경력 인턴십 프로젝트 자기소개 저는 성실하고 "
+              "책임감 있는 사람입니다 자격증 정보처리기사 토익 900 지원동기 입사 후 포부",
+    "invoice": "INVOICE Invoice No 2026-114 Bill To ABC Corp Description Qty Unit Price Amount Consulting "
+               "services 10 100 1000 Subtotal Tax Total Due Payment terms Net 30 bank transfer",
+}
+
+
+@pytest.mark.parametrize("name", sorted(UNRELATED))
+def test_unrelated_file_is_rejected(name):
+    for slot in ("MILL_SHEET", "TECH_FILE", "SOC_SDS", "COO", "CARE_LABEL"):
+        r = doc_classifier.check(UNRELATED[name], slot)
+        assert r["verdict"] == "MISMATCH", (name, slot, r)
 
 
 REAL_STYLE_MILL = """Mill Test Certificate
@@ -79,8 +95,9 @@ def test_real_style_mill_sheet():
     assert doc_classifier.check(REAL_STYLE_MILL, "SOC_SDS")["verdict"] == "MISMATCH"
 
 
-def test_too_little_text_passes():
-    assert doc_classifier.check("hello", "MILL_SHEET")["verdict"] == "NO_TEXT"
+def test_too_little_text_is_rejected():
+    r = doc_classifier.check("hello", "MILL_SHEET")
+    assert r["verdict"] == "MISMATCH" and r["reason"] == "NO_TEXT"
 
 
 def test_unknown_slot_passes():

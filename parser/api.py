@@ -66,8 +66,9 @@ async def classify_document(
     expected_doc_type: str = Form(None),
 ):
     """업로드한 문서가 올린 칸(expected_doc_type = BE document_type 코드)에 맞는지 판별한다
-    (2026-10-07, doc_classifier.py). BE는 verdict가 MISMATCH일 때만 업로드를 반려하고,
-    그 외(MATCH/UNSURE/UNKNOWN_TYPE/NO_TEXT)는 그대로 진행한다."""
+    (2026-10-07, doc_classifier.py). BE는 verdict가 MISMATCH면 업로드를 반려한다 - 다른
+    서류든, DPP 서류가 아닌 엉뚱한 파일이든, 글자가 없는 파일이든 전부. 모델이 모르는 칸
+    (UNKNOWN_TYPE)만 판단 없이 통과한다."""
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="빈 파일입니다.")
