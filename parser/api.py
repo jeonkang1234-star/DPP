@@ -14,6 +14,7 @@ import hasher
 import biz_reg
 import spec_extractor
 import structured_text
+import doc_classifier
 
 app = FastAPI(title="DPP Document Parser", version="0.1.0")
 
@@ -57,6 +58,30 @@ def list_registry():
         }
         for e in registry.REGISTRY
     ]
+
+
+@app.post("/classify")
+async def classify_document(
+    file: UploadFile = File(...),
+    expected_doc_type: str = Form(None),
+):
+    """업로드한 문서가 올린 칸(expected_doc_type = BE document_type 코드)에 맞는지 판별한다
+    (2026-10-07, doc_classifier.py). BE는 verdict가 MISMATCH일 때만 업로드를 반려하고,
+    그 외(MATCH/UNSURE/UNKNOWN_TYPE/NO_TEXT)는 그대로 진행한다."""
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+    try:
+        doc = fitz.open(stream=content, filetype="pdf")
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"PDF를 열 수 없습니다: {exc}")
+    try:
+        text = "\n".join(page.get_text() for page in doc)
+        if not text.strip() and os.environ.get("PARSER_OCR_FALLBACK", "1") != "0":
+            text = structured_text.ocr_text(doc)
+    finally:
+        doc.close()
+    return doc_classifier.check(text, expected_doc_type)
 
 
 @app.post("/parse")

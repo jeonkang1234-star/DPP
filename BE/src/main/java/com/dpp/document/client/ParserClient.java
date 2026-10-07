@@ -1,11 +1,17 @@
 package com.dpp.document.client;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.MultipartBodyBuilder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.util.Map;
@@ -16,10 +22,65 @@ import java.util.Map;
 @Component
 public class ParserClient {
 
-    private final RestClient parserRestClient;
+    private static final Logger log = LoggerFactory.getLogger(ParserClient.class);
 
-    public ParserClient(RestClient parserRestClient) {
+    private final RestClient parserRestClient;
+    private final boolean classifyEnabled;
+
+    public ParserClient(RestClient parserRestClient,
+                        @Value("${app.document.classify-enabled:true}") boolean classifyEnabled) {
         this.parserRestClient = parserRestClient;
+        this.classifyEnabled = classifyEnabled;
+    }
+
+    /**
+     * 올린 문서가 그 업로드 칸(expectedDocType = document_type.doc_type_code)의 문서가 맞는지
+     * 파서의 문서 분류 모델(parser/doc_classifier.py, POST /classify)로 확인한다(2026-10-07).
+     *
+     * 지금까지 문서 유형은 "어느 칸에 올렸는가"로만 정해졌고 내용은 아무도 보지 않았다 - 일반
+     * 문서 칸에는 아무 PDF나 올려도 '제출 완료'가 됐다. 이제 모델이 다른 문서라고 확신할 때
+     * (verdict=MISMATCH)만 422로 반려한다. 애매하거나(UNSURE) 모델이 모르는 칸이거나
+     * (UNKNOWN_TYPE) 파서가 죽어 있으면 그대로 통과시킨다 - 분류기 때문에 맞는 문서가 막히는
+     * 일은 없어야 한다. app.document.classify-enabled=false로 통째로 끌 수 있다.
+     */
+    @SuppressWarnings("unchecked")
+    public void requireDocumentType(MultipartFile file, String expectedDocType) {
+        if (!classifyEnabled || file == null || expectedDocType == null) {
+            return;
+        }
+        Map<String, Object> result;
+        try {
+            String filename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "upload.pdf";
+            ByteArrayResource resource = new ByteArrayResource(file.getBytes()) {
+                @Override
+                public String getFilename() {
+                    return filename;
+                }
+            };
+            MultipartBodyBuilder builder = new MultipartBodyBuilder();
+            builder.part("file", resource);
+            builder.part("expected_doc_type", expectedDocType);
+            result = parserRestClient.post()
+                    .uri("/classify")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(builder.build())
+                    .retrieve()
+                    .body(Map.class);
+        } catch (RestClientException | IOException e) {
+            log.warn("문서 분류 확인 실패 - 분류 없이 진행: expected={} 원인={}", expectedDocType, e.getMessage());
+            return;
+        }
+        if (result == null || !"MISMATCH".equals(result.get("verdict"))) {
+            return;
+        }
+        Object expectedLabel = result.get("expected_label");
+        Object predictedLabel = result.get("predicted_label");
+        Object confidence = result.get("confidence");
+        String pct = confidence instanceof Number n ? " (확신도 " + Math.round(n.doubleValue() * 100) + "%)" : "";
+        log.info("문서 유형 불일치로 반려: expected={} predicted={}{}", expectedDocType, result.get("predicted_doc_type"), pct);
+        throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "올린 파일이 '" + expectedLabel + "'이(가) 아니라 '" + predictedLabel + "'(으)로 판별됐습니다"
+                        + pct + ". 이 칸에 맞는 문서를 올려 주세요.");
     }
 
     public Map<String, Object> parse(MultipartFile file, String registryCode) throws IOException {

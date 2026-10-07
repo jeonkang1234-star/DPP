@@ -23,6 +23,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 최상위에는 서비스 모듈만 있고 테스트는 tests/ 아래라 이 패턴에 안 걸린다. main.py(배치
 # CLI)가 같이 들어오지만 몇 KB짜리고, 목록 누락으로 서비스가 죽는 것보다 낫다.
 COPY *.py ./
+# 문서 분류기 가중치(doc_classifier.py가 읽는다). 학습 스크립트(training/)는 이미지에 안 넣는다.
+COPY models ./models
 
 EXPOSE 8000
 
