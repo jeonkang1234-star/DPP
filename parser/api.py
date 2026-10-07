@@ -15,6 +15,7 @@ import biz_reg
 import spec_extractor
 import structured_text
 import doc_classifier
+import mill_table
 
 app = FastAPI(title="DPP Document Parser", version="0.1.0")
 
@@ -124,6 +125,8 @@ async def parse_document(
                 parse_engine = "ocr"
         # 표 안의 '라벨 | 값'은 줄 단위 추출이 놓치므로 별도로 펼쳐 둔다(아래에서 후보로만 사용).
         table_text = "\n".join(structured_text.table_lines(doc)) if raw_text.strip() else ""
+        # 실제 제철소 양식(가로 표) 제강 성적서 - 단어 좌표로 열을 맞춰 읽는다(2026-10-07, mill_table.py).
+        mill_horizontal = mill_table.extract_from_doc(doc) if entry["code"] == "Q2_05" and parse_engine == "text" else None
     finally:
         doc.close()
 
@@ -135,6 +138,11 @@ async def parse_document(
 
     common = extractor.extract_common_fields(raw_text)
     extended = extractor.extract_extended_fields(entry["code"], raw_text, domain)
+    # 세로 양식 파서(줄 오프셋)가 화학성분을 하나도 못 읽었고 가로 표로 읽혔으면 그 결과를 쓴다.
+    if mill_horizontal and mill_horizontal.get("chemical_composition_wt_percent"):
+        current = extended.get("steel_mill_values") or {}
+        if not current.get("chemical_composition_wt_percent"):
+            extended["steel_mill_values"] = mill_horizontal
     # 표에서만 뽑히는 필드를 보충한다. 원문에서 이미 뽑힌 필드는 덮어쓰지 않고(원문 우선),
     # 표 값도 spec_extractor의 어휘/형태/타입 관문을 그대로 통과한 것만 채운다.
     if table_text and isinstance(extended.get("spec_fields"), dict):
