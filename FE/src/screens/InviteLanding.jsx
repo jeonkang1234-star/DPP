@@ -161,9 +161,6 @@ export default function InviteLanding() {
               </label>
               {loginError ? <span style={{ fontSize: 12.5, color: '#C22B2B' }}>{loginError}</span> : null}
               <button onClick={doLogin} disabled={busy} style={{ ...btn, marginTop: 4, opacity: busy ? 0.7 : 1 }}>{busy ? '로그인 중…' : '로그인하고 자료 제출하기'}</button>
-              <span style={{ fontSize: 11.5, color: '#8494AC', lineHeight: 1.55 }}>
-                이 로그인은 이 탭에만 적용됩니다. 다른 탭에 열어 둔 제조사·세관 등 다른 계정에는 영향이 없습니다.
-              </span>
             </div>
           )}
         </>)}
