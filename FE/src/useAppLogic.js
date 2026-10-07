@@ -673,7 +673,7 @@ export function useAppLogic(userProps) {
     // 이 DPP로 새로 폼을 불러오는 시점이니, 직전 DPP에서 쌓인 "이 문서 업로드로 방금
     // 채워짐" 표시(parsedFieldSources)는 여기서 지운다 - 안 지우면 다른 DPP로 이동했는데도
     // 이전 DPP에서 파싱됐던 필드가 계속 "파싱됨"으로 잘못 표시된다.
-    setState({ parsedFieldSources: {}, unlockedFields: {} });
+    setState({ parsedFieldSources: {}, unlockedFields: {}, passportLevelInput: null });
     let alive = true;
     fetchFieldForm(dppId || undefined, domain || undefined)
       .then((res) => {
@@ -1934,8 +1934,8 @@ export function useAppLogic(userProps) {
   // saveFieldFormDraft(dppId, domain, values) 대신 (dppId, values)로 부르는 기존 호출부
   // (makerVals.js)를 그대로 두기 위한 래퍼 - 현재 화면의 role에서 도메인을 자동으로
   // 채워 넣는다(2026-08-16, 섬유 도메인 추가하며 domain 파라미터가 새로 생김).
-  const saveFieldFormDraftForRole = useCallback((dppId, values, displayName) => {
-    return saveFieldFormDraft(dppId, domainForRole(state.role), values, displayName);
+  const saveFieldFormDraftForRole = useCallback((dppId, values, displayName, passportLevel) => {
+    return saveFieldFormDraft(dppId, domainForRole(state.role), values, displayName, passportLevel);
   }, [state.role]);
 
   const ctx = {

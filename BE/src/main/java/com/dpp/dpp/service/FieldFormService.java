@@ -177,7 +177,7 @@ public class FieldFormService {
             return new FieldFormResponse(null, null, null, domain, "DRAFT", 0.0, 0, 0, allFields,
                     sectionsOf(allFields), codeOptionsOf(allFields),
                     null, complianceService.trackLabel(domain, null),
-                    List.of(), List.of(), List.of());
+                    List.of(), List.of(), List.of(), PassportLevel.defaultFor(domain));
         }
 
         Dpp dpp = dppRepository.findById(dppId)
@@ -257,7 +257,8 @@ public class FieldFormService {
 
         return new FieldFormResponse(dpp.getDppId(), dpp.getPublicUuid(), dpp.getDisplayName(), domain, status, completeness, filled, required,
                 fields, sectionsOf(fields), codeOptionsOf(fields),
-                passport, complianceService.trackLabel(domain, passport), blockers, checks, stages);
+                passport, complianceService.trackLabel(domain, passport), blockers, checks, stages,
+                dpp.getPassportLevel());
     }
 
     @Transactional
@@ -279,6 +280,13 @@ public class FieldFormService {
         if (access.owner() && request.displayName() != null) {
             String name = request.displayName().trim();
             dpp.setDisplayName(name.isEmpty() ? null : trimTo(name, 120));
+            dppRepository.save(dpp);
+        }
+        // 발급 단위(모델/배치/개별)도 소유 조직만 바꾼다. 발급이 끝난 DPP는 단위를 못 바꾼다 -
+        // 이미 QR·블록체인으로 나간 여권이 무엇을 대표하는지가 뒤늦게 달라지면 안 된다.
+        String level = PassportLevel.normalize(request.passportLevel());
+        if (access.owner() && level != null && dpp.getIssuedAt() == null && !level.equals(dpp.getPassportLevel())) {
+            dpp.setPassportLevel(level);
             dppRepository.save(dpp);
         }
 
@@ -377,6 +385,23 @@ public class FieldFormService {
                     .collect(Collectors.joining(", "));
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "문서에서 읽은 값과 입력값이 다릅니다. 먼저 확인해 주세요: " + names);
+        }
+        // 배치 단위로 발급하려면 배치를 가리키는 키(철강 Heat No. 등)가 있어야 한다 - 키 없는
+        // 배치 여권은 "어느 묶음인지" 말하지 못한다(2026-10-07, V40).
+        if (PassportLevel.BATCH.equals(dpp.getPassportLevel())) {
+            String keyCode = PassportLevel.keyFieldCode(PassportLevel.BATCH, dpp.getDomain());
+            if (keyCode != null) {
+                boolean hasKey = fieldValueRepository.findByDppIdAndFieldCode(dpp.getDppId(), keyCode)
+                        .map(DppFieldValue::getValueText)
+                        .filter(v -> !v.isBlank())
+                        .isPresent();
+                if (!hasKey) {
+                    String keyLabel = requirementFieldRepository.findById(keyCode)
+                            .map(RequirementField::getLabelKo).orElse(keyCode);
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "배치 단위로 발급하려면 '" + keyLabel + "'을(를) 먼저 입력해 주세요.");
+                }
+            }
         }
         if ("BATTERY".equals(dpp.getDomain())) {
             String blocked = complianceService.blockerMessage(complianceService.issueBlockerLabels(dpp.getDppId()));
@@ -713,6 +738,7 @@ public class FieldFormService {
         // 이 줄이 빠져 있어서 첫 임시저장(DPP 신규 생성)마다 insert 자체가 500으로
         // 죽는 버그였다(2026-08-15 발견).
         dpp.setPublicUuid(UUID.randomUUID());
+        dpp.setPassportLevel(PassportLevel.defaultFor(domain));
         dpp.setModelId(model.getModelId());
         dpp.setOwnerOrgId(orgId);
         dpp.setDomain(domain);

@@ -384,11 +384,6 @@ export function makerVals(ctx) {
 
   const inputMeta = data.makerInputMeta[r] || {};
   const fieldSets = data.makerFieldSets[r] || [];
-  // 배치 대량 발급은 철강 전용(강 지시, 2026-08-16: "이거는 철강 말고는 필요없는 것 같으니까
-  // 섬유에는 적용시키지 말자") - 다른 도메인에서 issueMode가 어쩌다 'batch'로 남아있어도
-  // (예: 역할 전환 전 상태 잔존) isBatch는 강제로 false, 토글 버튼 자체도 안 보여준다.
-  const batchIssueEnabled = r === 'steel';
-  const isBatch = batchIssueEnabled && state.issueMode === 'batch';
   // "기본 정보 입력" 폼 실데이터 - requirement_field 시딩이 STEEL/TEXTILE/BATTERY 도메인에
   // 있는 역할만 GET /me/field-form로 대체한다. 그 외 역할은 여전히 기존 목데이터 폼("SPHC"
   // 같은 예시값 포함) - 실 규정 필드가 시딩되기 전까지는 정직하게 흉내낼 수도, 비워둘
@@ -396,6 +391,24 @@ export function makerVals(ctx) {
   const hasRealFieldForm = r === 'steel' || r === 'textile' || r === 'battery';
   const ff = hasRealFieldForm ? ctx.fieldFormData : null;
   const ffInputs = ctx.fieldFormInputs || {};
+  // ── 발급 단위(2026-10-07) ─────────────────────────────────────────────
+  // 예전 "단일 발급 / 배치 대량 발급" 토글은 숫자가 박혀 있고 눌러도 아무것도 안 되는 화면이었다.
+  // 표준(ESPR 제9조)이 요구하는 건 대량 발급이 아니라 "DPP 하나가 모델/배치/개별 중 무엇을
+  // 대표하는가"라서, 그 단위를 고르는 칸으로 바꿨다. 철강 기본은 배치(용해 번호 Heat 단위).
+  const LEVEL_DEFAULT = { steel: 'BATCH', battery: 'ITEM', textile: 'MODEL' };
+  const LEVEL_KEY = {
+    steel: { BATCH: 'HEAT_NO', ITEM: 'LOT_NO' },
+    textile: { BATCH: 'FABRIC_LOT_NO', ITEM: 'SERIAL_NUMBER' },
+    battery: { BATCH: 'BATCH_OR_LOT_NUMBER', ITEM: 'BATTERY_UNIQUE_ID' }
+  };
+  const savedLevel = (ff && ff.passportLevel) || LEVEL_DEFAULT[r] || 'BATCH';
+  const passportLevel = state.passportLevelInput || savedLevel;
+  const passportLevelToSend = () => state.passportLevelInput || undefined;
+  const levelLocked = !!(ff && ff.status && ff.status !== 'DRAFT' && ff.status !== 'PENDING');
+  const levelKeyCode = passportLevel === 'MODEL' ? 'GTIN' : ((LEVEL_KEY[r] || {})[passportLevel] || null);
+  const levelKeyField = ff && levelKeyCode ? ff.fields.find(f => f.fieldCode === levelKeyCode) : null;
+  const levelKeyValue = levelKeyCode ? (ffInputs[levelKeyCode] || '') : '';
+  const levelKeyLabel = levelKeyField ? levelKeyField.labelKo : (levelKeyCode === 'GTIN' ? 'GTIN' : '');
   // Enum 필드 드롭다운 선택지(code_master) - 폼 응답에 같이 온다. 구버전 BE면 빈 배열이라
   // inputKindOf가 select 대신 text로 떨어진다.
   const codeOptions = ff && ff.codeOptions ? ff.codeOptions : [];
@@ -507,10 +520,10 @@ export function makerVals(ctx) {
     setState({ classifyBusy: true });
     try {
       const isNewDpp = !ff.dppId;
-      const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend());
+      const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend(), passportLevelToSend());
       ctx.setFieldFormData(result);
       ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
-      setState(s => ({ fieldFormDppId: result.dppId, classifyBusy: false, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
+      setState(s => ({ fieldFormDppId: result.dppId, classifyBusy: false, passportLevelInput: null, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
       if (isNewDpp) ctx.refreshDashboard();
       const shown = (result.fields || []).filter(f => CLASSIFY_CODES.indexOf(f.fieldCode) < 0).length;
       ctx.say('분류를 적용했습니다 · ' + (result.complianceTrackLabel ? result.complianceTrackLabel + ' · ' : '') + '입력 항목 ' + shown + '개');
@@ -803,12 +816,23 @@ export function makerVals(ctx) {
     inputTitle: inputMeta.title,
     formTitle: inputMeta.form,
     fieldCount: ff ? ff.fields.filter(f => f.required).length : inputMeta.count,
-    isBatch,
-    batchIssueEnabled,
-    singleBtn: ctx.pill(!isBatch), batchBtn: ctx.pill(isBatch),
-    setSingle: () => setState({ issueMode: 'single' }),
-    setBatch: () => setState({ issueMode: 'batch' }),
-    issueLabel: isBatch ? '배치 240건 발급' : 'DPP 발급',
+    // 발급 단위 선택(모델/배치/개별). 발급이 끝난 DPP는 바꿀 수 없다(서버도 막는다).
+    passportLevelShown: !!ff,
+    passportLevelLocked: levelLocked,
+    passportLevelOptions: [
+      { key: 'MODEL', label: '모델', tip: '같은 모델 전체에 여권 1개' },
+      { key: 'BATCH', label: '배치', tip: r === 'steel' ? '같은 용해 번호(Heat)로 만든 묶음에 여권 1개' : '같은 배치·로트에 여권 1개' },
+      { key: 'ITEM', label: '개별', tip: '제품 하나하나에 여권 1개' }
+    ].map(o => ({
+      ...o,
+      style: ctx.pill(passportLevel === o.key),
+      onClick: levelLocked ? undefined : () => setState({ passportLevelInput: o.key })
+    })),
+    passportLevelHint: !levelKeyCode ? ''
+      : levelKeyValue ? (levelKeyLabel + ' ' + levelKeyValue + ' 기준으로 발급')
+      : (levelKeyLabel ? levelKeyLabel + ' 미입력' : ''),
+    passportLevelHintWarn: passportLevel === 'BATCH' && !!levelKeyCode && !levelKeyValue,
+    issueLabel: 'DPP 발급',
     issueReady,
     issueDisabledHint,
     // "기본 정보 입력" 카드를 토글로 열고 닫을 수 있게(2026-08-16 사용자 피드백: "소재 기본
@@ -907,10 +931,10 @@ export function makerVals(ctx) {
       if (!ff) { ctx.say('임시저장했습니다.'); return; }
       try {
         const isNewDpp = !ff.dppId;
-        const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend());
+        const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend(), passportLevelToSend());
         ctx.setFieldFormData(result);
         ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(f => [f.fieldCode, f.value || ''])));
-        setState(s => ({ fieldFormDppId: result.dppId, dppNameInput: null, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
+        setState(s => ({ fieldFormDppId: result.dppId, dppNameInput: null, passportLevelInput: null, draftSavedAt: { ...(s.draftSavedAt || {}), [r]: nowStamp() } }));
         // 새 DPP가 이번 임시저장으로 처음 생겼으면 dashboardData(제품 조회/최근 작업 DPP
         // 조회의 출처)도 같이 갱신한다 - issueDpp와 같은 이유(2026-08-18 강 리포트).
         if (isNewDpp) ctx.refreshDashboard();
@@ -920,8 +944,7 @@ export function makerVals(ctx) {
       }
     },
     issueDpp: async () => {
-      if (!ff) { ctx.say(isBatch ? '배치 240건의 DPP 발급을 시작했습니다.' : 'DPP를 발급하고 블록체인에 앵커링했습니다.'); return; }
-      if (isBatch) { ctx.say('배치 대량 발급은 아직 실데이터 연동 전입니다.'); return; }
+      if (!ff) { ctx.say('DPP를 발급하고 블록체인에 앵커링했습니다.'); return; }
       // 제조사 입장에서 반드시 채워야 하는 데이터를 다 입력했을 때만 발급 가능 - 그 전엔
       // 임시저장만(2026-08-17 강 요청). 버튼도 비활성화되지만, 혹시 모를 경합(다른 탭에서
       // 필드를 지운 직후 등)을 대비해 실제 발급 호출 전에도 한 번 더 막는다.
@@ -933,9 +956,9 @@ export function makerVals(ctx) {
         // 하고 임시저장 버튼을 안 누른 값은 서버에 저장 안 된 채로 발급이 진행돼 버렸다
         // (발급은 서버에 이미 저장된 dpp_field_value만 보고 처리하기 때문). dppId 유무와
         // 상관없이 항상 먼저 현재 ffInputs로 저장한 뒤 그 결과로 발급한다.
-        const saved = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend());
+        const saved = await ctx.saveFieldFormDraft(ff.dppId, ffInputs, dppNameToSend(), passportLevelToSend());
         const dppId = saved.dppId;
-        setState({ fieldFormDppId: dppId });
+        setState({ fieldFormDppId: dppId, passportLevelInput: null });
         const issued = await ctx.issueFieldFormDpp(dppId);
         ctx.setFieldFormData(issued);
         ctx.setFieldFormInputs(Object.fromEntries((issued.fields || []).map(f => [f.fieldCode, f.value || ''])));

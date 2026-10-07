@@ -60,6 +60,12 @@ public class Dpp {
     @Column(name = "display_name", length = 120)
     private String displayName;
 
+    /**
+     * 발급 단위 MODEL / BATCH / ITEM (V40, ESPR 제9조). 도메인별 기본값은 PassportLevel.defaultFor.
+     */
+    @Column(name = "passport_level", nullable = false, length = 10)
+    private String passportLevel = "BATCH";
+
     @Column(name = "issued_at")
     private OffsetDateTime issuedAt;
 

@@ -41,6 +41,12 @@ public record PublicPassportResponse(
         /** PUBLIC / CUSTOMS / EU_AUTHORITY / ADMIN */
         String viewerRole,
         /** 화면에 그대로 쓸 한글 라벨("일반 공개" 등). */
-        String viewerLabel
+        String viewerLabel,
+        /** 발급 단위 MODEL / BATCH / ITEM (2026-10-07, V40, ESPR 제9조). */
+        String passportLevel,
+        /** "배치 단위" 같은 화면 문구. */
+        String passportLevelLabel,
+        /** 그 단위를 식별하는 키 - "Heat No. SH60218". 없으면 null. */
+        String passportUnitKey
 ) {
 }

@@ -16,6 +16,11 @@ public record SaveFieldFormRequest(
          * 그대로 둔다 - 이름 칸을 안 건드린 저장 요청이 이름을 지워버리면 안 된다.
          * 빈 문자열을 보내면 이름을 지운다.
          */
-        String displayName
+        String displayName,
+        /**
+         * 발급 단위 MODEL / BATCH / ITEM (2026-10-07, V40). null이면 기존 값을 유지한다.
+         * 소유 조직만 바꿀 수 있다.
+         */
+        String passportLevel
 ) {
 }
