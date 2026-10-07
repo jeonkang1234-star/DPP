@@ -29,6 +29,11 @@ ZKP 판정 대상이 아닌 문서(형식만 갖추면 업로드 즉시 승인)�
 - `Q2_05_MILL_SHEET_PASS_1/2.pdf`, `FAIL_1(탄소초과)/2(인장강도초과).pdf` — 제강 성적서.
   화학성분 8개(C/Si/Mn/P/S/N/Cu/CEV) + 기계성질 4개(ReH/Rm/A/KV)가 전부 성적서에 인쇄된
   규격 이내여야 승인. 부속서에 미량원소(Cr/Ni/Mo/Zr/Ce/W/Co/Sb/Zn)와 시험표준·표점거리까지 실었다.
+- `Q2_05_MILL_SHEET_REAL_PASS.pdf`, `Q2_05_MILL_SHEET_REAL_FAIL_인장강도초과.pdf` — **실제 제철소 양식**
+  제강 성적서(2026-10-07). 가로 표 한 장에 후판 4장(행)·용해번호 2개, YP/TS/EL·CVN·C~Ceq 열, 영문+한글
+  부제, 하단 각주·EN 10204 3.1 문구, 이미지 워터마크. 표 머리의 SPEC. MIN/MAX 행이 판정 기준이고,
+  한 행이라도 벗어나면 반려(FAIL은 3번째 후판 TS 648 > 630). 가상의 회사(스트럭타스틸)이며
+  `generator/real_style_mill.py`로 다시 만든다. 파서는 `parser/mill_table.py`(단어 좌표로 열 대응).
 - `Q2_06_CBAM_REPORT_승인_수입량초과/미만.pdf` — CBAM은 de minimis(50t) 초과 여부가
   **정보성 플래그**라 반려 케이스 자체가 없다. 그래서 PASS/FAIL이 아니라 수입량 두 상태로 나눈다.
   부속서에 전구체 3종·전력 배출계수·제3자 검증 정보가 들어 있다.

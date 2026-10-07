@@ -102,3 +102,30 @@ def test_too_little_text_is_rejected():
 
 def test_unknown_slot_passes():
     assert doc_classifier.check(REAL_STYLE_MILL, "SOMETHING_NEW")["verdict"] == "UNKNOWN_TYPE"
+
+
+# ── 실제 양식(가로 표) 제강 성적서 - mill_table.py ─────────────────────────────
+REAL_PASS = os.path.join(MOCK_DIR, "steel", "Q2_05_MILL_SHEET_REAL_PASS.pdf")
+REAL_FAIL = os.path.join(MOCK_DIR, "steel", "Q2_05_MILL_SHEET_REAL_FAIL_인장강도초과.pdf")
+
+
+@pytest.mark.skipif(not os.path.exists(REAL_PASS), reason="실제 양식 목 성적서 없음")
+def test_real_style_mill_sheet_parse_and_judge():
+    import judge
+    import mill_table
+
+    with fitz.open(REAL_PASS) as doc:
+        ok = mill_table.extract_from_doc(doc)
+    with fitz.open(REAL_FAIL) as doc:
+        ng = mill_table.extract_from_doc(doc)
+    # ZKP 매퍼(SteelZkpMapper)가 요구하는 12개 항목이 전부 있어야 한다.
+    assert set(ok["chemical_composition_wt_percent"]) == {"C", "Si", "Mn", "P", "S", "Cu", "N", "CEV"}
+    assert set(ok["mechanical_properties"]) == {"ReH", "Rm", "A", "KV"}
+    assert ok["identity"]["heat_no"] == "SH60218" and ok["identity"]["steel_grade"] == "S355J2+N"
+    assert ok["identity"]["standard"] == "EN 10025-2"
+    assert all(i["verdict"] == judge.PASS for i in judge.evaluate_steel_mill({"steel_mill_values": ok}))
+    failed = [i["item"] for i in judge.evaluate_steel_mill({"steel_mill_values": ng}) if i["verdict"] != judge.PASS]
+    assert failed == ["기계적성질 Rm"]
+    # 세로 양식 목 문서는 가로 표 파서가 건드리지 않는다.
+    with fitz.open(os.path.join(MOCK_DIR, "steel", "Q2_05_MILL_SHEET_PASS_1.pdf")) as doc:
+        assert mill_table.extract_from_doc(doc) is None

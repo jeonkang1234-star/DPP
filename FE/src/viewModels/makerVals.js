@@ -289,6 +289,19 @@ export function orgAutofillValues(org) {
   return out;
 }
 
+/** 제강 성적서 업로드 응답의 limits(정수 스케일)로 "C ≤ 0.200%" 같은 기준 문구를 만든다. */
+function millCriterionText(docTypeCode, vkey, result) {
+  const lim = docTypeCode === 'MILL_SHEET' && result && result.limits ? result.limits : null;
+  if (!lim || !vkey) return '';
+  const has = k => typeof lim[k] === 'number';
+  if (has(vkey) && ['C', 'Si', 'Mn', 'P', 'S', 'Cu', 'N', 'CEV'].includes(vkey)) return vkey + ' ≤ ' + (lim[vkey] / 1000).toFixed(3) + '%';
+  if (vkey === 'ReH' && has('ReH_min')) return 'ReH ≥ ' + lim.ReH_min + ' N/mm²';
+  if (vkey === 'Rm' && has('Rm_low') && has('Rm_high')) return lim.Rm_low + ' ≤ Rm ≤ ' + lim.Rm_high + ' N/mm²';
+  if (vkey === 'A' && has('A_min')) return 'A ≥ ' + lim.A_min + '%';
+  if (vkey === 'KV' && has('KV_min')) return 'KV ≥ ' + lim.KV_min + ' J';
+  return '';
+}
+
 const DOC_TYPE_LABEL = {
   MILL_SHEET: '제강 성적서', CBAM_REPORT: 'CBAM 탄소보고서', CARE_LABEL: '섬유 케어라벨', OEKOTEX_LABEL: 'OEKO-TEX 인증서',
   BATTERY_CARBON_REPORT: '배터리 탄소발자국 선언서', RECYCLING_REPORT: '재활용 처리 결과 보고서',
@@ -1141,7 +1154,10 @@ export function makerVals(ctx) {
               if (c.vkey && zkpResult.verdicts) itemFailed = zkpResult.verdicts[c.vkey] === false;
               else if (typeof zkpResult.specPassed === 'boolean') itemFailed = zkpResult.specPassed === false;
             }
-            return { ...c, failed: itemFailed };
+            // 제강 성적서는 강종마다 규격이 달라서(S355JR, S355J2, SPHT1 ...) 고정 문구 대신 이번
+            // 성적서에서 실제로 읽은 규격(서버 응답 limits - 화학성분 ×1000, 기계적 성질 그대로)을
+            // 보여준다(2026-10-07, 실제 양식 성적서 지원). 업로드 전에는 기존 예시 문구.
+            return { ...c, criterion: millCriterionText(d.docTypeCode, c.vkey, zkpResult) || c.criterion, failed: itemFailed };
           });
           const criterionOpen = !!(state.criteriaOpen && state.criteriaOpen[d.docTypeCode]);
           // 2026-08-18 강 요청: 문서 타일 테두리 색 - 아직 업로드 안 됨(빨강), 검증/제출
