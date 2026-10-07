@@ -290,6 +290,10 @@ public class DocumentSlotService {
             }
         });
 
+        // 올린 칸과 다른 문서(예: 기술문서 칸에 사업자등록증)는 저장하기 전에 반려한다 -
+        // 지금까지 이 일반 업로드 경로는 내용을 전혀 안 보고 저장 즉시 '제출 완료'였다(2026-10-07).
+        parserClient.requireDocumentType(file, docTypeCode);
+
         byte[] bytes;
         try {
             bytes = file.getBytes();

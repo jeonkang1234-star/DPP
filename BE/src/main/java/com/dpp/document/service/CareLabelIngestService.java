@@ -158,6 +158,8 @@ public class CareLabelIngestService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "지정한 DPP를 찾을 수 없거나 이 조직 소유가 아닙니다. (dppId=" + dppId + ")"));
 
+        // 올린 칸과 다른 문서면 여기서 반려한다(문서 분류 모델, 2026-10-07 - ParserClient 참고).
+        parserClient.requireDocumentType(file, DOC_TYPE_CODE);
         IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 10, 38, 6, "문서 파싱 중 (텍스트·표 추출)");
         Map<String, Object> parsed;
         try {

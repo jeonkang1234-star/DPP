@@ -99,6 +99,10 @@ oauth:
 # 회원가입 이메일 인증코드 발송. 기본은 false라 콘솔 로그로만 찍힌다(ConsoleSignupMailSender).
 # 실제 SMTP로 보내려면 true로 바꾸고 위 spring.mail.* 값을 application-local.yml에 채우세요.
 app:
+  # 업로드한 문서가 그 칸의 문서가 맞는지 파서의 문서 분류 모델로 확인한다(2026-10-07,
+  # ParserClient.requireDocumentType). 다른 문서라고 확신할 때만 반려한다. false면 끈다.
+  document:
+    classify-enabled: ${DOCUMENT_CLASSIFY_ENABLED:true}
   mail:
     enabled: ${APP_MAIL_ENABLED:false}
     # Gmail 등 대부분의 SMTP는 From이 인증 계정과 같아야 발송을 허용한다 - 그래서 기본값을
