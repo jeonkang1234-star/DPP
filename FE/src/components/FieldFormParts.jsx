@@ -25,7 +25,7 @@ export function DocumentSlotTile({ d }) {
             업로드 버튼 대신 담당 역할을 보여주고, 항목은 그대로 남겨 제출
             진행 상황을 볼 수 있게 한다. */}
         {d.partnerOwned
-          ? (<span style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', border: '1px dashed rgba(16,32,64,.20)', borderRadius: '9px', background: '#F2F4F8', color: '#6B7A93', fontSize: '11.5px', fontWeight: '600', whiteSpace: 'nowrap', flex: 'none' }}>{d.partnerOwnerLabel}</span>)
+          ? (<span style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', border: d.partnerOwnerDone ? '1px solid rgba(18,161,80,.35)' : '1px dashed rgba(16,32,64,.20)', borderRadius: '9px', background: d.partnerOwnerDone ? 'rgba(18,161,80,.08)' : '#F2F4F8', color: d.partnerOwnerDone ? '#0E7A3D' : '#6B7A93', fontSize: '11.5px', fontWeight: '600', whiteSpace: 'nowrap', flex: 'none' }}>{d.partnerOwnerLabel}</span>)
           : (<>
             <label htmlFor={d.inputId} style={{ height: '32px', padding: '0 12px', display: 'inline-flex', alignItems: 'center', border: '1px solid rgba(0,69,169,.24)', borderRadius: '9px', background: '#fff', color: '#0045A9', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>{d.fileName ? '재업로드' : '업로드'}</label>
             <input id={d.inputId} type="file" accept={d.accept} disabled={d.disabled} onChange={d.onFileChange} style={{ display: 'none' }} />
@@ -147,7 +147,7 @@ export function FieldFormBody({ fields, fieldSections }) {
         {/* 협력사가 수락해서 잠긴 칸은 '수정'으로 풀 수 없다 - 대신 누구를
             기다리는 중인지 보여준다(2026-08-23). */}
         {f.partnerLockLabel
-          ? (<span style={{ height: '22px', padding: '0 9px', display: 'inline-flex', alignItems: 'center', border: '1px dashed rgba(16,32,64,.20)', borderRadius: '7px', background: '#F2F4F8', fontSize: '10.5px', fontWeight: '600', color: '#6B7A93', whiteSpace: 'nowrap', flex: 'none' }}>{f.partnerLockLabel}</span>)
+          ? (<span style={{ height: '22px', padding: '0 9px', display: 'inline-flex', alignItems: 'center', border: f.partnerLockDone ? '1px solid rgba(18,161,80,.35)' : '1px dashed rgba(16,32,64,.20)', borderRadius: '7px', background: f.partnerLockDone ? 'rgba(18,161,80,.08)' : '#F2F4F8', fontSize: '10.5px', fontWeight: '600', color: f.partnerLockDone ? '#0E7A3D' : '#6B7A93', whiteSpace: 'nowrap', flex: 'none' }}>{f.partnerLockLabel}</span>)
           : f.locked && f.unlock ? (<button type="button" onClick={f.unlock} style={{ height: '22px', padding: '0 9px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '7px', background: '#fff', fontSize: '10.5px', fontWeight: '600', color: '#0045A9', cursor: 'pointer', flex: 'none' }}>수정</button>) : null}
       </span>
       {renderInput(f)}
