@@ -28,9 +28,11 @@ import fitz
 
 import extractor
 import judge
+import mill_table
 import registry
 import spec_extractor
 import spec_fields
+import structured_text
 
 DOMAIN_BY_DIR = {"steel": "STEEL", "textile": "TEXTILE", "battery": "BATTERY"}
 
@@ -111,6 +113,10 @@ def check(pdf_dir):
             doc = fitz.open(path)
             text = "\n".join(pg.get_text() for pg in doc)
             pages = doc.page_count
+            # 서비스(parser/api.py)와 같은 경로: 괘선 표를 '라벨: 값'으로 펼친 줄, 가로 표 성적서.
+            table_text = "\n".join(structured_text.table_lines(doc)) if text.strip() else ""
+            code_for_doc = registry_code_of(name)
+            horizontal = mill_table.extract_from_doc(doc) if code_for_doc == "Q2_05" else None
             doc.close()
 
             # 1. 텍스트 추출
@@ -123,6 +129,14 @@ def check(pdf_dir):
             code = registry_code_of(name)
             common = extractor.extract_common_fields(text)
             ext = extractor.extract_extended_fields(code, text, domain)
+            if table_text and isinstance(ext.get("spec_fields"), dict):
+                for k, v in spec_extractor.extract_spec_fields(table_text, domain).items():
+                    ext["spec_fields"].setdefault(k, v)
+            if horizontal and horizontal.get("chemical_composition_wt_percent") and \
+                    not (ext.get("steel_mill_values") or {}).get("chemical_composition_wt_percent"):
+                ext["steel_mill_values"] = horizontal
+                for k, v in (horizontal.get("spec_fields") or {}).items():
+                    ext["spec_fields"].setdefault(k, v)
             record = dict(registry_code=code, **common, **ext)
 
             # 2. ZKP 판정

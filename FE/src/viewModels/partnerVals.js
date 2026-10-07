@@ -31,6 +31,8 @@ function nowStamp() {
 function FIELD_DOC_TYPE(code) {
   if (/^(SOC_|SVHC_|ROHS_|HEXAVALENT_)/.test(code)) return 'SOC_SDS';
   if (/^(RECYCLED_SCRAP_RATE|SCRAP_SOURCE)$/.test(code)) return 'SCRAP_PROOF';
+  // 시험·인증기관(TEST_LAB) 담당 탄소·CBAM 항목은 탄소발자국 산정보고서(검증보고서)에 실린다(2026-10-07).
+  if (/^(PCF_VALUE|CBAM_|ELECTRICITY_|PRECURSOR_)/.test(code)) return 'PCF_REPORT';
   return null;
 }
 
@@ -242,27 +244,51 @@ export function partnerVals(ctx) {
     });
 
     // ── 오른쪽 입력 카드 - 제조사 화면 fields와 같은 모양(FieldFormBody가 그대로 그린다) ──
-    // 문서에서 채워지는 항목을 위로(제조사 화면과 같은 정렬).
-    const autoFillableOf = f => !!docTypeFor(f.fieldCode) || isParserField(f);
+    // 2026-10-07 강 지적: 제조사 화면 규칙(파서 대상이면 무조건 "문서 업로드 시 자동 인식")을 그대로
+    // 가져오니, 협력사가 담당 문서를 다 올렸는데도 빈 칸이 "아직 파싱 안 된 것"처럼 보였다.
+    // 협력사 기준으로 다시 가른다.
+    //   - 영업비밀(ZKP 대체) 항목: 협력사 문서로는 채워지지 않는다. 제조사가 올린 검증 문서의
+    //     영지식증명 판정으로 채워지므로 "입력 불필요"로 보여주고 빨간 테두리로 재촉하지 않는다.
+    //   - 문서 파싱 항목: 그 값을 담을 담당 문서가 아직 안 올라왔을 때만 "업로드 시 자동 인식".
+    //     문서를 올렸는데도 비어 있으면 "업로드한 문서에 없음 · 직접 입력"으로 내려 보낸다.
+    const isUploaded = d => !!(d && d.status && d.status !== 'NOT_UPLOADED');
+    const allDocsUploaded = docs.length > 0 && docs.every(isUploaded);
+    const fillDocOf = f => {
+      const t = docTypeFor(f.fieldCode);
+      return t ? docByType[t] : null;
+    };
+    const isSecret = f => f.disclosureScope === 'TRADE_SECRET';
+    const canFillByDoc = f => !isSecret(f) && docs.length > 0 && (!!docTypeFor(f.fieldCode) || isParserField(f));
+    const waitingForDoc = f => {
+      if (!canFillByDoc(f)) return false;
+      const d = fillDocOf(f);
+      return d ? !isUploaded(d) : !allDocsUploaded;
+    };
+    const autoFillableOf = f => {
+      const v = inputOf(f.fieldCode);
+      // 영업비밀 항목은 사람이 쓰는 칸이 아니라 자동 판정 칸이라 '자동 인식' 묶음에 둔다.
+      if (isSecret(f)) return true;
+      return (!!f.fromDocument && !!v && v === (serverValue[f.fieldCode] || '')) || (!v && waitingForDoc(f));
+    };
     const formFields = fields.slice()
       .sort((a, b) => (autoFillableOf(b) ? 1 : 0) - (autoFillableOf(a) ? 1 : 0))
       .map(f => {
         const code = f.fieldCode;
         const value = inputOf(code);
         const saved = serverValue[code] || '';
-        const docType = docTypeFor(code);
-        const doc = docType ? docByType[docType] : null;
-        const docUploaded = !!(doc && doc.status && doc.status !== 'NOT_UPLOADED');
+        const fillDoc = fillDocOf(f);
         const isAutoFillable = autoFillableOf(f);
-        const docName = doc ? doc.labelKo : (AUTO_FILL_DOC_NAME[code] || '문서');
+        const docName = fillDoc ? fillDoc.labelKo : '담당 문서';
         // 서버가 "이 값은 문서에서 왔다"고 알려준 값(fromDocument)이고, 아직 손대지 않았을 때만 파싱값이다.
         const fromDoc = !!(f.fromDocument && value && value === saved);
+        const secret = isSecret(f);
         let sourceLabel;
-        if (fromDoc) sourceLabel = '파싱(' + docName + ')';
+        if (secret) sourceLabel = value ? '제조사 검증 문서의 영지식증명으로 판정됨' : '제조사 검증 문서의 영지식증명으로 판정 · 입력 불필요';
+        else if (fromDoc) sourceLabel = '파싱(' + docName + ')';
         else if (value && value !== saved) sourceLabel = '수정됨 · 제출 전';
         else if (value) sourceLabel = '직접 입력됨';
-        else if (isAutoFillable && docUploaded) sourceLabel = docName + '에서 찾지 못함 · 직접 입력';
-        else if (isAutoFillable) sourceLabel = docName + ' 업로드 시 자동 인식';
+        else if (waitingForDoc(f)) sourceLabel = docName + ' 업로드 시 자동 인식';
+        else if (canFillByDoc(f)) sourceLabel = '업로드한 문서에 없음 · 직접 입력';
         else sourceLabel = '직접 입력 항목';
         // 파싱된 값은 제조사 화면처럼 잠그고 '수정'을 눌러야 고칠 수 있다.
         const locked = fromDoc && !unlocked[code];
@@ -287,7 +313,7 @@ export function partnerVals(ctx) {
           disclosureLabel: DISCLOSURE_LABEL[f.disclosureScope] || '',
           ...zkpVerdictOf(f),
           // 미입력=빨간 테두리, 입력됨=초록 테두리(제조사 화면과 동일).
-          inputBorderColor: value ? '#12A150' : '#E03B3B',
+          inputBorderColor: secret ? 'rgba(16,32,64,.14)' : value ? '#12A150' : '#E03B3B',
           locked,
           partnerLockLabel: '',
           unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [code]: true } })),

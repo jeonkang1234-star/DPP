@@ -507,13 +507,18 @@ def build_all(out_dir):
                      _mech(**{"인장강도 Rm": "655"}),
                      overrides={"TENSILE_STRENGTH_ACTUAL_MPA": "655 MPa"})
 
-    # CBAM은 de minimis(50t) 초과 여부가 정보성 플래그라 반려 케이스가 없다.
-    build_cbam(p("STEEL", "Q2_06_CBAM_REPORT_승인_수입량초과.pdf"), "62.4")
-    build_cbam(p("STEEL", "Q2_06_CBAM_REPORT_승인_수입량미만.pdf"), "38.5")
-
-    for key in ["DOC_TECH_FILE", "DOC_PCF_REPORT", "DOC_LCA_EPD", "DOC_SOC_SDS", "DOC_EU_DOC",
-                "DOC_TEST_REPORT", "DOC_COO", "DOC_LABEL", "DOC_MANUAL", "DOC_SCRAP_PROOF"]:
-        build_plain(p("STEEL", key + ".pdf"), "STEEL", key)
+    # 2026-10-07: 철강의 CBAM 보고서·일반 문서 10종과 실제 양식 제강 성적서는 실제 서식을 따른
+    # 별도 생성기로 만든다(real_style_steel_docs.py / real_style_mill.py). 위 세로 양식 제강 성적서
+    # 4건은 기존 시연·테스트가 그 값에 맞춰져 있어 그대로 둔다.
+    import real_style_mill
+    import real_style_steel_docs
+    steel_dir = os.path.join(out_dir, "steel")
+    for path in real_style_steel_docs.build_all(steel_dir):
+        made.append(os.path.join("steel", os.path.basename(path)))
+    font_path = real_style_mill._font()
+    for name, cert, order, rows in real_style_mill.DOCS:
+        real_style_mill.render(os.path.join(steel_dir, name), cert, order, rows, font_path)
+        made.append(os.path.join("steel", name))
 
     # ── 섬유 ────────────────────────────────────────────────────────────
     build_care_label(p("TEXTILE", "Q1_04_CARE_LABEL_PASS_1.pdf"), FIBERS_BASE)

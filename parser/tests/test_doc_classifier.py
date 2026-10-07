@@ -123,6 +123,12 @@ def test_real_style_mill_sheet_parse_and_judge():
     assert set(ok["mechanical_properties"]) == {"ReH", "Rm", "A", "KV"}
     assert ok["identity"]["heat_no"] == "SH60218" and ok["identity"]["steel_grade"] == "S355J2+N"
     assert ok["identity"]["standard"] == "EN 10025-2"
+    # 표에서 열 위치로 읽은 DPP 항목 - 라벨 사전으로는 못 읽는 값들(2026-10-07)
+    sf = ok["spec_fields"]
+    assert sf["TENSILE_STRENGTH_ACTUAL_MPA"] == "528" and sf["TENSILE_STRENGTH_MAX_MPA"] == "630"
+    assert sf["TEST_DIRECTION"] == "T" and sf["MILL_TEST_CERTIFICATE_TYPE"] == "EN10204_3_1"
+    assert sf["PRODUCTION_DATE"] == "2026-09-28" and sf["SURFACE_TREATMENT_TYPE"] == "NONE"
+    assert sf["CHEM_CO_ACTUAL_PCT"] == "0.007" and sf["CHEM_MN_ACTUAL_PCT"] == "1.42"
     assert all(i["verdict"] == judge.PASS for i in judge.evaluate_steel_mill({"steel_mill_values": ok}))
     failed = [i["item"] for i in judge.evaluate_steel_mill({"steel_mill_values": ng}) if i["verdict"] != judge.PASS]
     assert failed == ["기계적성질 Rm"]

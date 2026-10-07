@@ -49,15 +49,20 @@ W, H = landscape(A4)
 # 화학성분은 상한(MAX)만, 기계적 성질은 하한(MIN)·인장강도는 범위.
 SPEC = {
     "C": (None, 0.20), "Si": (None, 0.55), "Mn": (None, 1.60), "P": (None, 0.025), "S": (None, 0.025),
-    "Cu": (None, 0.55), "N": (None, 0.012), "Ceq": (None, 0.45),
+    "Cu": (None, 0.55), "Cr": (None, None), "Ni": (None, None), "Mo": (None, None),
+    "N": (None, 0.012), "Ceq": (None, 0.45),
     "YP": (345, None), "TS": (470, 630), "EL": (22, None), "CVN": (27, None),
 }
-ELEMENTS = ["C", "Si", "Mn", "P", "S", "Cu", "N", "Ceq"]
+ELEMENTS = ["C", "Si", "Mn", "P", "S", "Cu", "Cr", "Ni", "Mo", "N", "Ceq"]
 EL_FMT = {"C": "{:.3f}", "Si": "{:.2f}", "Mn": "{:.2f}", "P": "{:.4f}", "S": "{:.4f}", "Cu": "{:.2f}",
-          "N": "{:.4f}", "Ceq": "{:.2f}"}
+          "Cr": "{:.2f}", "Ni": "{:.2f}", "Mo": "{:.3f}", "N": "{:.4f}", "Ceq": "{:.2f}"}
 
-HEAT_A = {"C": 0.162, "Si": 0.21, "Mn": 1.42, "P": 0.0142, "S": 0.0041, "Cu": 0.02, "N": 0.0046, "Ceq": 0.41}
-HEAT_B = {"C": 0.158, "Si": 0.24, "Mn": 1.38, "P": 0.0128, "S": 0.0036, "Cu": 0.03, "N": 0.0051, "Ceq": 0.40}
+HEAT_A = {"C": 0.162, "Si": 0.21, "Mn": 1.42, "P": 0.0142, "S": 0.0041, "Cu": 0.02, "Cr": 0.03, "Ni": 0.02,
+          "Mo": 0.004, "N": 0.0046, "Ceq": 0.41}
+HEAT_B = {"C": 0.158, "Si": 0.24, "Mn": 1.38, "P": 0.0128, "S": 0.0036, "Cu": 0.03, "Cr": 0.04, "Ni": 0.02,
+          "Mo": 0.005, "N": 0.0051, "Ceq": 0.40}
+# 잔류 원소(제품 분석) - 국내외 제철소가 수출용 성적서에 별도 표로 싣는 미량원소.
+RESIDUAL = [("Co", "0.007"), ("Sb", "0.003"), ("W", "0.004"), ("Zn", "0.005"), ("Zr", "0.002"), ("Ce", "0.001")]
 
 ROWS_PASS = [
     # size, product no, weight, heat, pos, YP, TS, EL, CVN, chem
@@ -136,9 +141,9 @@ def render(path, cert_no, order_no, rows, font_path):
         c.setFont(F, 6.5)
         c.drawString(x, y - 9, sub)
         c.setFont(F, 9.5)
-        c.drawString(x + 78, y, ":")
+        c.drawString(x + 96, y, ":")
         if value:
-            c.drawString(x + 90, y, value)
+            c.drawString(x + 108, y, value)
 
     head(28, H - 92, "Order No.", "계약번호", order_no)
     head(28, H - 116, "Supplier", "주문자", "")
@@ -146,35 +151,37 @@ def render(path, cert_no, order_no, rows, font_path):
     head(430, H - 92, "PO No.", "주문번호", "")
     head(430, H - 116, "Commodity", "품명", "HOT ROLLED STEEL PLATE")
     head(430, H - 140, "Spec & Type", "규격", "EN 10025-2 S355J2+N")
+    head(28, H - 164, "Date of Production", "제조일자", "2026-09-28")
+    head(430, H - 164, "Surface Condition", "표면상태", "AS ROLLED")
     c.setLineWidth(0.8)
-    c.line(28, H - 156, W - 28, H - 156)
+    c.line(28, H - 178, W - 28, H - 178)
 
     # ── 표 열 배치 ──
     cols = [  # (key, 머리글, 부제, 중심 x)
-        ("size", "Size", "/치수", 68), ("prod", "Product No.", "/제품번호", 152), ("qty", "Quantity", "/수량", 205),
-        ("wt", "Weight", "/중량(kg)", 250), ("heat", "Heat No.", "/제강번호", 302),
-        ("melt", None, None, 341), ("pos", None, None, 364),
-        ("YP", "YP", "(MPa)", 392), ("TS", "TS", "(MPa)", 423), ("EL", "EL", "(%)", 452),
-        ("CVN", "CVN", "(J)", 491), ("div", None, None, 528),
+        ("size", "Size", "/치수", 66), ("prod", "Product No.", "/제품번호", 142), ("qty", "Quantity", "/수량", 190),
+        ("wt", "Weight", "/중량(kg)", 230), ("heat", "Heat No.", "/제강번호", 277),
+        ("melt", None, None, 312), ("pos", None, None, 331),
+        ("YP", "YP", "(MPa)", 355), ("TS", "TS", "(MPa)", 382), ("EL", "EL", "(%)", 407),
+        ("CVN", "CVN", "(J)", 438), ("div", None, None, 465),
     ]
-    x_el = 562
+    x_el = 492
     for i, e in enumerate(ELEMENTS):
-        cols.append((e, e, "(%)", x_el + i * 33))
+        cols.append((e, e, "(%)", x_el + i * 29.5))
     cx = {k: x for k, _, _, x in cols}
 
-    top, head_bot = H - 160, H - 252
+    top, head_bot = H - 182, H - 268
     # 세로 점선
     c.setDash(2, 2)
     c.setLineWidth(0.4)
-    for x in (113, 190, 226, 276, 328, 354, 374, 466, 516, 540):
-        c.line(x, top, x, 120)
+    for x in (106, 170, 208, 254, 301, 322, 341, 419, 458, 474):
+        c.line(x, top, x, 150)
     c.setDash()
     # 그룹 머리글
     c.setFont(F, 9.5)
     c.drawCentredString((cx["YP"] + cx["EL"]) / 2, top - 16, "Tensile Test")
     c.setFont(F, 6.5)
     c.drawCentredString((cx["YP"] + cx["EL"]) / 2, top - 25, "/인장시험")
-    c.setFont(F, 9.5)
+    c.setFont(F, 8)
     c.drawCentredString(cx["CVN"], top - 16, "Impact Test")
     c.setFont(F, 6.5)
     c.drawCentredString(cx["CVN"], top - 25, "/충격시험 -20℃")
@@ -195,7 +202,7 @@ def render(path, cert_no, order_no, rows, font_path):
     for key, label, sub, x in cols:
         if not label:
             continue
-        c.setFont(F, 9 if len(label) > 4 else 9.5)
+        c.setFont(F, 9 if len(label) > 4 else (8.5 if key in ELEMENTS else 9.5))
         c.drawCentredString(x, hy, label)
         c.setFont(F, 6.5)
         c.drawCentredString(x, hy - 11, sub)
@@ -214,6 +221,7 @@ def render(path, cert_no, order_no, rows, font_path):
             v = SPEC[k][idx]
             if v is not None:
                 c.drawCentredString(cx[k], y, str(v))
+        c.setFont(F, 7.4)
         for e in ELEMENTS:
             v = SPEC[e][idx]
             if v is not None:
@@ -229,7 +237,9 @@ def render(path, cert_no, order_no, rows, font_path):
     total = 0
     c.setFont(F, 8.5)
     for size, prod, wt, heat, pos, yp, ts, el, cvn, chem in rows:
+        c.setFont(F, 7.6)
         c.drawCentredString(cx["size"], y, size)
+        c.setFont(F, 8.5)
         c.drawCentredString(cx["prod"], y, prod)
         c.drawCentredString(cx["qty"], y, "1")
         c.drawCentredString(cx["wt"], y, f"{wt:,}")
@@ -239,8 +249,10 @@ def render(path, cert_no, order_no, rows, font_path):
         for k, v in (("YP", yp), ("TS", ts), ("EL", el), ("CVN", cvn)):
             c.drawCentredString(cx[k], y, str(v))
         c.drawCentredString(cx["div"], y, "L")
+        c.setFont(F, 7.4)
         for e in ELEMENTS:
             c.drawCentredString(cx[e], y, EL_FMT[e].format(chem[e]))
+        c.setFont(F, 8.5)
         total += wt
         y -= 15
     c.drawString(34, y, "*** Sub Total (010) ***")
@@ -252,6 +264,20 @@ def render(path, cert_no, order_no, rows, font_path):
     c.drawCentredString(cx["wt"], y, f"{total:,}(kg)")
     c.drawString(560, y - 20, "=== Last Item ===")
 
+    # 잔류 원소(제품 분석) 표 - 오른쪽 아래
+    rx, ry = 536, 136
+    c.setFont(F, 8)
+    c.drawString(rx, ry + 30, "Residual Elements (Product Analysis, %)  /잔류원소")
+    c.setLineWidth(0.5)
+    cw = 46
+    for i, (el, v) in enumerate(RESIDUAL):
+        x0 = rx + i * cw
+        c.rect(x0, ry + 8, cw, 14)
+        c.rect(x0, ry - 6, cw, 14)
+        c.setFont(F, 8)
+        c.drawCentredString(x0 + cw / 2, ry + 12, el)
+        c.drawCentredString(x0 + cw / 2, ry - 2, v)
+
     # ── 하단 ──
     c.setLineWidth(0.8)
     c.line(28, 118, W - 28, 118)
@@ -260,11 +286,12 @@ def render(path, cert_no, order_no, rows, font_path):
     c.setFont(F, 8)
     notes = ["* Position - T : Top, M : Middle, B : Bottom",
              "* Tensile Test. Direction : Transversal, Gauge Length : 200 mm(Rectangular)",
-             "  YP Method : Upper Yield Point (ReH)",
-             "* Impact Test - Charpy V-notch 10x10 mm, Test Temp. : -20 ℃, Average of 3",
-             "* Division - L : Ladle Analysis,  Ceq = C + Mn/6 + (Cr+Mo+V)/5 + (Ni+Cu)/15"]
+             "  Test Method : ISO 6892-1:2019 Method B,  YP Method : Upper Yield Point (ReH)",
+             "* Impact Test - ISO 148-1, Charpy V-notch 10x10 mm, -20 ℃, Average of 3",
+             "* Division - L : Ladle Analysis,  Chemical Analysis : ASTM E415-21 (Spark OES)",
+             "  Ceq = C + Mn/6 + (Cr+Mo+V)/5 + (Ni+Cu)/15"]
     for i, n in enumerate(notes):
-        c.drawString(34, 106 - i * 12, n)
+        c.drawString(34, 108 - i * 11, n)
     cert = ["We certify that the material has been made in accordance with the order and is in compliance.",
             "This material has been fully killed and made by basic oxygen process.",
             "Test Certificate is issued according to ISO 10474/EN 10204 3.1.",
@@ -277,6 +304,8 @@ def render(path, cert_no, order_no, rows, font_path):
     c.drawString(W / 2 - 32, 52, "Legal sanction can be imposed on forging. Improper use of product can cause safety issues.")
     c.setFont(F, 9)
     c.drawString(34, 30, "Surveyor To:")
+    c.setFont(F, 7.5)
+    c.drawString(W / 2 - 32, 30, f"e-Certificate : https://docs.structasteel.example.kr/mtc/{cert_no}.pdf")
     c.setFont(F, 6)
     c.setFillColor(Color(0.45, 0.5, 0.58))
     c.drawRightString(W - 28, 16, f"MOCK / DEMONSTRATION DATA - {cert_no} - Generated for EU Digital Product Passport system")
