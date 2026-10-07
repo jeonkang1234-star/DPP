@@ -51,10 +51,15 @@ def group_of(source: str) -> str:
     return source
 
 
+MOCK_OVERSAMPLE = 6  # 서식이 한 장뿐인 목 문서(실제 양식 철강 문서 등)는 여러 번 증강해서 넣는다
+
+
 def fit(rows, rng):
     texts, ys = [], []
     for r in rows:
-        for t in augment(r["text"], rng):
+        src = r["source"].replace("\\", "/")
+        times = MOCK_OVERSAMPLE if ("mock-documents" in src and "demo-bulk" not in src) else 1
+        for t in [x for _ in range(times) for x in augment(r["text"], rng)]:
             texts.append(t)
             ys.append(r["label"])
     vec = TfidfVectorizer(analyzer=doc_classifier.featurize, sublinear_tf=True, min_df=2,

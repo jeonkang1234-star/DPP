@@ -143,6 +143,11 @@ async def parse_document(
         current = extended.get("steel_mill_values") or {}
         if not current.get("chemical_composition_wt_percent"):
             extended["steel_mill_values"] = mill_horizontal
+            # 표에서 열 위치로 읽은 DPP 항목(항복강도 실측·시험 표준·잔류 원소 등). 라벨 사전이
+            # 표 안 값을 못 읽으므로 여기서 채운다 - 라벨 사전이 이미 뽑은 값은 덮어쓰지 않는다.
+            if isinstance(extended.get("spec_fields"), dict):
+                for code, value in (mill_horizontal.get("spec_fields") or {}).items():
+                    extended["spec_fields"].setdefault(code, value)
     # 표에서만 뽑히는 필드를 보충한다. 원문에서 이미 뽑힌 필드는 덮어쓰지 않고(원문 우선),
     # 표 값도 spec_extractor의 어휘/형태/타입 관문을 그대로 통과한 것만 채운다.
     if table_text and isinstance(extended.get("spec_fields"), dict):

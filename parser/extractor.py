@@ -24,6 +24,8 @@ DOC_ID_PATTERNS = [
     re.compile(r"인증(?:서)?\s*번호\s+(\S+)"),
     re.compile(r"EPREL\s*등록번호\s+(\S+)"),
     re.compile(r"^보고서\s+(\S+)", re.MULTILINE),
+    # 실제 양식 제강 성적서(영문 머리, 2026-10-07): "Certificate No. MTC-..."
+    re.compile(r"Certificate\s*No\.?\s+([A-Z][A-Za-z0-9\-]{5,})"),
 ]
 
 

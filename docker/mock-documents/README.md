@@ -37,7 +37,19 @@ ZKP 판정 대상이 아닌 문서(형식만 갖추면 업로드 즉시 승인)�
 - `Q2_06_CBAM_REPORT_승인_수입량초과/미만.pdf` — CBAM은 de minimis(50t) 초과 여부가
   **정보성 플래그**라 반려 케이스 자체가 없다. 그래서 PASS/FAIL이 아니라 수입량 두 상태로 나눈다.
   부속서에 전구체 3종·전력 배출계수·제3자 검증 정보가 들어 있다.
-- `DOC_*.pdf` 10종 — 비-ZKP 문서. `DOC_SOC_SDS`에 SVHC/RoHS/6가크롬, `DOC_COO`에 원산지증명서 URL.
+- `DOC_*.pdf` 10종과 CBAM 보고서 2건 — **실제 서식판(2026-10-07, `generator/real_style_steel_docs.py`)**.
+  발행처 머리·문서정보 상자·번호 매긴 절·괘선 표·서명/직인·쪽 번호를 갖췄고, **그 서류를 내는 주체가
+  책임지는 DPP 항목**을 괘선 표(라벨 칸 | 값 칸)에 싣는다. 파서는 표를 '라벨: 값'으로 펼쳐 읽는다.
+  | 서류 | 발행 주체(역할) | 채워지는 DPP 항목 |
+  |---|---|---|
+  | CBAM 보고서 | 제조사 | 탄소·CBAM 19개(영업비밀 11개는 ZKP 판정) + 수입 수량 |
+  | DOC_PCF_REPORT 탄소발자국 산정·CBAM 검증 보고서 | 시험·인증기관(TEST_LAB) | 탄소·CBAM 19개(영업비밀 제외 8개가 실제 저장) |
+  | DOC_LCA_EPD | 시험·인증기관 | 단위당 내재배출량, 재활용 가능성 |
+  | DOC_TEST_REPORT | 시험·인증기관 | (KOLAS 공인시험 결과) |
+  | DOC_SOC_SDS | 원자재 공급사(RAW_SUPPLIER) | SVHC 물질명·CAS·농도, 도금층 SVHC, RoHS, 6가크롬 |
+  | DOC_SCRAP_PROOF | 원자재 공급사 | 재생 스크랩 함유율, 스크랩 출처 |
+  | DOC_COO | 상공회의소 양식 | 원산지증명서 URL, 원산지 국가 |
+  | DOC_EU_DOC · DOC_LABEL · DOC_MANUAL · DOC_TECH_FILE | 제조사 | (GTIN·EORI 등 공통 항목) |
 
 ### textile/ (18건)
 - `Q1_04_CARE_LABEL_PASS_1/2.pdf`, `FAIL_1(합계90)/2(합계110).pdf` — 혼용률 합계가

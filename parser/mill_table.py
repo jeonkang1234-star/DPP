@@ -29,8 +29,14 @@ MECH_ALIASES = {
 }
 CHEM_ALIASES = {
     "c": "C", "si": "Si", "mn": "Mn", "p": "P", "s": "S", "cu": "Cu", "n": "N",
-    "ceq": "CEV", "cev": "CEV", "ce": "CEV",
+    "cr": "Cr", "ni": "Ni", "mo": "Mo",
+    "ceq": "CEV", "cev": "CEV",
 }
+# 잔류 원소 표(제품 분석) - 머리글 원소 → 영업비밀(ZKP 대체) 실측 필드.
+RESIDUAL_FIELDS = {"co": "CHEM_CO_ACTUAL_PCT", "sb": "CHEM_SB_ACTUAL_PCT", "w": "CHEM_W_ACTUAL_PCT",
+                   "zn": "CHEM_ZN_ACTUAL_PCT", "zr": "CHEM_ZR_ACTUAL_PCT", "ce": "CHEM_CE_ACTUAL_PCT"}
+MAIN_CHEM_FIELDS = {"Mn": "CHEM_MN_ACTUAL_PCT", "Cr": "CHEM_CR_ACTUAL_PCT", "Ni": "CHEM_NI_ACTUAL_PCT",
+                    "Mo": "CHEM_MO_ACTUAL_PCT"}
 MECH_UNIT = {"ReH": "N/mm²", "Rm": "N/mm²", "A": "%", "KV": "J"}
 
 _SIZE_PAT = re.compile(r"^\d+(\.\d+)?[xX×][\d,.]+([xX×][\d,.A-Za-z]+)?$")
@@ -99,16 +105,22 @@ def _labeled_value(rows, label_tokens):
     같은 줄 오른쪽 끝까지가 아니라, 라벨 바로 뒤 ':'부터 다음 라벨 전까지만 본다."""
     want = [t.lower() for t in label_tokens]
     for _, ws in rows:
-        toks = [t for _, t in ws]
-        low = [t.lower() for t in toks]
+        low = [t.lower() for _, t in ws]
         for i in range(len(low) - len(want) + 1):
             if low[i:i + len(want)] == want:
-                rest = toks[i + len(want):]
-                if rest and rest[0] == ":":
+                rest = ws[i + len(want):]
+                if rest and rest[0][1] == ":":
                     rest = rest[1:]
-                elif rest and rest[0].startswith(":"):
-                    rest = [rest[0][1:]] + rest[1:]
-                value = " ".join(t for t in rest if t).strip()
+                elif rest and rest[0][1].startswith(":"):
+                    rest = [(rest[0][0], rest[0][1][1:])] + rest[1:]
+                # 같은 줄 오른쪽에 다른 머리 항목이 이어지면(단어 간격이 크게 벌어지면) 거기서 끊는다.
+                vals = []
+                for j, (xc, t) in enumerate(rest):
+                    if vals and xc - rest[j - 1][0] > 70:
+                        break
+                    if t:
+                        vals.append(t)
+                value = " ".join(vals).strip()
                 return value or None
     return None
 
@@ -186,10 +198,102 @@ def extract_from_doc(doc):
         "weight_kg": weight,
         "standard": standard,
     }
+    spec = _spec_fields(rows, header_y, cols, max_dx, page.get_text(), data[0][1], spec_min, spec_max)
     return {
+        "spec_fields": spec,
         "chemical_composition_wt_percent": chem_out,
         "mechanical_properties": mech_out,
         "identity": identity,
         "layout": "horizontal_table",
         "rows": len(data),
     }
+
+
+_GAUGE_PAT = re.compile(r"Gauge\s*Length\s*:?\s*(\d+(?:\.\d+)?)\s*mm", re.I)
+_DIRECTION_PAT = re.compile(r"Direction\s*:?\s*(Transvers\w*|Longitudinal|Through[- ]thickness)", re.I)
+_TENSILE_STD_PAT = re.compile(r"Test\s*Method\s*:?\s*(ISO\s*6892[-\d:]*(?:\s*Method\s*[AB])?|ASTM\s*A370[-\d]*|KS\s*B\s*0802)", re.I)
+_CHEM_STD_PAT = re.compile(r"Chemical\s*Analysis\s*:?\s*((?:ASTM|ISO|KS|JIS)\s*[A-Z]?\s*[\d\-:]+)", re.I)
+_MTC_TYPE_PAT = re.compile(r"EN\s*10204\s*(?:type\s*)?([23])\.([12])", re.I)
+_URL_PAT = re.compile(r"(https?://\S+\.pdf)")
+_SURFACE = [(re.compile(r"galvani[sz]ed|HDG|hot[- ]dip", re.I), "HDG"),
+            (re.compile(r"electro[- ]?galv|\bEG\b", re.I), "EG"),
+            (re.compile(r"galvalume|AL-?ZN|aluzinc", re.I), "ALZN"),
+            (re.compile(r"paint|coated|primer", re.I), "PAINTED"),
+            (re.compile(r"as[- ]rolled|black|pickled|mill scale|none", re.I), "NONE")]
+
+
+def _spec_fields(rows, header_y, cols, max_dx, text, first, spec_min, spec_max):
+    """가로 표 성적서에서 DPP 항목(field_code → 값)을 바로 만든다 - 라벨 사전(spec_extractor)이
+    표 안의 값을 못 읽으므로, 열 위치로 읽은 값을 field_code에 직접 꽂는다. 식별 정보(Heat No. 등)는
+    BE persistIdentityFields가 identity로 따로 채우므로 여기 넣지 않는다."""
+    out = {}
+
+    def put(code, v):
+        if v is not None and v != "":
+            out[code] = str(v)
+
+    def num(k):
+        return _num(first[k]) if k in first else None
+
+    put("YIELD_STRENGTH_ACTUAL_MPA", _fmt(num("ReH")) if num("ReH") is not None else None)
+    put("TENSILE_STRENGTH_ACTUAL_MPA", _fmt(num("Rm")) if num("Rm") is not None else None)
+    put("ELONGATION_ACTUAL_PCT", _fmt(num("A")) if num("A") is not None else None)
+    if spec_min.get("ReH") is not None:
+        put("YIELD_STRENGTH_MIN_MPA", _fmt(spec_min["ReH"]))
+    if spec_min.get("Rm") is not None:
+        put("TENSILE_STRENGTH_MIN_MPA", _fmt(spec_min["Rm"]))
+    if spec_max.get("Rm") is not None:
+        put("TENSILE_STRENGTH_MAX_MPA", _fmt(spec_max["Rm"]))
+    if spec_min.get("A") is not None:
+        put("ELONGATION_MIN_PCT", _fmt(spec_min["A"]))
+    for el, code in MAIN_CHEM_FIELDS.items():
+        if num(el) is not None:
+            put(code, _fmt(num(el)))
+
+    m = _GAUGE_PAT.search(text)
+    if m:
+        put("GAUGE_LENGTH_MM", m.group(1))
+    m = _DIRECTION_PAT.search(text)
+    if m:
+        d = m.group(1).lower()
+        put("TEST_DIRECTION", "T" if d.startswith("transv") else "L" if d.startswith("long") else "Z")
+    m = _TENSILE_STD_PAT.search(text)
+    if m:
+        put("TENSILE_TEST_STANDARD", " ".join(m.group(1).split()))
+    m = _CHEM_STD_PAT.search(text)
+    if m:
+        put("CHEMICAL_TEST_STANDARD", " ".join(m.group(1).split()))
+    m = _MTC_TYPE_PAT.search(text)
+    if m:
+        put("MILL_TEST_CERTIFICATE_TYPE", f"EN10204_{m.group(1)}_{m.group(2)}")
+    m = _URL_PAT.search(text)
+    if m:
+        put("MILL_TEST_CERTIFICATE_DOCUMENT_URL", m.group(1))
+    # Division 열: L = 레이들 분석, P = 제품 분석
+    div = (first.get("div") or "").upper() if "div" in cols else ""
+    if re.search(r"Ladle\s*Analysis", text, re.I) or div == "L":
+        put("CHEMICAL_ANALYSIS_TYPE", "LADLE" if div != "P" else "PRODUCT")
+    prod = _labeled_value(rows, ("date", "of", "production")) or _labeled_value(rows, ("production", "date"))
+    if prod and re.match(r"^\d{4}-\d{2}-\d{2}$", prod):
+        put("PRODUCTION_DATE", prod)
+    surface = _labeled_value(rows, ("surface", "condition"))
+    if surface:
+        for pat, code in _SURFACE:
+            if pat.search(surface):
+                put("SURFACE_TREATMENT_TYPE", code)
+                break
+
+    # 잔류 원소 표: 원소 머리글 줄 바로 다음 줄이 값
+    for i, (y, ws) in enumerate(rows):
+        if y <= header_y:
+            continue
+        hdr = [(xc, RESIDUAL_FIELDS[t.strip().lower()]) for xc, t in ws if t.strip().lower() in RESIDUAL_FIELDS]
+        if len(hdr) >= 4 and i + 1 < len(rows):
+            for xc, t in rows[i + 1][1]:
+                if not _NUM_PAT.match(t):
+                    continue
+                best = min(hdr, key=lambda h: abs(h[0] - xc))
+                if abs(best[0] - xc) <= 20:
+                    put(best[1], t)
+            break
+    return out

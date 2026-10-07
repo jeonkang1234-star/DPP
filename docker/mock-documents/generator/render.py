@@ -38,11 +38,17 @@ FONT_CANDIDATES = [
     "/Library/Fonts/AppleGothic.ttf",
     "C:/Windows/Fonts/malgun.ttf",
 ]
+try:  # pip install koreanize-matplotlib 이 NanumGothic.ttf를 같이 깐다(apt 없이 폰트 구하기)
+    import koreanize_matplotlib as _km
+    _KM = os.path.join(os.path.dirname(_km.__file__), "fonts")
+    FONT_CANDIDATES.append(os.path.join(_KM, "NanumGothic.ttf"))
+except Exception:  # noqa: BLE001
+    _KM = None
 FONT_CANDIDATES_BOLD = [
     "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",
     "/usr/share/fonts/truetype/nanum/NanumBarunGothicBold.ttf",
     "C:/Windows/Fonts/malgunbd.ttf",
-]
+] + ([os.path.join(_KM, "NanumGothicBold.ttf")] if _KM else [])
 
 FONT = "MockKR"
 FONT_BOLD = "MockKR-Bold"
