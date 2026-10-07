@@ -1758,3 +1758,11 @@ function domainGrantVals(ctx, state, setState) {
     }
   };
 }
+
+// 협력사 입력 폼(partnerVals.js)이 제조사 입력 폼과 똑같은 규칙으로 칸을 그리도록 같이 쓴다
+// (2026-10-07 강 요청). 위젯 종류·법정필수 배지·섹션 묶음·자동 인식 문서명이 두 화면에서
+// 어긋나지 않게 하려면 판정 로직도 한 벌이어야 한다.
+export {
+  isParserField, inputKindOf, optionsFor, zkpVerdictOf, groupBySection,
+  TIER_LABEL, DISCLOSURE_LABEL, AUTO_FILL_DOC_NAME, ZKP_CRITERIA
+};

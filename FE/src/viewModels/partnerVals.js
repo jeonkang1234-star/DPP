@@ -1,3 +1,14 @@
+import {
+  isParserField, inputKindOf, optionsFor, zkpVerdictOf, groupBySection,
+  TIER_LABEL, DISCLOSURE_LABEL, AUTO_FILL_DOC_NAME, ZKP_CRITERIA
+} from './makerVals.js';
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function nowStamp() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
 /**
  * 파트너(협력사) 계정 전용 뷰모델 - "협력사 초대"를 받아 가입한 조직이 자기가 참여 요청받은
  * DPP 목록을 보고, DPP 하나를 골라 자기 담당 필드만 입력/제출하는 화면.
@@ -27,13 +38,6 @@ function FIELD_DOC_TYPE(code) {
 function unitLabel(unit) {
   if (!unit) return '';
   return { PERCENT: '%', KGCO2E_T: 'kgCO₂e/t', TON: 't', KG: 'kg' }[unit] || unit;
-}
-
-function displayValue(kind, value, unit) {
-  if (!value) return '';
-  if (kind === 'boolean') return value === 'true' ? '예' : value === 'false' ? '아니오' : value;
-  if (kind === 'number' && unit) return value + ' ' + unit;
-  return value;
 }
 
 export function partnerVals(ctx) {
@@ -132,18 +136,24 @@ export function partnerVals(ctx) {
       const found = (ctx.participationsData || []).find(p => p.dppId === state.partnerAssignedDppId);
       return found ? found.dppLabel : '';
     })(),
-    // ── 담당 항목 상세(2026-10-06 개편) ───────────────────────────────────
-    // 협력사가 O/X를 손으로 고르는 게 아니라, 담당 문서(SDS·스크랩 매입증빙 등)를 올리면
-    // 서버가 파싱해서 항목을 채우고 협력사는 결과를 확인만 한다. 문서에서 못 찾은 항목만
-    // 직접 입력한다. 화면 순서도 "1 문서 제출 → 2 추출 결과 확인"으로 바꿨다.
+    // 상세 화면 제목 위 한 줄 - 제조사 화면의 "철강 도메인 · 필수 필드 N개" 자리.
+    partnerAssignedSubLabel: (() => {
+      const row = participationRows.find(r => r.dppId === state.partnerAssignedDppId);
+      return row ? (row.owner + ' · ' + row.roleLabel + ' 담당') : '';
+    })(),
+    // ── 담당 항목 상세(2026-10-06 개편, 2026-10-07 제조사 입력 화면과 같은 모양으로) ──
+    // 협력사가 담당 문서(SDS·스크랩 매입증빙 등)를 올리면 서버가 파싱해서 항목을 채우고,
+    // 협력사는 결과를 확인하고 문서에 없는 항목만 직접 입력한다. 화면은 제조사 DPP 입력과
+    // 똑같이 왼쪽 '문서 검증' + 오른쪽 섹션별 입력 폼(components/FieldFormParts.jsx 공용).
     ...partnerDetail()
   };
 
   function partnerDetail() {
     const docs = df ? (df.documents || []) : [];
     const fields = ff ? (ff.fields || []) : [];
+    const codeOptions = ff && ff.codeOptions ? ff.codeOptions : [];
     const uploading = state.partnerUploading || null;
-    const editing = state.partnerEditing || {};
+    const unlocked = state.unlockedFields || {};
     const docByType = Object.fromEntries(docs.map(d => [d.docTypeCode, d]));
     const serverValue = Object.fromEntries(fields.map(f => [f.fieldCode, f.value || '']));
 
@@ -152,22 +162,48 @@ export function partnerVals(ctx) {
       return t && docByType[t] ? t : null;
     };
     const fieldsOfDoc = docType => fields.filter(f => docTypeFor(f.fieldCode) === docType);
+    const inputOf = code => (ffInputs[code] != null ? ffInputs[code] : (serverValue[code] || ''));
 
+    // ── 왼쪽 '문서 검증' 카드 - 제조사 화면 documentSlots와 같은 모양(2026-10-07 강 요청) ──
     const docRows = docs.map(d => {
       const busy = uploading === d.docTypeCode;
+      const failed = !busy && (d.status === 'REJECTED' || d.status === 'EXPIRED');
+      const stageIdx = busy || d.status === 'PENDING' ? 1
+        : (d.status === 'APPROVED' || d.status === 'REJECTED' || d.status === 'EXPIRED') ? 2 : 0;
+      const success = stageIdx === 2 && !failed;
+      const finalLabel = failed ? (DOC_STATUS_LABEL[d.status] || '반려됨') : '제출 완료';
       const covered = fieldsOfDoc(d.docTypeCode);
       const extracted = covered.filter(f => f.fromDocument && f.value).length;
+      const criterionItems = (d.zkpTarget ? (ZKP_CRITERIA[d.docTypeCode] || []) : []).map(c => ({ ...c, failed: false }));
       return {
         key: d.fieldCode, docTypeCode: d.docTypeCode, label: d.labelKo, labelEn: d.labelEn || '',
         req: d.required ? '필수' : '선택',
-        uploaded: d.status && d.status !== 'NOT_UPLOADED',
+        laterStage: false, laterLabel: '', laterStyle: null,
+        partnerOwned: false, partnerOwnerLabel: '',
         fileName: d.fileName || '',
         statusLabel: busy ? '문서 분석 중…' : (DOC_STATUS_LABEL[d.status] || d.status),
-        dot: ctx.pillDot(busy ? '#0045A9' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
-        busy,
-        extractedLabel: covered.length ? ('자동 입력 ' + extracted + ' / ' + covered.length) : '',
+        progressVisible: false, progressPct: 0, progressStage: '',
+        dot: ctx.pillDot(busy ? '#E3A008' : (DOC_STATUS_COLOR[d.status] || '#9AA8BE')),
+        categoryLabel: d.zkpTarget ? '데이터 검증' : '형식 확인',
+        categoryChip: d.zkpTarget ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : ctx.chip('rgba(16,32,64,.06)', '#6B7A93'),
+        criterionItems,
+        criterionOpen: !!(state.criteriaOpen && state.criteriaOpen[d.docTypeCode]),
+        toggleCriterion: () => setState(s => ({ criteriaOpen: { ...(s.criteriaOpen || {}), [d.docTypeCode]: !(s.criteriaOpen && s.criteriaOpen[d.docTypeCode]) } })),
+        // 이 문서가 채우는 담당 항목 중 몇 개가 실제로 문서에서 나왔는지.
+        detailLabel: covered.length && stageIdx === 2 ? ('문서에서 자동 입력 ' + extracted + ' / ' + covered.length + '개 항목') : '',
+        tileBorderColor: stageIdx === 2 ? (success ? '#12A150' : '#E3A008')
+          : stageIdx === 0 ? '#E03B3B' : 'rgba(16,32,64,.07)',
+        steps: ['미제출', '검증 중', finalLabel].map((label, i) => ({
+          key: i,
+          label,
+          status: (i < stageIdx || (i === stageIdx && success)) ? 'done'
+            : (i === stageIdx && failed) ? 'failed'
+            : (i === stageIdx && stageIdx === 1) ? 'active'
+            : 'upcoming'
+        })),
         inputId: 'partner-doc-upload-' + d.fieldCode,
-        buttonLabel: busy ? '분석 중' : (d.status && d.status !== 'NOT_UPLOADED' ? '다시 올리기' : '업로드'),
+        accept: 'application/pdf,.pdf',
+        disabled: !!uploading,
         onFileChange: async (e) => {
           const file = e.target.files && e.target.files[0];
           e.target.value = '';
@@ -194,7 +230,7 @@ export function partnerVals(ctx) {
             const after = res ? (res.fields || []) : [];
             const newly = after.filter(f => f.value && !serverValue[f.fieldCode]).length;
             ctx.say(newly > 0
-              ? d.labelKo + ' 분석 완료 · ' + newly + '개 항목을 문서에서 채웠습니다. 아래에서 확인해 주세요.'
+              ? d.labelKo + ' 분석 완료 · ' + newly + '개 항목을 문서에서 채웠습니다. 오른쪽에서 확인해 주세요.'
               : d.labelKo + ' 업로드 완료 · 문서에서 새로 찾은 항목이 없습니다. 비어 있는 항목은 직접 입력해 주세요.');
           } catch (err) {
             ctx.say(err.message || '문서 업로드에 실패했습니다.');
@@ -205,67 +241,76 @@ export function partnerVals(ctx) {
       };
     });
 
-    const fieldRows = fields.map(f => {
-      const code = f.fieldCode;
-      const kind = f.dataType === 'BOOLEAN' ? 'boolean' : f.dataType === 'NUMBER' ? 'number' : 'text';
-      const input = ffInputs[code] != null ? ffInputs[code] : (f.value || '');
-      const saved = f.value || '';
-      const changed = input !== saved;
-      const docType = docTypeFor(code);
-      const doc = docType ? docByType[docType] : null;
-      const docUploaded = !!(doc && doc.status && doc.status !== 'NOT_UPLOADED');
-      const isEditing = !!editing[code];
-      // 상태: doc(문서에서 추출) / manual(직접 입력) / edited(고쳤지만 미제출) / waiting(문서 대기) / missing(문서에 없음) / empty
-      let status;
-      if (changed && input) status = 'edited';
-      else if (input && f.fromDocument) status = 'doc';
-      else if (input) status = 'manual';
-      else if (doc && !docUploaded) status = 'waiting';
-      else if (doc && docUploaded) status = 'missing';
-      else status = 'empty';
-      // 배지는 흰 바탕 + 그림자로 띄우고 상태는 글자색(과 점)으로만 구분한다(2026-10-06 강 요청).
-      const badge = {
-        doc: { text: '문서에서 추출', color: '#0E7A3D' },
-        manual: { text: '직접 입력', color: '#44546F' },
-        edited: { text: '수정됨 · 제출 전', color: '#B26B00' },
-        waiting: { text: '문서 대기', color: '#8494AC' },
-        missing: { text: '문서에서 찾지 못함', color: '#C0362C' },
-        empty: { text: '입력 필요', color: '#8494AC' }
-      }[status];
-      const showInput = isEditing || status === 'missing' || status === 'empty';
-      const setValue = v => ctx.setFieldFormInputs(prev => ({ ...prev, [code]: v }));
-      return {
-        key: code, label: f.labelKo, unit: unitLabel(f.unit), req: f.required ? '필수' : '선택', kind,
-        status, badge, showInput,
-        display: displayValue(kind, input, unitLabel(f.unit)),
-        hint: status === 'waiting' ? (doc.labelKo + '를 올리면 자동으로 채워집니다')
-          : status === 'missing' ? (doc.labelKo + '에 이 항목이 없습니다. 직접 입력해 주세요.')
-          : (status === 'empty' ? (f.helpText || '') : ''),
-        value: input,
-        boolYes: input === 'true', boolNo: input === 'false',
-        setYes: () => setValue('true'), setNo: () => setValue('false'),
-        onChange: e => setValue(e.target.value),
-        canEdit: !showInput,
-        editLabel: status === 'waiting' ? '직접 입력' : '수정',
-        startEdit: () => setState(s => ({ partnerEditing: { ...(s.partnerEditing || {}), [code]: true } })),
-        cancelEdit: () => {
-          setValue(saved);
-          setState(s => { const n = { ...(s.partnerEditing || {}) }; delete n[code]; return { partnerEditing: n }; });
-        },
-        canCancel: isEditing
-      };
-    });
+    // ── 오른쪽 입력 카드 - 제조사 화면 fields와 같은 모양(FieldFormBody가 그대로 그린다) ──
+    // 문서에서 채워지는 항목을 위로(제조사 화면과 같은 정렬).
+    const autoFillableOf = f => !!docTypeFor(f.fieldCode) || isParserField(f);
+    const formFields = fields.slice()
+      .sort((a, b) => (autoFillableOf(b) ? 1 : 0) - (autoFillableOf(a) ? 1 : 0))
+      .map(f => {
+        const code = f.fieldCode;
+        const value = inputOf(code);
+        const saved = serverValue[code] || '';
+        const docType = docTypeFor(code);
+        const doc = docType ? docByType[docType] : null;
+        const docUploaded = !!(doc && doc.status && doc.status !== 'NOT_UPLOADED');
+        const isAutoFillable = autoFillableOf(f);
+        const docName = doc ? doc.labelKo : (AUTO_FILL_DOC_NAME[code] || '문서');
+        // 서버가 "이 값은 문서에서 왔다"고 알려준 값(fromDocument)이고, 아직 손대지 않았을 때만 파싱값이다.
+        const fromDoc = !!(f.fromDocument && value && value === saved);
+        let sourceLabel;
+        if (fromDoc) sourceLabel = '파싱(' + docName + ')';
+        else if (value && value !== saved) sourceLabel = '수정됨 · 제출 전';
+        else if (value) sourceLabel = '직접 입력됨';
+        else if (isAutoFillable && docUploaded) sourceLabel = docName + '에서 찾지 못함 · 직접 입력';
+        else if (isAutoFillable) sourceLabel = docName + ' 업로드 시 자동 인식';
+        else sourceLabel = '직접 입력 항목';
+        // 파싱된 값은 제조사 화면처럼 잠그고 '수정'을 눌러야 고칠 수 있다.
+        const locked = fromDoc && !unlocked[code];
+        const unit = unitLabel(f.unit);
+        return {
+          key: code, label: f.labelKo + (unit ? ' (' + unit + ')' : ''),
+          labelEn: f.labelEn || '',
+          req: f.required ? '필수' : '선택',
+          laterStage: false, laterLabel: '', laterStyle: null,
+          ph: (f.helpText && f.helpText.length <= 40) ? f.helpText : '',
+          value,
+          hint: (f.helpText && f.helpText.length > 40) ? f.helpText : '',
+          sourceLabel,
+          autoFillable: isAutoFillable,
+          section: f.section || 'SYSTEM',
+          inputKind: inputKindOf(f),
+          options: optionsFor(f, codeOptions),
+          tier: f.tier || '',
+          tierLabel: TIER_LABEL[f.tier] || '',
+          tierStyle: ctx.badgeText3d(f.tier === 'T0' ? '#C22B2B' : f.tier === 'T1' ? '#0045A9' : '#6B7A93'),
+          basisTip: [f.legalBasis, f.t1Condition ? '발동 조건: ' + f.t1Condition : ''].filter(Boolean).join(' / '),
+          disclosureLabel: DISCLOSURE_LABEL[f.disclosureScope] || '',
+          ...zkpVerdictOf(f),
+          // 미입력=빨간 테두리, 입력됨=초록 테두리(제조사 화면과 동일).
+          inputBorderColor: value ? '#12A150' : '#E03B3B',
+          locked,
+          partnerLockLabel: '',
+          unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [code]: true } })),
+          onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [code]: e.target.value }))
+        };
+      });
 
-    const filled = fieldRows.filter(r => !!r.value).length;
-    const dirty = fieldRows.some(r => r.status === 'edited') || fieldRows.some(r => r.value && r.value !== (serverValue[r.key] || ''));
+    const filled = formFields.filter(r => !!r.value).length;
+    const dirty = fields.some(f => inputOf(f.fieldCode) !== (serverValue[f.fieldCode] || ''));
+    const dppKey = state.partnerAssignedDppId;
+    const submittedAt = state.partnerSubmittedAt && state.partnerSubmittedAt[dppKey];
     return {
       partnerDocs: docRows,
       partnerDocsEmpty: docRows.length === 0,
-      partnerFieldRows: fieldRows,
+      partnerFormFields: formFields,
+      partnerFieldSections: ff ? groupBySection(formFields, ff.sections, state.openFieldSections, setState) : [],
+      partnerFormOpen: state.partnerFormOpen !== false,
+      togglePartnerForm: () => setState(s => ({ partnerFormOpen: !(s.partnerFormOpen !== false) })),
       partnerFieldFilledCount: filled,
-      partnerFieldTotalCount: fieldRows.length,
-      partnerDocFromCount: fieldRows.filter(r => r.status === 'doc').length,
+      partnerFieldTotalCount: formFields.length,
       partnerDirty: dirty,
+      partnerLastSavedLabel: dirty ? '제출하지 않은 변경이 있습니다'
+        : submittedAt ? ('마지막 제출 ' + submittedAt) : '아직 제출한 이력이 없습니다',
       partnerUploadBusy: !!uploading,
       partnerSaveDraft: async () => {
         if (!ff || !ff.dppId) return;
@@ -273,7 +318,7 @@ export function partnerVals(ctx) {
           const result = await ctx.saveFieldFormDraft(ff.dppId, ffInputs);
           ctx.setFieldFormData(result);
           ctx.setFieldFormInputs(Object.fromEntries((result.fields || []).map(x => [x.fieldCode, x.value || ''])));
-          setState({ partnerEditing: {} });
+          setState(s => ({ unlockedFields: {}, partnerSubmittedAt: { ...(s.partnerSubmittedAt || {}), [ff.dppId]: nowStamp() } }));
           ctx.say('제출했습니다.');
         } catch (e) {
           ctx.say(e.message || '저장에 실패했습니다.');
