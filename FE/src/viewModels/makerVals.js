@@ -596,6 +596,9 @@ export function makerVals(ctx) {
         // 쓸 수 없다. 파싱 잠금과 달리 화면에서 풀 수 없다 - 서버도 이 필드의 저장을
         // 무시하므로(FieldFormService.upsertValues) '수정' 버튼을 주면 거짓말이 된다.
         const partnerLockLabel = f.partnerLockLabel || '';
+        // 협력사가 이미 값을 넣었으면 "제출 대기"가 아니라 "제출 완료"다(2026-10-07 강 지적 -
+        // 협력사가 데이터를 올려도 계속 "○○(역할) 제출 대기"로 떠 있었다).
+        const partnerDone = !!partnerLockLabel && !!value;
         const locked = (isParsed && !unlocked) || !!partnerLockLabel;
         return {
           key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
@@ -647,7 +650,8 @@ export function makerVals(ctx) {
           inputBorderColor: value ? '#12A150'
             : (partnerLockLabel || !inIssueGate(f)) ? 'rgba(16,32,64,.14)' : '#E03B3B',
           locked,
-          partnerLockLabel,
+          partnerLockLabel: partnerDone ? partnerLockLabel.replace(/제출 대기$/, '제출 완료') : partnerLockLabel,
+          partnerLockDone: partnerDone,
           // 협력사 잠금은 못 푼다 - '수정' 버튼 자체를 주지 않는다(AppView는 unlock이
           // 없으면 버튼을 그리지 않는다).
           unlock: partnerLockLabel ? null
@@ -1173,6 +1177,8 @@ export function makerVals(ctx) {
           // (partnerLockLabel: 그 역할의 협력사가 참여를 '수락'한 경우에만 채워짐).
           // 잠겼을 때도 항목 자체는 남긴다 - 제조사는 협력사 제출 진행 상황을 봐야 한다.
           const partnerLockLabel = d.partnerLockLabel || '';
+          // 협력사가 문서를 올렸으면 "제출 완료"로 바꿔 보여준다(2026-10-07).
+          const partnerDocDone = !!partnerLockLabel && !!d.status && d.status !== 'NOT_UPLOADED';
           return {
             key: d.fieldCode, label: d.labelKo, labelEn: d.labelEn || '', req: d.required ? '필수' : '선택',
             // 발급 이후 단계에 제출하는 문서 - 필수여도 지금 없다고 발급이 막히지 않는다.
@@ -1181,7 +1187,8 @@ export function makerVals(ctx) {
             laterStyle: laterStage ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : null,
             // 미제출 타일의 빨간 테두리도 빼준다 - 아직 낼 수 없는 문서를 재촉하면 안 된다.
             partnerOwned: !!partnerLockLabel,
-            partnerOwnerLabel: partnerLockLabel,
+            partnerOwnerLabel: partnerDocDone ? partnerLockLabel.replace(/제출 대기$/, '제출 완료') : partnerLockLabel,
+            partnerOwnerDone: partnerDocDone,
             fileName: d.fileName || '',
             // 검증 중이면 서버가 알려주는 진행률(GET /document/progress)을 % 로 함께 보여준다.
             statusLabel: uploading ? ('검증 중' + (docProgress ? ' ' + docProgress.percent + '%' : '')) : (DOC_STATUS_LABEL[d.status] || d.status),
