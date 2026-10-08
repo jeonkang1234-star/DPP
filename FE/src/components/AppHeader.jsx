@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearSession, loadSession, saveSession } from '../api/session.js';
 import { refreshSession } from '../api/authApi.js';
@@ -24,15 +24,31 @@ function fmtRemain(ms) {
 /**
  * 세션 남은 시간 + 연장 버튼(2026-10-08 강 요청 - 좌측 상단 로고·역할 옆).
  *
- * 남은 시간은 액세스 토큰의 exp 기준이다(서버 jwt.access-token-expiration-ms, 기본 1시간).
+ * 남은 시간은 액세스 토큰의 exp 기준이다(서버 jwt.access-token-expiration-ms = 30분).
  * '연장'은 refresh 토큰으로 새 토큰을 받아 세션에 덮어쓴다(POST /auth/refresh). 시간이
  * 다 되면 어차피 다음 API 호출이 401로 튕기므로, 기다리지 않고 바로 로그인 화면으로 보낸다.
+ *
+ * 개발보고서대로 "무활동 30분 후 자동 로그아웃"(2026-10-08 강 요청): 사용자가 화면을
+ * 쓰고 있는 동안(최근 1분 안에 클릭·키 입력·스크롤)에는 남은 시간이 AUTO_EXTEND_BELOW_MS
+ * 아래로 내려가면 조용히 자동 연장한다. 손을 놓으면 연장이 멈춰서 마지막 활동 후
+ * 약 30분이 지나면 로그아웃된다.
  */
+const ACTIVE_WINDOW_MS = 60 * 1000;
+const AUTO_EXTEND_BELOW_MS = 28 * 60 * 1000;
+const ACTIVITY_EVENTS = ['mousedown', 'keydown', 'wheel', 'touchstart'];
 function SessionTimer({ onExpired }) {
   const [expiry, setExpiry] = useState(() => tokenExpiryMs(loadSession()?.accessToken || ''));
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const lastActivity = useRef(Date.now());
+  const busyRef = useRef(false);
+
+  useEffect(() => {
+    const mark = () => { lastActivity.current = Date.now(); };
+    ACTIVITY_EVENTS.forEach((ev) => window.addEventListener(ev, mark, { passive: true }));
+    return () => ACTIVITY_EVENTS.forEach((ev) => window.removeEventListener(ev, mark));
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -49,14 +65,24 @@ function SessionTimer({ onExpired }) {
     if (remain != null && remain <= 0) onExpired?.();
   }, [remain != null && remain <= 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // 활동 중이면 자동 연장 - 매 초 확인하지만 실제 호출은 남은 시간이 28분 아래일 때만이라
+  // 계속 쓰는 중에도 2분에 한 번 이하로만 나간다.
+  useEffect(() => {
+    if (remain == null || remain <= 0) return;
+    if (remain < AUTO_EXTEND_BELOW_MS && Date.now() - lastActivity.current < ACTIVE_WINDOW_MS) {
+      extend(true);
+    }
+  }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (remain == null) return null;
   const canExtend = !!loadSession()?.refreshToken;
   const warn = remain < 5 * 60 * 1000;
 
-  async function extend() {
+  async function extend(silent) {
     const session = loadSession();
-    if (!session?.refreshToken || busy) return;
-    setBusy(true);
+    if (!session?.refreshToken || busyRef.current) return;
+    busyRef.current = true;
+    if (!silent) setBusy(true);
     setError('');
     try {
       const res = await refreshSession(session.refreshToken);
@@ -66,16 +92,17 @@ function SessionTimer({ onExpired }) {
       setError(e.message || '연장하지 못했습니다.');
       if (e.status === 401) onExpired?.();
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   return (
-    <span title={error || '세션 만료까지 남은 시간'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '30px', padding: '0 4px 0 11px', border: '1px solid ' + (warn ? 'rgba(224,59,59,.30)' : 'rgba(16,32,64,.10)'), borderRadius: '10px', background: warn ? 'rgba(224,59,59,.06)' : '#fff' }}>
+    <span title={error || '세션 만료까지 남은 시간 · 사용 중에는 자동 연장되고, 30분 동안 활동이 없으면 로그아웃됩니다'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '30px', padding: '0 4px 0 11px', border: '1px solid ' + (warn ? 'rgba(224,59,59,.30)' : 'rgba(16,32,64,.10)'), borderRadius: '10px', background: warn ? 'rgba(224,59,59,.06)' : '#fff' }}>
       <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path fill={warn ? '#C22B2B' : '#8494AC'} d="M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Zm0 1.7a5.8 5.8 0 1 1 0 11.6 5.8 5.8 0 0 1 0-11.6Zm-.85 1.9v4.25l3.4 2.05.85-1.4-2.55-1.55V6.1h-1.7Z" /></svg>
       <span style={{ fontSize: '12px', fontWeight: '600', color: warn ? '#C22B2B' : '#44546F', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtRemain(remain)}</span>
       {canExtend ? (
-        <button onClick={extend} disabled={busy} style={{ height: '22px', padding: '0 9px', border: '0', borderRadius: '7px', background: '#0045A9', color: '#fff', fontSize: '11px', fontWeight: '700', cursor: busy ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>{busy ? '연장 중…' : '연장'}</button>
+        <button onClick={() => extend(false)} disabled={busy} style={{ height: '22px', padding: '0 9px', border: '0', borderRadius: '7px', background: '#0045A9', color: '#fff', fontSize: '11px', fontWeight: '700', cursor: busy ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>{busy ? '연장 중…' : '연장'}</button>
       ) : <span style={{ width: '4px' }} />}
     </span>
   );
