@@ -121,4 +121,37 @@ public interface RegulatorDppDetailRepository extends Repository<Dpp, Long> {
             + "WHERE rf.disclosure_scope = 'RESTRICTED' AND rf.domain IN ('COMMON', :domain)",
             nativeQuery = true)
     List<String> findRestrictedLabels(@Param("domain") String domain);
+
+    /**
+     * 무결성 검증(2026-10-08): 스냅샷 버전별 0 snapshot_id, 1 version_no, 2 사유, 3 생성 시각,
+     * 4 저장된 해시, 5 저장된 payload 로 지금 다시 계산한 해시, 6 앵커 상태, 7 tx_id,
+     * 8 블록 번호, 9 앵커 행에 남긴 해시, 10 앵커 시각.
+     */
+    @Query(value = "SELECT CAST(s.snapshot_id AS TEXT), CAST(s.version_no AS TEXT), s.trigger_reason, "
+            + "to_char(s.created_at AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI'), "
+            + "CAST(s.content_hash AS TEXT), encode(digest(s.payload::text, 'sha256'), 'hex'), "
+            + "a.status, a.tx_id, CAST(a.block_no AS TEXT), CAST(a.content_hash AS TEXT), "
+            + "to_char(COALESCE(a.anchored_at, a.created_at) AT TIME ZONE 'Asia/Seoul', 'YYYY-MM-DD HH24:MI') "
+            + "FROM dpp_snapshot s LEFT JOIN blockchain_anchor a ON a.anchor_id = s.anchor_id "
+            + "WHERE s.dpp_id = :dppId ORDER BY s.version_no",
+            nativeQuery = true)
+    List<Object[]> findSnapshotIntegrity(@Param("dppId") Long dppId);
+
+    /**
+     * 최신 스냅샷(원장에 고정된 기록본)과 지금 DB의 항목 값이 다른 항목 이름.
+     * 기록 이후 DB 값이 몰래 바뀌었는지 본다 - 정상 경로의 변경은 저장할 때마다 새 스냅샷이 쌓이므로
+     * 여기에 걸리지 않는다(FieldFormService.saveDraft, V41).
+     */
+    @Query(value = "WITH latest AS (SELECT payload FROM dpp_snapshot WHERE dpp_id = :dppId "
+            + "  ORDER BY version_no DESC LIMIT 1), "
+            + "snap AS (SELECT e->>'field_code' AS code, NULLIF(e->>'value_text', '') AS val "
+            + "  FROM latest, jsonb_array_elements(latest.payload->'fields') e), "
+            + "cur AS (SELECT field_code AS code, NULLIF(value_text, '') AS val FROM dpp_field_value WHERE dpp_id = :dppId) "
+            + "SELECT COALESCE(rf.label_ko, x.code) FROM ("
+            + "  SELECT COALESCE(s.code, c.code) AS code FROM snap s FULL OUTER JOIN cur c ON s.code = c.code "
+            + "  WHERE s.val IS DISTINCT FROM c.val) x "
+            + "LEFT JOIN requirement_field rf ON rf.field_code = x.code "
+            + "WHERE EXISTS (SELECT 1 FROM latest) ORDER BY 1",
+            nativeQuery = true)
+    List<String> findLiveFieldDrift(@Param("dppId") Long dppId);
 }

@@ -3,10 +3,12 @@ package com.dpp.verify.service;
 import com.dpp.auth.entity.AccountType;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
+import com.dpp.blockchain.client.BlockchainClient;
 import com.dpp.dpp.dto.PublicPassportResponse;
 import com.dpp.dpp.service.PublicPassportService;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
+import com.dpp.verify.dto.DppIntegrityDto;
 import com.dpp.verify.dto.DppSearchResultDto;
 import com.dpp.verify.dto.RegulatorDppDetailDto;
 import com.dpp.verify.repository.DppRegistrySearchRepository;
@@ -19,9 +21,11 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -43,17 +47,20 @@ public class DppRegistryService {
     private final DppRegistrySearchRepository dppRegistrySearchRepository;
     private final RegulatorDppDetailRepository regulatorDppDetailRepository;
     private final PublicPassportService publicPassportService;
+    private final Optional<BlockchainClient> blockchainClient;
 
     public DppRegistryService(UserAccountRepository userAccountRepository,
                                OrganizationRepository organizationRepository,
                                DppRegistrySearchRepository dppRegistrySearchRepository,
                                RegulatorDppDetailRepository regulatorDppDetailRepository,
-                               PublicPassportService publicPassportService) {
+                               PublicPassportService publicPassportService,
+                               Optional<BlockchainClient> blockchainClient) {
         this.userAccountRepository = userAccountRepository;
         this.organizationRepository = organizationRepository;
         this.dppRegistrySearchRepository = dppRegistrySearchRepository;
         this.regulatorDppDetailRepository = regulatorDppDetailRepository;
         this.publicPassportService = publicPassportService;
+        this.blockchainClient = blockchainClient;
     }
 
     /**
@@ -148,6 +155,130 @@ public class DppRegistryService {
 
         return new RegulatorDppDetailDto(product, manufacturer, participants, documents, proofs, anchors,
                 clearances, hasPhoto, restrictedLabels, passport);
+    }
+
+    /**
+     * 무결성 검증(2026-10-08, 개발보고서 "세관·당국은 원장의 기록과 대조해 위·변조를 판정").
+     *
+     * 버전마다 해시 세 개를 비교한다.
+     *   ① 기록 시점에 저장한 해시
+     *   ② 저장된 기록본(payload)으로 지금 다시 계산한 해시 - DB 의 기록본이 바뀌면 달라진다
+     *   ③ 블록체인 원장에서 읽은 해시 - 원장은 고칠 수 없으므로 기준값이다
+     * 셋이 같으면 그 버전은 위·변조가 없다. 추가로 최신 기록본과 지금 DB 값을 항목별로
+     * 비교해, 기록 이후 값이 몰래 바뀌었는지(정상 경로는 바꿀 때마다 새 버전이 쌓인다)도 본다.
+     *
+     * 원장이 연결되지 않은 환경(blockchain.enabled=false, 앵커 상태 MOCK)에서는 ③ 대신 앵커
+     * 행에 남긴 해시와 비교하고, 화면에 "원장 미연결"이라고 분명히 밝힌다.
+     */
+    @Transactional(readOnly = true)
+    public DppIntegrityDto integrity(Long userId, String publicUuid) {
+        requireRegulatorAccess(userId);
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(publicUuid == null ? "" : publicUuid.trim());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 DPP 식별자입니다.");
+        }
+        List<Object[]> headerRows = regulatorDppDetailRepository.findHeader(uuid.toString());
+        if (headerRows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "발급된 DPP를 찾을 수 없습니다.");
+        }
+        Long dppId = Long.valueOf(str(headerRows.get(0)[0]));
+
+        List<DppIntegrityDto.Version> versions = new ArrayList<>();
+        boolean anyMismatch = false;
+        boolean allMatch = true;
+        boolean ledgerUsed = false;
+        for (Object[] r : regulatorDppDetailRepository.findSnapshotIntegrity(dppId)) {
+            String snapshotId = nz(r[0]);
+            String stored = trimHash(nz(r[4]));
+            String recomputed = trimHash(nz(r[5]));
+            String anchorStatus = nz(r[6]);
+            String anchorHash = trimHash(nz(r[9]));
+
+            String ledgerHash = null;
+            String ledgerSource;
+            String verdict;
+            if (anchorStatus.isEmpty()) {
+                ledgerSource = "없음";
+                verdict = "NOT_ANCHORED";
+            } else if ("CONFIRMED".equals(anchorStatus) && blockchainClient.isPresent()) {
+                ledgerSource = "Fabric 원장";
+                try {
+                    ledgerHash = trimHash(blockchainClient.get().queryDocumentHash("snapshot:" + snapshotId));
+                    ledgerUsed = true;
+                    verdict = null;
+                } catch (Exception e) {
+                    verdict = "LEDGER_ERROR";
+                }
+            } else if ("MOCK".equals(anchorStatus) || "CONFIRMED".equals(anchorStatus)) {
+                ledgerSource = "앵커 기록(원장 미연결)";
+                ledgerHash = anchorHash;
+                verdict = null;
+            } else {
+                ledgerSource = "원장 기록 " + ("FAILED".equals(anchorStatus) ? "실패" : "대기");
+                verdict = "NOT_ANCHORED";
+            }
+            if (!stored.equals(recomputed)) {
+                verdict = "MISMATCH";
+            } else if (verdict == null) {
+                verdict = stored.equals(ledgerHash) ? "MATCH" : "MISMATCH";
+            }
+            anyMismatch |= "MISMATCH".equals(verdict);
+            allMatch &= "MATCH".equals(verdict);
+
+            versions.add(new DppIntegrityDto.Version(
+                    Integer.parseInt(nz(r[1])), nz(r[2]), reasonLabel(nz(r[2])), nz(r[3]),
+                    stored, recomputed, ledgerHash, ledgerSource, anchorStatus, nz(r[7]), nz(r[8]), nz(r[10]),
+                    verdict, verdictLabel(verdict)));
+        }
+        List<String> drift = versions.isEmpty() ? List.of() : regulatorDppDetailRepository.findLiveFieldDrift(dppId);
+
+        String overall;
+        String overallLabel;
+        if (versions.isEmpty()) {
+            overall = "NO_RECORD";
+            overallLabel = "기록된 발급본이 없습니다";
+        } else if (anyMismatch || !drift.isEmpty()) {
+            overall = "TAMPERED";
+            overallLabel = "위·변조 의심 - 기록과 다른 값이 있습니다";
+        } else if (allMatch) {
+            overall = "VERIFIED";
+            overallLabel = "위·변조 없음 - 모든 기록본이 원장과 일치합니다";
+        } else {
+            overall = "PARTIAL";
+            overallLabel = "일부 기록본은 아직 원장과 대조할 수 없습니다";
+        }
+        String checkedAt = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        return new DppIntegrityDto(overall, overallLabel, checkedAt, ledgerUsed, versions, drift);
+    }
+
+    private static String nz(Object v) {
+        return v == null ? "" : String.valueOf(v);
+    }
+
+    private static String trimHash(String h) {
+        return h == null ? "" : h.trim().toLowerCase();
+    }
+
+    private static String reasonLabel(String reason) {
+        return switch (reason) {
+            case "ISSUE" -> "발급";
+            case "LIFECYCLE" -> "발급 이후 데이터 추가";
+            case "EOL" -> "수명 종료";
+            case "CUSTOMS" -> "통관";
+            default -> reason;
+        };
+    }
+
+    private static String verdictLabel(String verdict) {
+        return switch (verdict) {
+            case "MATCH" -> "일치";
+            case "MISMATCH" -> "불일치";
+            case "LEDGER_ERROR" -> "원장 조회 실패";
+            default -> "원장 기록 없음";
+        };
     }
 
     private static String str(Object v) {

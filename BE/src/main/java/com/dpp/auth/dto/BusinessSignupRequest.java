@@ -33,7 +33,10 @@ import jakarta.validation.constraints.Size;
  */
 public record BusinessSignupRequest(
         @NotBlank @Email String email,
-        @NotBlank @Size(min = 8, message = "비밀번호는 8자 이상이어야 합니다.") String password,
+        // 대소문자·숫자·특수문자를 모두 포함한 8자 이상(2026-10-08, 개발보고서 "인증과 세션").
+        @NotBlank @Size(min = 8, message = "비밀번호는 8자 이상이어야 합니다.")
+        @Pattern(regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,}$",
+                message = "비밀번호는 영문 대문자·소문자·숫자·특수문자를 모두 포함해야 합니다.") String password,
         @NotBlank String companyName,
         String businessRegNo,
         @NotBlank String country,

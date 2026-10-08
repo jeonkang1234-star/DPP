@@ -151,4 +151,12 @@ public interface DppQueryRepository extends JpaRepository<Dpp, Long> {
             + "required_count, filled_count FROM v_dpp_lifecycle_status "
             + "WHERE dpp_id IN (:dppIds) ORDER BY dpp_id, stage_no", nativeQuery = true)
     List<Object[]> findLifecycleStatus(@Param("dppIds") List<Long> dppIds);
+
+    /**
+     * 일반 소비자(비로그인·개인·타사) 공개 여권에서 앞 두 글자만 남기고 가릴 항목
+     * (field_visibility tier_level 1 = MASKED, V42). PublicPassportService가 쓴다.
+     */
+    @Query(value = "SELECT field_code FROM field_visibility WHERE tier_level = 1 AND visibility = 'MASKED'",
+            nativeQuery = true)
+    List<String> findConsumerMaskedFieldCodes();
 }

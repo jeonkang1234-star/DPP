@@ -1,5 +1,6 @@
 package com.dpp.verify.controller;
 
+import com.dpp.verify.dto.DppIntegrityDto;
 import com.dpp.verify.dto.DppSearchResultDto;
 import com.dpp.verify.dto.RegulatorDppDetailDto;
 import com.dpp.verify.service.DppRegistryService;
@@ -48,6 +49,16 @@ public class DppRegistryController {
     public ResponseEntity<RegulatorDppDetailDto> detail(@PathVariable String publicUuid,
                                                         Authentication authentication) {
         return ResponseEntity.ok(dppRegistryService.detail(parseUserId(authentication), publicUuid));
+    }
+
+    /**
+     * 무결성 검증(2026-10-08) - 버전별로 저장 해시·재계산 해시·블록체인 원장 해시를 대조하고,
+     * 최신 기록본과 지금 값이 다른 항목이 있는지 본다. 세관·시장감시 전용.
+     */
+    @GetMapping("/verify/dpp/{publicUuid}/integrity")
+    public ResponseEntity<DppIntegrityDto> integrity(@PathVariable String publicUuid,
+                                                     Authentication authentication) {
+        return ResponseEntity.ok(dppRegistryService.integrity(parseUserId(authentication), publicUuid));
     }
 
     private Long parseUserId(Authentication authentication) {

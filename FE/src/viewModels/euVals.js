@@ -2,7 +2,7 @@ import { fetchPublicPassport } from '../api/publicApi.js';
 import React from 'react';
 import QRCode from 'qrcode';
 import { publicPassportUrl } from '../publicUrl.js';
-import { searchDppRegistry, fetchRegulatorDppDetail } from '../api/meApi.js';
+import { searchDppRegistry, fetchRegulatorDppDetail, fetchDppIntegrity } from '../api/meApi.js';
 
 /**
  * EU 시장감시(레지스트리 조회) - 예전엔 하드코딩 배열 6건을 그대로 보여줬다. 이제
@@ -205,7 +205,68 @@ function regDetailVals(ctx) {
       integrity: lab(L.integrity, r.integrityResult),
       at: dash(r.decidedAt || r.requestedAt)
     })),
-    regDetailClearancesEmpty: clearances.length === 0
+    regDetailClearancesEmpty: clearances.length === 0,
+    ...integrityVals(ctx, rd)
+  };
+}
+
+/**
+ * 무결성 검증 카드(2026-10-08) - '블록체인·통관' 탭 맨 위. 버튼을 누르면 서버가 버전별로
+ * ① 기록 시 저장한 해시 ② 기록본으로 지금 다시 계산한 해시 ③ 블록체인 원장의 해시를
+ * 대조하고, 최신 기록본과 지금 값이 다른 항목이 있는지도 본다(GET /verify/dpp/{uuid}/integrity).
+ */
+function integrityVals(ctx, rd) {
+  const { state, setState } = ctx;
+  const uuid = rd && rd.uuid;
+  const cur = state.regIntegrity && state.regIntegrity.uuid === uuid ? state.regIntegrity : null;
+  const d = cur && cur.data;
+  const OVERALL = {
+    VERIFIED: { icon: '✓', fg: '#0E7A3D', bg: 'rgba(18,161,80,.08)', bd: 'rgba(18,161,80,.30)' },
+    TAMPERED: { icon: '✕', fg: '#C22B2B', bg: 'rgba(224,59,59,.07)', bd: 'rgba(224,59,59,.30)' },
+    PARTIAL: { icon: '!', fg: '#96660A', bg: 'rgba(227,160,8,.10)', bd: 'rgba(227,160,8,.32)' },
+    NO_RECORD: { icon: '–', fg: '#6B7A93', bg: '#F7F9FD', bd: 'rgba(16,32,64,.10)' }
+  };
+  const o = d ? (OVERALL[d.overall] || OVERALL.NO_RECORD) : null;
+  const short = (h) => (h ? h.slice(0, 10) + '…' + h.slice(-6) : '—');
+  return {
+    regIntegrityLoading: !!(cur && cur.loading),
+    regIntegrityError: (cur && cur.error) || '',
+    regIntegrityDone: !!d,
+    regIntegrityRun: () => {
+      if (!uuid) return;
+      setState({ regIntegrity: { uuid, loading: true } });
+      fetchDppIntegrity(uuid)
+        .then((data) => setState({ regIntegrity: { uuid, data } }))
+        .catch((e) => setState({ regIntegrity: { uuid, error: (e && e.message) || '무결성 검증에 실패했습니다.' } }));
+    },
+    regIntegrityIcon: o ? o.icon : '',
+    regIntegrityLabel: d ? d.overallLabel : '',
+    regIntegrityBoxStyle: o
+      ? { display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '14px', background: o.bg, border: '1px solid ' + o.bd }
+      : {},
+    regIntegrityIconStyle: o
+      ? { width: '30px', height: '30px', flex: 'none', borderRadius: '999px', background: o.fg, color: '#fff', display: 'grid', placeItems: 'center', fontSize: '15px', fontWeight: '800' }
+      : {},
+    regIntegrityLabelStyle: o ? { fontSize: '14px', fontWeight: '700', color: o.fg } : {},
+    regIntegrityMeta: d
+      ? ('검증 시각 ' + d.checkedAt + ' · ' + (d.ledgerConnected ? 'Fabric 원장에서 직접 조회' : '원장 미연결 환경 - 앵커 기록과 대조'))
+      : '',
+    regIntegrityVersions: d ? d.versions.map((v) => ({
+      key: v.versionNo,
+      title: 'v' + v.versionNo + ' · ' + v.reasonLabel,
+      at: v.createdAt || '—',
+      verdict: v.verdictLabel,
+      verdictStyle: badge(v.verdict === 'MATCH' ? 'ok' : v.verdict === 'MISMATCH' ? 'bad' : 'mute'),
+      rows: [
+        { k: '① 기록 시 저장한 해시', v: short(v.storedHash), ok: true },
+        { k: '② 기록본으로 다시 계산', v: short(v.recomputedHash), ok: v.recomputedHash === v.storedHash },
+        { k: '③ ' + (v.ledgerSource || '원장'), v: short(v.ledgerHash), ok: !!v.ledgerHash && v.ledgerHash === v.storedHash }
+      ].map((r) => ({ ...r, mark: r.ok ? '✓' : '✕', markColor: r.ok ? '#12A150' : '#E03B3B' })),
+      tx: v.txId ? ('tx ' + short(v.txId) + (v.blockNo ? ' · 블록 #' + v.blockNo : '')) : ''
+    })) : [],
+    regIntegrityDrift: d && d.liveDrift && d.liveDrift.length
+      ? '최신 기록본 이후 값이 바뀐 항목 ' + d.liveDrift.length + '개: ' + d.liveDrift.slice(0, 6).join(', ') + (d.liveDrift.length > 6 ? ' 외' : '')
+      : ''
   };
 }
 

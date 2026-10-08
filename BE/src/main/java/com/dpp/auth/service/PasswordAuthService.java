@@ -31,7 +31,9 @@ import java.util.Set;
 public class PasswordAuthService {
 
     private static final int MAX_FAILED_ATTEMPTS = 5;
-    private static final int LOCK_MINUTES = 15;
+    /** 5회 실패로 잠겼을 때의 안내 - FE는 423을 보고 이메일 잠금 해제 화면을 띄운다. */
+    public static final String LOCKED_MESSAGE =
+            "로그인 5회 실패로 계정이 잠겼습니다. 가입한 이메일로 인증코드를 받아 잠금을 해제해 주세요.";
 
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
@@ -62,7 +64,9 @@ public class PasswordAuthService {
         this.organizationRepository = organizationRepository;
     }
 
-    @Transactional
+    // 실패 횟수·잠금은 예외를 던지기 직전에 저장한다 - 기본 설정(런타임 예외면 롤백)이면
+    // 그 저장까지 같이 되돌아가서, 몇 번을 틀려도 횟수가 쌓이지 않았다(2026-10-08 발견).
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public LoginResponse login(String email, String rawPassword) {
         UserAccount user = userAccountRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -74,16 +78,24 @@ public class PasswordAuthService {
         if (user.getCredentialType() == CredentialType.SNS) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SNS로 가입된 계정입니다. SNS 로그인을 이용해 주세요.");
         }
+        // 5회 실패 잠금은 시간이 지나도 풀리지 않는다 - 이메일 인증으로만 푼다
+        // (AccountUnlockService, 2026-10-08 개발보고서 기준). 예전 방식(locked_until)으로
+        // 잠긴 계정도 같은 안내로 보낸다.
+        if (user.getStatus() == AccountStatus.LOCKED
+                || (user.getLockedUntil() != null && user.getLockedUntil().isAfter(OffsetDateTime.now()))) {
+            throw new ResponseStatusException(HttpStatus.LOCKED, LOCKED_MESSAGE);
+        }
         if (user.getStatus() != AccountStatus.ACTIVE) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, statusMessage(user.getStatus()));
         }
-        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(OffsetDateTime.now())) {
-            throw new ResponseStatusException(HttpStatus.LOCKED,
-                    "로그인 실패 횟수 초과로 잠긴 계정입니다. " + user.getLockedUntil() + " 이후 다시 시도해 주세요.");
-        }
         if (user.getPasswordHash() == null || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
-            registerFailedAttempt(user);
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다.");
+            int failed = registerFailedAttempt(user);
+            if (failed >= MAX_FAILED_ATTEMPTS) {
+                throw new ResponseStatusException(HttpStatus.LOCKED, LOCKED_MESSAGE);
+            }
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "이메일 또는 비밀번호가 올바르지 않습니다. (" + failed + "/" + MAX_FAILED_ATTEMPTS + "회 실패 - "
+                            + MAX_FAILED_ATTEMPTS + "회가 되면 계정이 잠깁니다)");
         }
 
         Organization org = requireApprovedOrganization(user);
@@ -136,14 +148,20 @@ public class PasswordAuthService {
         });
     }
 
-    /** 실패 5회 누적 시 15분 잠금. 잠금 중 재시도해도 카운트가 더 늘지 않게 여기서만 증가시킨다. */
-    private void registerFailedAttempt(UserAccount user) {
+    /**
+     * 실패 5회 누적 시 계정을 LOCKED로 잠근다 - 이메일 인증(AccountUnlockService)으로만 풀린다.
+     * 잠금 중 재시도는 위에서 먼저 막히므로 카운트가 더 늘지 않는다.
+     *
+     * @return 누적 실패 횟수
+     */
+    private int registerFailedAttempt(UserAccount user) {
         short next = (short) (user.getFailedLoginCount() + 1);
         user.setFailedLoginCount(next);
         if (next >= MAX_FAILED_ATTEMPTS) {
-            user.setLockedUntil(OffsetDateTime.now().plusMinutes(LOCK_MINUTES));
+            user.setStatus(AccountStatus.LOCKED);
         }
         userAccountRepository.save(user);
+        return next;
     }
 
     private String statusMessage(AccountStatus status) {
