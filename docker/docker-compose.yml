@@ -86,6 +86,11 @@ services:
       - SPRING_PROFILES_ACTIVE=local
       - DOCUMENT_PARSER_URL=http://parser:8000
       - DOCUMENT_ZKP_URL=http://zkp:4001
+      # 세션(액세스 토큰) 30분 - 개발보고서 "무활동 30분 후 자동 로그아웃"(2026-10-08).
+      # application-local.yml(로컬)·env_file(EC2)에 예전 값(1시간)이 남아 있어도 이 값이
+      # 이긴다 - 스프링에서 환경변수가 설정 파일보다 우선이고, compose의 environment가
+      # env_file보다 우선이다. 키 이름은 jwt.access-token-expiration-ms의 환경변수 표기.
+      - JWT_ACCESSTOKENEXPIRATIONMS=1800000
     volumes:
       # 업로드된 문서 원본. document.file_uri가 이 안의 경로를 가리킨다.
       - ./document-uploads:/data/document-uploads

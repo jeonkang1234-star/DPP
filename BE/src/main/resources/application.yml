@@ -64,7 +64,9 @@ server:
     include-binding-errors: always
 jwt:
   secret: "${JWT_SECRET:change-me-in-application-local-yml}"
-  access-token-expiration-ms: 3600000
+  # 30분 - 개발보고서 "무활동 30분 후 자동 로그아웃". 활동 중에는 FE(AppHeader SessionTimer)가
+  # refresh 토큰으로 자동 연장하므로, 실제로는 마지막 활동 후 30분이 지나야 만료된다.
+  access-token-expiration-ms: 1800000
   refresh-token-expiration-ms: 1209600000
 # 카카오/구글/네이버 개발자 콘솔에서 발급받은 값으로 채우세요.
 # 실제 값은 BE/src/main/resources/application-local.yml (git 미포함, SPRING_PROFILES_ACTIVE=local일 때만 읽힘)에 채웁니다.
