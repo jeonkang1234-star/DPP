@@ -199,6 +199,8 @@ export default function AppView(v) {
     isSignup,
     issueDpp,
     issueLabel,
+    saveLabel,
+    issuedNote,
     kpiAvg,
     kpiAvgBar,
     kpiIncomplete,
@@ -1343,10 +1345,11 @@ export default function AppView(v) {
                   <span style={{ fontSize: '12.5px', color: '#8494AC' }}>{lastSavedLabel}</span>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
                     <div style={{ display: 'flex', gap: '9px' }}>
-                      <button onClick={saveDraft} style={{ height: '48px', padding: '0 20px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '13px', background: '#fff', fontSize: '14px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv21">임시저장</button>
+                      <button onClick={saveDraft} style={{ height: '48px', padding: '0 20px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '13px', background: '#fff', fontSize: '14px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }} className="hv21">{saveLabel}</button>
                       <button onClick={issueDpp} disabled={!issueReady} title={issueDisabledHint} style={{ height: '48px', padding: '0 24px', border: '0', borderRadius: '13px', background: issueReady ? '#0045A9' : '#B7C2D6', color: '#fff', fontSize: '14px', fontWeight: '600', cursor: issueReady ? 'pointer' : 'not-allowed', boxShadow: issueReady ? '0 8px 18px rgba(0,69,169,.24)' : 'none' }}>{issueLabel}</button>
                     </div>
                     {!issueReady && issueDisabledHint ? (<span style={{ fontSize: '11.5px', color: '#C22B2B' }}>{issueDisabledHint}</span>) : null}
+                    {issuedNote ? (<span style={{ fontSize: '11.5px', color: '#0045A9' }}>{issuedNote}</span>) : null}
                   </div>
                 </div>
                 </>) : null}

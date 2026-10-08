@@ -133,6 +133,7 @@ public class DocumentSlotService {
     private final DocumentIntegrationProperties properties;
     private final PartnerAssignmentService partnerAssignmentService;
     private final DppComplianceService complianceService;
+    private final DppSnapshotAnchorService snapshotAnchorService;
 
     public DocumentSlotService(UserAccountRepository userAccountRepository,
                                 DppQueryRepository dppRepository,
@@ -147,7 +148,8 @@ public class DocumentSlotService {
                                 SpecFieldAutoFillService specFieldAutoFillService,
                                 DocumentIntegrationProperties properties,
                                 PartnerAssignmentService partnerAssignmentService,
-                                DppComplianceService complianceService) {
+                                DppComplianceService complianceService,
+                                DppSnapshotAnchorService snapshotAnchorService) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.participantRepository = participantRepository;
@@ -162,6 +164,7 @@ public class DocumentSlotService {
         this.properties = properties;
         this.partnerAssignmentService = partnerAssignmentService;
         this.complianceService = complianceService;
+        this.snapshotAnchorService = snapshotAnchorService;
     }
 
     @Transactional(readOnly = true)
@@ -259,6 +262,19 @@ public class DocumentSlotService {
                 .collect(Collectors.toSet());
         if (!allowedDocTypes.contains(docTypeCode)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "이 문서 유형을 업로드할 권한이 없습니다: " + docTypeCode);
+        }
+        // 발급이 끝난 DPP에는 발급 이후 단계(회수·재활용 등) 문서만 받는다(2026-10-08, V41).
+        // 발급 전 단계 문서는 발급 스냅샷으로 원장에 고정된 상태라, 뒤늦게 바꿔 끼우면
+        // QR로 보는 여권과 발급본이 갈라진다.
+        boolean issued = dpp.getIssuedAt() != null;
+        if (issued) {
+            boolean gateDoc = fieldsFor(fieldDomains(dpp.getDomain()), null).stream()
+                    .filter(f -> docTypeCode.equals(f.getLinkedDocType()))
+                    .anyMatch(DocumentSlotService::isIssueGate);
+            if (gateDoc) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "발급된 DPP에는 발급 이후 단계(회수·재활용 등) 문서만 추가로 올릴 수 있습니다.");
+            }
         }
         // 협력사가 참여를 수락한 역할의 문서는 그 협력사만 올린다(2026-08-23 강 요청).
         // 수락 전에는 이 검사에 걸리는 게 없어서 제조사가 혼자 다 올릴 수 있다.
@@ -369,6 +385,13 @@ public class DocumentSlotService {
         }
 
         dppRepository.recalcCompleteness(dppId);
+
+        // 발급 이후에 들어온 문서도 위변조 검증 대상이 되도록, 발급 스냅샷은 그대로 두고
+        // 새 버전 스냅샷을 쌓아 다시 앵커링한다. 같은 파일 재업로드(reused)는 내용이
+        // 바뀐 게 없으니 건너뛴다.
+        if (issued && !reused) {
+            snapshotAnchorService.snapshotAndAnchor(dppId, DppSnapshotAnchorService.REASON_LIFECYCLE, userId, orgId);
+        }
 
         return getForm(userId, dppId);
     }

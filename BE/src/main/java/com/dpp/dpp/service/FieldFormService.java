@@ -3,9 +3,6 @@ package com.dpp.dpp.service;
 import com.dpp.audit.service.AuditLogService;
 import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
-import com.dpp.blockchain.client.BlockchainClient;
-import com.dpp.blockchain.entity.BlockchainAnchor;
-import com.dpp.blockchain.repository.BlockchainAnchorRepository;
 import com.dpp.customs.service.CustomsClearanceService;
 import com.dpp.mypage.service.DomainGrantService;
 import com.dpp.dpp.dto.CodeOptionDto;
@@ -35,7 +32,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -73,7 +69,6 @@ import java.util.stream.Collectors;
 public class FieldFormService {
 
     private static final Logger log = LoggerFactory.getLogger(FieldFormService.class);
-    private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
     /** dppId도 request.domain()도 없을 때만 쓰는 최후 기본값 - 기존 철강 FE 호출과의 하위 호환용. */
     private static final String DEFAULT_DOMAIN = "STEEL";
@@ -113,8 +108,7 @@ public class FieldFormService {
     private final CodeMasterRepository codeMasterRepository;
     private final DppParticipantRepository participantRepository;
     private final ParticipantSubmitStatusService participantSubmitStatusService;
-    private final BlockchainAnchorRepository blockchainAnchorRepository;
-    private final Optional<BlockchainClient> blockchainClient;
+    private final DppSnapshotAnchorService snapshotAnchorService;
     private final CustomsClearanceService customsClearanceService;
     private final AuditLogService auditLogService;
     private final DomainGrantService domainGrantService;
@@ -129,8 +123,7 @@ public class FieldFormService {
                              CodeMasterRepository codeMasterRepository,
                              DppParticipantRepository participantRepository,
                              ParticipantSubmitStatusService participantSubmitStatusService,
-                             BlockchainAnchorRepository blockchainAnchorRepository,
-                             Optional<BlockchainClient> blockchainClient,
+                             DppSnapshotAnchorService snapshotAnchorService,
                              CustomsClearanceService customsClearanceService,
                              AuditLogService auditLogService,
                              DomainGrantService domainGrantService,
@@ -144,8 +137,7 @@ public class FieldFormService {
         this.codeMasterRepository = codeMasterRepository;
         this.participantRepository = participantRepository;
         this.participantSubmitStatusService = participantSubmitStatusService;
-        this.blockchainAnchorRepository = blockchainAnchorRepository;
-        this.blockchainClient = blockchainClient;
+        this.snapshotAnchorService = snapshotAnchorService;
         this.customsClearanceService = customsClearanceService;
         this.auditLogService = auditLogService;
         this.domainGrantService = domainGrantService;
@@ -290,13 +282,23 @@ public class FieldFormService {
             dppRepository.save(dpp);
         }
 
-        upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode(),
-                access.owner() ? partnerAssignmentService.lockedRoleLabels(dpp.getDppId()).keySet() : Set.of());
+        boolean issued = dpp.getIssuedAt() != null;
+        int changed = upsertValues(dpp.getDppId(), dpp.getDomain(), orgId, userId, request.values(), access.participantRoleCode(),
+                access.owner() ? partnerAssignmentService.lockedRoleLabels(dpp.getDppId()).keySet() : Set.of(),
+                issued);
         syncModelName(dpp);
         syncBatteryUniqueId(dpp);
         recalc(dpp.getDppId());
         if (!access.owner()) {
             participantSubmitStatusService.refresh(dpp, orgId, access.participantRoleCode());
+        }
+        // 발급 이후에 들어온 회수·재활용 실적은 발급 스냅샷을 덮어쓰지 않고 새 버전으로
+        // 쌓아 다시 앵커링한다 - 그래야 이 실적도 위변조 검증 대상이 된다(2026-10-08).
+        if (issued && changed > 0) {
+            String txId = snapshotAnchorService.snapshotAndAnchor(
+                    dpp.getDppId(), DppSnapshotAnchorService.REASON_LIFECYCLE, userId, orgId);
+            auditLogService.record(userId, "UPDATE", "DPP", dpp.getDppId(),
+                    dpp.getPublicUuid() + " · 발급 이후 단계 데이터 " + changed + "건", "성공", txId);
         }
         return getForm(userId, dpp.getDppId());
     }
@@ -366,6 +368,11 @@ public class FieldFormService {
         // 최종 발급 여부는 소유 조직이 결정한다.
         if (!orgId.equals(dpp.getOwnerOrgId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP를 발급할 권한이 없습니다.");
+        }
+        // 같은 DPP를 두 번 발급하면 발급 스냅샷·통관 케이스가 중복으로 생긴다. 발급 이후
+        // 데이터는 저장 시점에 새 스냅샷으로 쌓인다(saveDraft).
+        if (dpp.getIssuedAt() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 발급된 DPP입니다.");
         }
 
         // ── 발급 게이트(2026-09-19 강 요청) ────────────────────────────────
@@ -470,61 +477,7 @@ public class FieldFormService {
      * 실패해도 발급 자체를 막지 않는다 - 앵커링은 부가 증빙이지 발급의 필요조건이 아니다.
      */
     private String anchorDppSnapshot(Dpp dpp, Long userId, Long orgId) {
-        Long snapshotId;
-        try {
-            snapshotId = dppRepository.createSnapshot(dpp.getDppId(), "ISSUE", userId);
-        } catch (Exception e) {
-            log.warn("dppId={} 발급 스냅샷 생성 실패 - 발급 자체는 계속 진행: {}", dpp.getDppId(), e.getMessage(), e);
-            return null;
-        }
-        if (snapshotId == null) {
-            return null;
-        }
-        String contentHash = dppRepository.findSnapshotContentHash(snapshotId);
-        if (contentHash == null) {
-            return null;
-        }
-        Optional<BlockchainAnchor> anchorOpt =
-                blockchainAnchorRepository.findFirstByTargetTypeAndTargetIdOrderByAnchorIdDesc("DPP_SNAPSHOT", snapshotId);
-        if (anchorOpt.isEmpty()) {
-            return null;
-        }
-        BlockchainAnchor anchor = anchorOpt.get();
-        if (blockchainClient.isEmpty()) {
-            // fn_create_dpp_snapshot이 p_mock=true로 이미 status='MOCK', tx_id='mock-'||해시인
-            // 앵커 행을 만들어 놓은 상태다. 예전엔 여기서 blockchainClient가 비면 곧장 null을
-            // 반환해서, 감사 로그의 tx_id 칸만 비어 보였다(앵커 행 자체는 있었다).
-            return anchor.getTxId();
-        }
-        try {
-            BlockchainClient.ChainResult result = blockchainClient.get().recordDocumentHash(
-                    "snapshot:" + snapshotId,
-                    "DPP_SNAPSHOT",
-                    contentHash,
-                    orgId.toString(),
-                    OffsetDateTime.now().format(TIMESTAMP_FORMAT));
-            anchor.setTxId(result.txId());
-            // block_no는 2026-08-22에 처음 채우기 시작했다 - 그전엔 이 컬럼을 쓰는 코드가
-            // 아예 없어서 관리자 대시보드 '블록 높이'가 구조상 항상 비어 있었다(강 리포트).
-            anchor.setBlockNo(result.blockNumber());
-            anchor.setStatus("CONFIRMED");
-            anchor.setAnchoredAt(OffsetDateTime.now());
-            blockchainAnchorRepository.save(anchor);
-            return result.txId();
-        } catch (Exception e) {
-            log.warn("snapshotId={} 블록체인 앵커링 실패: {}", snapshotId, e.getMessage(), e);
-            anchor.setStatus("FAILED");
-            anchor.setErrorMessage(truncate(e.getMessage(), 500));
-            blockchainAnchorRepository.save(anchor);
-            return null;
-        }
-    }
-
-    private static String truncate(String s, int max) {
-        if (s == null) {
-            return null;
-        }
-        return s.length() > max ? s.substring(0, max) : s;
+        return snapshotAnchorService.snapshotAndAnchor(dpp.getDppId(), DppSnapshotAnchorService.REASON_ISSUE, userId, orgId);
     }
 
     /**
@@ -824,10 +777,10 @@ public class FieldFormService {
      *     (2026-08-23 강 요청). FE도 그 칸을 읽기 전용으로 그리지만, 요청을 직접 만들어
      *     보내는 경우까지 여기서 막는다.
      */
-    private void upsertValues(Long dppId, String domain, Long orgId, Long userId, Map<String, String> values,
-                               String participantRoleCode, Set<String> lockedRoleCodes) {
+    private int upsertValues(Long dppId, String domain, Long orgId, Long userId, Map<String, String> values,
+                              String participantRoleCode, Set<String> lockedRoleCodes, boolean issued) {
         if (values == null) {
-            return;
+            return 0;
         }
         Set<String> partnerLockedFieldCodes = lockedRoleCodes.isEmpty()
                 ? Set.of()
@@ -853,6 +806,18 @@ public class FieldFormService {
                 .map(RequirementField::getFieldCode)
                 .collect(Collectors.toSet());
 
+        // 발급이 끝난 DPP는 발급 이후 단계(9~12, 사용·회수·재활용) 항목만 새로 받는다
+        // (2026-10-08, V41). 발급 전 단계 항목은 발급 스냅샷으로 블록체인에 고정된 값이라,
+        // 여기서 바뀌면 "QR로 보는 여권"과 "원장에 남은 발급본"이 조용히 갈라진다.
+        // FE는 화면 전체 값을 한꺼번에 보내므로 "값이 그대로인" 칸은 문제 삼지 않고,
+        // 실제로 달라진 칸만 거부한다.
+        Map<String, RequirementField> fieldByCode = issued
+                ? fieldsFor(fieldDomains(domain), null).stream()
+                        .collect(Collectors.toMap(RequirementField::getFieldCode, f -> f, (a, b) -> a))
+                : Map.of();
+        List<String> frozenEdits = new ArrayList<>();
+        int changed = 0;
+
         for (Map.Entry<String, String> entry : values.entrySet()) {
             String text = entry.getValue();
             if (text == null || text.isBlank()) {
@@ -877,6 +842,16 @@ public class FieldFormService {
                         v.setFieldCode(entry.getKey());
                         return v;
                     });
+            if (text.equals(value.getValueText())) {
+                continue;
+            }
+            if (issued) {
+                RequirementField rf = fieldByCode.get(entry.getKey());
+                if (rf == null || isIssueGate(rf)) {
+                    frozenEdits.add(rf == null ? entry.getKey() : rf.getLabelKo());
+                    continue;
+                }
+            }
             // 사람이 문서 추출값과 다른 값으로 고쳐 저장하면 더 이상 "문서에서 온 값"이 아니다 -
             // 출처 문서 표시를 떼어 화면에서 "직접 입력"으로 보이게 한다(같은 값이면 유지).
             if (value.getSourceDocumentId() != null && !text.equals(value.getValueText())) {
@@ -887,7 +862,20 @@ public class FieldFormService {
             value.setSubmittedByUser(userId);
             value.setUpdatedAt(OffsetDateTime.now());
             fieldValueRepository.save(value);
+            changed++;
         }
+        if (!frozenEdits.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "발급된 DPP는 발급 이후 단계(회수·재활용 등) 항목만 추가로 입력할 수 있습니다. 수정할 수 없는 항목: "
+                            + frozenEdits.stream().limit(5).collect(Collectors.joining(", ")));
+        }
+        return changed;
+    }
+
+    /** 발급 전에 채워져야 하는 항목인가(1~8단계). 단계가 비어 있으면 제조 단계로 본다(V36). */
+    private static boolean isIssueGate(RequirementField f) {
+        int stage = f.getLifecycleStage() == null ? DEFAULT_LIFECYCLE_STAGE : f.getLifecycleStage().intValue();
+        return stage <= ISSUE_GATE_MAX_STAGE;
     }
 
     private void recalc(Long dppId) {
