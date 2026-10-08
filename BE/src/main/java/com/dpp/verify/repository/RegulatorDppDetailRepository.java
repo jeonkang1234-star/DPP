@@ -154,4 +154,16 @@ public interface RegulatorDppDetailRepository extends Repository<Dpp, Long> {
             + "WHERE EXISTS (SELECT 1 FROM latest) ORDER BY 1",
             nativeQuery = true)
     List<String> findLiveFieldDrift(@Param("dppId") Long dppId);
+
+    /** EU 레지스트리 내보내기(2026-10-08): 0 owner_org_id, 1 passport_level. 발급된 DPP만. */
+    @Query(value = "SELECT CAST(d.owner_org_id AS TEXT), d.passport_level FROM dpp d "
+            + "WHERE d.deleted_at IS NULL AND d.status = 'ACTIVE' AND CAST(d.public_uuid AS TEXT) = :publicUuid",
+            nativeQuery = true)
+    List<Object[]> findOwnerAndLevel(@Param("publicUuid") String publicUuid);
+
+    /** 이 DPP의 입력값 전부: 0 field_code, 1 value_text. */
+    @Query(value = "SELECT field_code, value_text FROM dpp_field_value "
+            + "WHERE dpp_id = :dppId AND value_text IS NOT NULL AND value_text <> ''",
+            nativeQuery = true)
+    List<Object[]> findFieldValues(@Param("dppId") Long dppId);
 }

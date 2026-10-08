@@ -2,6 +2,7 @@ import { fetchPublicPassport } from '../api/publicApi.js';
 import React from 'react';
 import QRCode from 'qrcode';
 import { publicPassportUrl } from '../publicUrl.js';
+import { downloadRegistryExport } from '../registryExport.js';
 import { searchDppRegistry, fetchRegulatorDppDetail, fetchDppIntegrity } from '../api/meApi.js';
 
 /**
@@ -122,6 +123,7 @@ function regDetailVals(ctx) {
     regDetailUrl: (rd && rd.url) || '',
     regDetailPhoto: d && d.hasPhoto && rd.uuid ? `/public/dpp/${rd.uuid}/photo` : '',
     copyRegDetailUrl: () => copyText((rd && rd.url) || '', ctx.say, '공개 주소를 복사했습니다.'),
+    downloadRegDetailRegistry: () => downloadRegistryExport(rd && rd.uuid, ctx.say),
     closeRegDetail: () => setState({ regDetail: null }),
     regDetailTabs: [
       tabBtn('fields', 'DPP 항목', fields.length),

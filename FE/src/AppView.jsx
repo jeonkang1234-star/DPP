@@ -372,7 +372,7 @@ export default function AppView(v) {
     registry,
     euBy, euByOrg, euByProduct, euById, euInput, onEuInputChange, euInputClear, euPlaceholder, euDomainPills,
     regDetailOpen, regDetailLoading, regDetailError, regDetailTitle, regDetailSub, regDetailViewer,
-    regDetailQr, regDetailPhoto, copyRegDetailUrl, closeRegDetail, regDetailTabs,
+    regDetailQr, regDetailPhoto, copyRegDetailUrl, downloadRegDetailRegistry, closeRegDetail, regDetailTabs,
     regTabFields, regTabMaker, regTabChain, regTabDocs, regTabTrace,
     regDetailFields, regDetailRestrictedShown, regDetailTradeSecretNote, regDetailProduct, regDetailMaker,
     regDetailParticipants, regDetailParticipantsEmpty, regDetailDocs, regDetailDocsEmpty,
@@ -517,6 +517,8 @@ export default function AppView(v) {
     setProductStatusFilter,
     productFilterTabs,
     dppDetailQrImg,
+    dppRegistryExportVisible,
+    downloadDppRegistryExport,
     dppDetailQrPending,
     dppTitleOpen, toggleDppTitle, dppTitleUnset
   } = v;
@@ -2098,6 +2100,10 @@ export default function AppView(v) {
               <span style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <span style={{ fontSize: '13px', fontWeight: '700' }}>이 DPP의 QR 코드</span>
                 <span style={{ fontSize: '11.5px', color: '#8494AC', lineHeight: '1.6' }}>{dppIssued ? 'QR을 스캔하면 이 DPP의 조회 화면으로 바로 연결됩니다.' : '발급 버튼을 누르면 QR이 자동으로 생성됩니다.'}</span>
+                {dppRegistryExportVisible ? (<span style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+                  <button onClick={downloadDppRegistryExport} style={{ height: '30px', padding: '0 12px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '9px', background: '#fff', color: '#0045A9', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>EU 레지스트리 등록 데이터</button>
+                  <span style={{ fontSize: '11px', color: '#96660A' }}>제출 대기 · 레지스트리 계정 발급 후 전송</span>
+                </span>) : null}
               </span>
             </div>
 
@@ -2327,6 +2333,7 @@ export default function AppView(v) {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flex: 'none' }}>
                 <img src={regDetailQr} alt="공개 여권 QR" width="84" height="84" style={{ borderRadius: '10px', border: '1px solid rgba(16,32,64,.08)' }} />
                 <button onClick={copyRegDetailUrl} style={{ height: '26px', padding: '0 10px', border: '1px solid rgba(16,32,64,.12)', borderRadius: '8px', background: '#fff', fontSize: '11px', fontWeight: '600', color: '#44546F', cursor: 'pointer' }}>공개 주소 복사</button>
+                <button onClick={downloadRegDetailRegistry} title="ESPR 제13조 레지스트리 등록 데이터(JSON)" style={{ height: '26px', padding: '0 10px', border: '1px solid rgba(0,69,169,.24)', borderRadius: '8px', background: '#fff', fontSize: '11px', fontWeight: '600', color: '#0045A9', cursor: 'pointer' }}>EU 레지스트리 데이터</button>
               </div>
               ) : null}
             </div>

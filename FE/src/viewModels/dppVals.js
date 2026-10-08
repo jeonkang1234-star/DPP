@@ -1,3 +1,4 @@
+import { downloadRegistryExport } from '../registryExport.js';
 import React from 'react';
 
 /**
@@ -183,6 +184,9 @@ export function dppVals(ctx) {
     dppMissingCount: done === 100 ? 0 : missing.length,
     dppIssued: issued,
     dppDetailQrImg: qrImg || '',
+    // EU DPP 레지스트리 등록 데이터(ESPR 제13조) 내려받기 - 발급된 DPP만(2026-10-08).
+    dppRegistryExportVisible: issued && !!(dashRow && dashRow.publicUuid),
+    downloadDppRegistryExport: () => downloadRegistryExport(dashRow && dashRow.publicUuid, ctx.say),
     dppDetailQrPending: qrPending,
     dppDetailQrLabel: displayId,
     lifecycle: stages.map(([stage, state, detail], i) => ({

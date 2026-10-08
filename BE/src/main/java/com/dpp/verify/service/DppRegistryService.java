@@ -5,6 +5,7 @@ import com.dpp.auth.entity.UserAccount;
 import com.dpp.auth.repository.UserAccountRepository;
 import com.dpp.blockchain.client.BlockchainClient;
 import com.dpp.dpp.dto.PublicPassportResponse;
+import com.dpp.dpp.service.PassportLevel;
 import com.dpp.dpp.service.PublicPassportService;
 import com.dpp.mypage.entity.Organization;
 import com.dpp.mypage.repository.OrganizationRepository;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -252,6 +254,118 @@ public class DppRegistryService {
         String checkedAt = java.time.ZonedDateTime.now(java.time.ZoneId.of("Asia/Seoul"))
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         return new DppIntegrityDto(overall, overallLabel, checkedAt, ledgerUsed, versions, drift);
+    }
+
+    /**
+     * EU DPP 레지스트리 등록 데이터(2026-10-08). ESPR (EU) 2024/1781 제13조 레지스트리는
+     * 고유 제품 식별자·고유 운영자 식별자·고유 시설 식별자와 상품 코드를 저장한다.
+     * 발급 시 확정된 그 값들을 레지스트리 제출 형식으로 묶어 돌려준다.
+     *
+     * 실제 전송은 하지 않는다 - 레지스트리 계정이 사업자 등록을 전제로 발급돼서 아직 받지
+     * 못했다. submissionStatus 로 그 사실을 그대로 밝힌다. 발급 조직 본인과 세관·시장감시가
+     * 열람할 수 있다.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, Object> registryExport(Long userId, String publicUuid) {
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(publicUuid == null ? "" : publicUuid.trim());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "잘못된 DPP 식별자입니다.");
+        }
+        List<Object[]> own = regulatorDppDetailRepository.findOwnerAndLevel(uuid.toString());
+        List<Object[]> headerRows = regulatorDppDetailRepository.findHeader(uuid.toString());
+        if (own.isEmpty() || headerRows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "발급된 DPP를 찾을 수 없습니다.");
+        }
+        Long ownerOrgId = Long.valueOf(nz(own.get(0)[0]));
+        String level = nz(own.get(0)[1]);
+        UserAccount user = userAccountRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "유효하지 않은 사용자입니다."));
+        if (!ownerOrgId.equals(user.getOrgId())) {
+            requireRegulatorAccess(userId);
+        }
+
+        Object[] h = headerRows.get(0);
+        Long dppId = Long.valueOf(nz(h[0]));
+        Map<String, String> values = new HashMap<>();
+        for (Object[] r : regulatorDppDetailRepository.findFieldValues(dppId)) {
+            values.put(nz(r[0]), nz(r[1]));
+        }
+
+        Map<String, Object> product = new LinkedHashMap<>();
+        product.put("uniqueProductIdentifier", "urn:uuid:" + nz(h[1]));
+        product.put("gtin", blankToNull(nz(h[9])));
+        product.put("passportLevel", level);
+        product.put("passportLevelLabel", PassportLevel.label(level));
+        product.put("passportUnitKey", PassportLevel.keyText(level, nz(h[14]), values));
+        product.put("modelName", blankToNull(nz(h[10])));
+        product.put("brand", blankToNull(nz(h[11])));
+        product.put("productGroup", nz(h[14]));
+        product.put("commodityCode", firstNonBlank(values.get("CN_CODE_8_DIGIT"), values.get("TARIC_CODE"), nz(h[12])));
+        product.put("countryOfOrigin", blankToNull(nz(h[13])));
+        product.put("issuedAt", nz(h[7]));
+
+        String eori = nz(h[18]);
+        String lei = nz(h[19]);
+        String bizReg = nz(h[17]);
+        Map<String, Object> operator = new LinkedHashMap<>();
+        operator.put("name", nz(h[16]));
+        operator.put("uniqueOperatorIdentifier", firstNonBlank(eori, lei, bizReg));
+        operator.put("identifierScheme", !eori.isBlank() ? "EORI" : !lei.isBlank() ? "LEI" : "KR_BRN");
+        operator.put("country", blankToNull(nz(h[20])));
+        operator.put("address", blankToNull(nz(h[21])));
+        operator.put("contactEmail", blankToNull(nz(h[23])));
+
+        Map<String, Object> facility = new LinkedHashMap<>();
+        facility.put("uniqueFacilityIdentifier", firstNonBlank(values.get("CBAM_INSTALLATION_ID"),
+                values.get("UFI_PLANT"), values.get("BATTERY_PLANT_ID"), values.get("DYEING_FACILITY_ID")));
+        facility.put("address", firstNonBlank(values.get("PRODUCTION_FACILITY_ADDRESS"),
+                values.get("MANUFACTURER_REGISTERED_ADDRESS")));
+        facility.put("country", firstNonBlank(values.get("PRODUCTION_FACILITY_COUNTRY"), nz(h[13])));
+
+        Map<String, Object> integrity = new LinkedHashMap<>();
+        List<Object[]> snaps = regulatorDppDetailRepository.findSnapshotIntegrity(dppId);
+        if (!snaps.isEmpty()) {
+            Object[] last = snaps.get(snaps.size() - 1);
+            integrity.put("snapshotVersion", Integer.valueOf(nz(last[1])));
+            integrity.put("contentHashSha256", nz(last[4]).trim());
+            integrity.put("anchorStatus", blankToNull(nz(last[6])));
+            integrity.put("ledgerTxId", blankToNull(nz(last[7])));
+            integrity.put("ledgerBlockNo", blankToNull(nz(last[8])));
+        }
+
+        List<String> missing = new ArrayList<>();
+        if (facility.get("uniqueFacilityIdentifier") == null) missing.add("facility.uniqueFacilityIdentifier");
+        if (product.get("commodityCode") == null) missing.add("product.commodityCode");
+        if (operator.get("uniqueOperatorIdentifier") == null) missing.add("economicOperator.uniqueOperatorIdentifier");
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("schema", "IEUM-EU-DPP-REGISTRY-EXPORT/1.0");
+        out.put("legalBasis", "Regulation (EU) 2024/1781 (ESPR) Art. 13 - Digital product passport registry");
+        out.put("generatedAt", OffsetDateTime.now(java.time.ZoneId.of("Asia/Seoul")).toString());
+        out.put("submissionStatus", "NOT_SUBMITTED");
+        out.put("submissionNote", "EU DPP 레지스트리 계정이 사업자 등록을 전제로 발급되어 아직 전송하지 못했습니다. "
+                + "계정 발급 후 이 데이터를 그대로 제출합니다.");
+        out.put("product", product);
+        out.put("economicOperator", operator);
+        out.put("facility", facility);
+        out.put("integrity", integrity);
+        out.put("missingRequired", missing);
+        return out;
+    }
+
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v;
+    }
+
+    private static String firstNonBlank(String... vs) {
+        for (String v : vs) {
+            if (v != null && !v.isBlank()) {
+                return v;
+            }
+        }
+        return null;
     }
 
     private static String nz(Object v) {
