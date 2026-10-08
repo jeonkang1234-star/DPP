@@ -31,6 +31,16 @@ if [ -z "$PRIV_KEY_FILE" ]; then
 fi
 echo "  admin 개인키 파일: $PRIV_KEY_FILE"
 
+# 서명 인증서 이름도 생성 방식마다 다르다: cryptogen은 User1@org1.example.com-cert.pem,
+# Fabric CA(-ca)는 cert.pem (2026-10-08 EC2에서 -ca로 띄웠다가 Explorer가 파일을 못 찾음).
+CERTDIR="$CRYPTO/peerOrganizations/org1.example.com/users/User1@org1.example.com/msp/signcerts"
+SIGN_CERT_FILE="$(ls -1 "$CERTDIR" | head -n 1 || true)"
+if [ -z "$SIGN_CERT_FILE" ]; then
+  echo "ERROR: $CERTDIR 안에 인증서 파일이 없습니다." >&2
+  exit 1
+fi
+echo "  서명 인증서 파일: $SIGN_CERT_FILE"
+
 TLS_CA="$CRYPTO/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/ca.crt"
 [ -f "$TLS_CA" ] || { echo "ERROR: TLS CA가 없습니다: $TLS_CA" >&2; exit 1; }
 
@@ -44,6 +54,7 @@ fi
 
 mkdir -p connection-profile
 sed -e "s#__PRIV_KEY_FILE__#${PRIV_KEY_FILE}#" \
+    -e "s#__SIGN_CERT_FILE__#${SIGN_CERT_FILE}#" \
     -e "s#__EXPLORER_ADMIN_ID__#${ADMIN_ID}#" \
     -e "s#__EXPLORER_ADMIN_PW__#${ADMIN_PW}#" \
     connection-profile/dpp-network.json.template > connection-profile/dpp-network.json
