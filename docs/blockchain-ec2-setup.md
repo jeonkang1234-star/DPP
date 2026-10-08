@@ -78,6 +78,46 @@ cd /opt/fabric-tools/fabric-samples/test-network
 peer lifecycle chaincode querycommitted -C dppchannel -n dpp-ledger-chaincode
 ```
 
+## 3-B. 최신 Docker(29+)에서 `deployCC`가 실패할 때 → CCaaS로 배포 (2026-10-08 EC2 실제 경험)
+
+`peer lifecycle chaincode install`이 `docker build failed: ... broken pipe` 또는 `unexpected EOF`로
+실패한다. Fabric 2.5.9 peer에 들어 있는 Docker 클라이언트가 최신 Docker 엔진과 맞지 않아서
+peer가 체인코드 이미지를 직접 빌드하지 못하는 것이다. 이때는 peer가 빌드하지 않는
+**CCaaS(Chaincode as a Service)** 방식으로 배포한다.
+
+```bash
+# 1) 호스트에 JDK가 없으므로 도커로 빌드 (build/install/dpp-ledger-chaincode 생성)
+cd /opt/app/chaincode
+docker run --rm -v "$PWD":/w -w /w gradle:8.10-jdk17 gradle installDist -x test --no-daemon
+sudo chown -R ubuntu:ubuntu build
+
+# 2) CCaaS 배포 - chaincode/Dockerfile로 이미지를 만들고 org1/org2용 컨테이너 2개를 띄운다
+cd /opt/fabric-tools/fabric-samples/test-network
+./network.sh deployCCAAS -c dppchannel -ccn dpp-ledger-chaincode -ccp /opt/app/chaincode -ccv 1.0 -ccs 1
+docker ps --format '{{.Names}}' | grep ccaas    # peer0org1_..._ccaas, peer0org2_..._ccaas
+```
+
+배포 직후 패키지 ID를 파일로 남겨 둔다(재기동 때 필요):
+
+```bash
+sudo mkdir -p /opt/app/fabric-identity
+docker inspect peer0org1_dpp-ledger-chaincode_ccaas --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | sed -n 's/^CHAINCODE_ID=//p' | sudo tee /opt/app/fabric-identity/ccaas-package-id.txt
+```
+
+CCaaS 컨테이너는 `--rm`으로 떠서 **EC2/Docker 재시작 후에는 사라진다.** 원장과 체인코드
+정의는 그대로이므로 Fabric 노드를 켜고 컨테이너만 다시 띄우면 된다:
+
+```bash
+docker ps -a --format '{{.Names}}' | grep -E 'example.com|^ca_' | xargs docker start
+PKG=$(cat /opt/app/fabric-identity/ccaas-package-id.txt)
+for o in org1 org2; do
+  docker run --rm -d --name peer0${o}_dpp-ledger-chaincode_ccaas --network fabric_test \
+    -e CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999 -e CHAINCODE_ID=$PKG -e CORE_CHAINCODE_ID_NAME=$PKG \
+    dpp-ledger-chaincode_ccaas_image:latest
+done
+```
+
 ## 4. 백엔드가 쓸 인증서 3개 배치
 
 `test-network`의 cryptogen 산출물에서 복사한다(운영 인증서가 아니라 데모/테스트망 전용):
