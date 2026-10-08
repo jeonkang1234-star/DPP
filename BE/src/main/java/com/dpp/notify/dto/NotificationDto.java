@@ -24,7 +24,9 @@ public record NotificationDto(
          */
         String linkUrl,
         String colorHex,
-        boolean read
+        boolean read,
+        /** 알림 개별 삭제(DELETE /notifications/{id})용 식별자(2026-10-08). */
+        Long id
 ) {
     public static NotificationDto from(Notification n) {
         boolean hasLink = n.getLinkUrl() != null && !n.getLinkUrl().isBlank();
@@ -37,6 +39,7 @@ public record NotificationDto(
                 hasLink ? "바로가기" : null,
                 hasLink ? n.getLinkUrl() : null,
                 n.getCategory().colorHex(),
-                n.isRead());
+                n.isRead(),
+                n.getNotificationId());
     }
 }

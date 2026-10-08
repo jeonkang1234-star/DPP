@@ -133,4 +133,40 @@ public class NotificationService {
                 .map(NotificationDto::from)
                 .toList();
     }
+
+    /**
+     * 알림 하나 지우기(2026-10-08 강 요청 - 알림센터 각 카드 우측 상단 X).
+     * 알림은 감사 증적이 아니라 안내 메시지라 행을 지운다(감사 로그는 audit_log 몫).
+     * 다른 사람의 알림 id면 404 - 존재 여부도 드러내지 않는다.
+     */
+    @Transactional
+    public void delete(Long userId, Long notificationId) {
+        Notification n = notificationRepository.findByNotificationIdAndRecipientUserId(notificationId, userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."));
+        notificationRepository.delete(n);
+    }
+
+    /**
+     * 알림 모두 지우기. category를 주면 그 탭의 알림만, 없거나 all이면 전부 지운다 -
+     * 알림센터에서 지금 보고 있는 탭 기준으로 "모두 지우기"가 동작하게.
+     *
+     * @return 지운 건수
+     */
+    @Transactional
+    public int deleteAll(Long userId, String categoryKey) {
+        List<Notification> targets;
+        if (categoryKey == null || categoryKey.isBlank() || "all".equalsIgnoreCase(categoryKey)) {
+            targets = notificationRepository.findByRecipientUserIdOrderByCreatedAtDesc(userId);
+        } else {
+            NotificationCategory category;
+            try {
+                category = NotificationCategory.valueOf(categoryKey.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "알 수 없는 알림 카테고리입니다: " + categoryKey);
+            }
+            targets = notificationRepository.findByRecipientUserIdAndCategoryOrderByCreatedAtDesc(userId, category);
+        }
+        notificationRepository.deleteAll(targets);
+        return targets.size();
+    }
 }

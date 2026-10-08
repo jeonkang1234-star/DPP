@@ -15,7 +15,7 @@ import {
   goToSnsLogin, consumeSnsCallback,
 } from './api/authApi.js';
 import { fetchMe, fetchScans, deleteScan, searchProducts, recordScan, fetchCatalog, fetchCatalogBrands, fetchNotificationCategories, fetchNotifications,
-  markNotificationsRead, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, resolveCrossCheck, fetchInvitations, fetchPartnerDirectory, sendInvitation, resendInvitation, fetchParticipations, acceptParticipation, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
+  markNotificationsRead, deleteNotification, deleteAllNotifications, fetchOrganization, fetchDashboard, fetchFieldForm, saveFieldFormDraft, issueFieldFormDpp, resolveCrossCheck, fetchInvitations, fetchPartnerDirectory, sendInvitation, resendInvitation, fetchParticipations, acceptParticipation, fetchDocumentForm, uploadDocument, uploadSteelMillSheet, uploadCbamReport, uploadCareLabel, uploadOekotexLabel, uploadBatteryCarbonReport, uploadRecyclingReport, fetchOrgApprovals, approveOrg, rejectOrg, searchDppRegistry, fetchCustomsQueue, fetchCustomsCase, decideCustomsCase, fetchAdminDashboard, fetchAdminMembers, fetchAuditLog,
   // 도메인 확장(2026-08-22) - 마이페이지 신청 / 관리자 심사 / DPP 생성 도메인 선택기.
   fetchMyDomains, requestDomainGrant, fetchDomainGrants, approveDomainGrant, rejectDomainGrant,
   fetchDomainGrantEvidenceBlob,
@@ -1942,6 +1942,12 @@ export function useAppLogic(userProps) {
     state, setState, props,
     data,
     meData, orgData, setOrgData, dashboardData, scansData, notifCatsData, notifsData, fmtRelative,
+    // 알림 지우기(2026-10-08 강 요청) - 서버에서 지운 뒤 화면 목록에서도 바로 뺀다.
+    removeNotification: (id) => deleteNotification(id)
+      .then(() => setNotifsData((prev) => (prev || []).filter((n) => n.id !== id))),
+    clearNotifications: (category) => deleteAllNotifications(category)
+      .then(() => setNotifsData((prev) => (category && category !== 'all')
+        ? (prev || []).filter((n) => n.key !== category) : [])),
     orgApprovalsData, refetchOrgApprovals,
     euRegistryData, setEuRegistryData,
     customsQueueData, customsCaseDetail, refetchCustomsQueue, refetchCustomsCase, decideCustomsCase,

@@ -158,3 +158,11 @@ export function consumeSnsCallback() {
   if (error) return { error };
   return { accessToken, refreshToken, tokenType: 'bearer', accountType: 'PERSONAL' };
 }
+
+/**
+ * 세션 연장(2026-10-08 강 요청). 로그인 때 받은 refreshToken으로 새 accessToken·refreshToken을
+ * 받는다 - 헤더의 남은 시간 옆 '연장' 버튼이 부른다. 성공 시 {accessToken, refreshToken, tokenType}.
+ */
+export function refreshSession(refreshToken) {
+  return postJson('/auth/refresh', { refreshToken });
+}
