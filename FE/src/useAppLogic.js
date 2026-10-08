@@ -1823,9 +1823,14 @@ export function useAppLogic(userProps) {
             || (res.accountType === 'ADMIN' ? 'admin' : (heuristic && heuristic !== 'personal' ? heuristic : 'steel'));
           go(role, { accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType });
         } catch (err) {
+          // 5회 실패 잠금(423) - 이메일 인증으로 푸는 카드를 띄운다(2026-10-08).
+          if (err.status === 423) { setState({ loginLocked: email }); return; }
           say(err.message || '로그인에 실패했습니다.');
         }
       },
+      loginLockedEmail: s.loginLocked || '',
+      closeLoginLocked: () => setState({ loginLocked: null }),
+      onLoginUnlocked: () => { setState({ loginLocked: null, loginPassword: '' }); say('잠금을 해제했습니다. 다시 로그인해 주세요.'); },
       /** 카카오/네이버/구글 공통 - provider 인자를 받아 실제 SNS 인증 페이지로 이동시킵니다. */
       snsLogin: (provider) => goToSnsLogin(provider || 'kakao'),
       captchaGlyphs: (s.captcha || { glyphs: [] }).glyphs,
@@ -1850,6 +1855,10 @@ export function useAppLogic(userProps) {
           if (!s.suCountry) { say('국가를 입력해 주세요.'); return; }
         } else if (!s.suBizRegNo) { say('사업자등록번호를 입력해 주세요.'); return; }
         if (!s.suPassword || s.suPassword.length < 8) { say('비밀번호는 8자 이상이어야 합니다.'); return; }
+        // 대소문자·숫자·특수문자 모두 포함(2026-10-08, 서버 BusinessSignupRequest와 같은 규칙).
+        if (!/[a-z]/.test(s.suPassword) || !/[A-Z]/.test(s.suPassword) || !/\d/.test(s.suPassword) || !/[^A-Za-z0-9]/.test(s.suPassword)) {
+          say('비밀번호는 영문 대문자·소문자·숫자·특수문자를 모두 포함해야 합니다.'); return;
+        }
         if (s.suPassword !== s.suPasswordConfirm) { say('비밀번호가 일치하지 않습니다.'); return; }
         // 자동입력 방지 문자 확인(2026-08-21). 예전엔 화면에만 있고 검사를 아예 안 했다.
         const captchaAnswer = (s.suCaptcha || '').trim().toLowerCase();

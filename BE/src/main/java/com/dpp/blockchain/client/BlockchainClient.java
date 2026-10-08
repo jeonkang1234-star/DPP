@@ -55,6 +55,17 @@ public class BlockchainClient {
     }
 
     /**
+     * 원장에 기록된 해시를 읽어 온다(조회 전용 evaluate - 블록을 만들지 않는다).
+     * 세관·시장감시 화면의 "무결성 검증"이 DB에 남은 값이 아니라 원장 값과 직접 비교하려고
+     * 쓴다(2026-10-08). 기록이 없으면 체인코드가 DOC_NOT_FOUND 로 예외를 던진다.
+     */
+    public String queryDocumentHash(String docId) throws Exception {
+        byte[] result = contract.evaluateTransaction("getDocumentHash", docId);
+        JsonNode node = objectMapper.readTree(new String(result, StandardCharsets.UTF_8));
+        return node.path("docHash").asText(null);
+    }
+
+    /**
      * proofHash = zkp_proof.proof_data의 SHA-256(2026-08-20 추가, 강 지적 "문서 해시만
      * 하는 것 같은데 영지식증명 쪽도 해야 하지 않냐"). 실측 수치는 여전히 넘기지 않는다 -
      * 수치는 경우의 수가 좁아 해시만으로도 전수 대입이 되기 때문이고, 증명 산출물은

@@ -617,3 +617,11 @@ export async function fetchProductPhotoBlob(dppId) {
   if (!res.ok) throw new Error('제품 사진을 불러오지 못했습니다.');
   return res.blob();
 }
+
+/**
+ * 무결성 검증(2026-10-08) - 세관·시장감시 전용. 버전별로 저장 해시·재계산 해시·블록체인
+ * 원장 해시를 대조하고, 최신 기록본과 지금 값이 다른 항목이 있는지 본다.
+ */
+export function fetchDppIntegrity(publicUuid) {
+  return authedFetch(`/verify/dpp/${encodeURIComponent(publicUuid)}/integrity`);
+}

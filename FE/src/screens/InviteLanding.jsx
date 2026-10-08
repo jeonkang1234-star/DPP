@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchInvitePreview } from '../api/publicApi.js';
 import { login } from '../api/authApi.js';
+import AccountUnlockPanel from '../components/AccountUnlockPanel.jsx';
 import { loadSession, saveSession, clearSession, saveInviteTarget } from '../api/session.js';
 import { pathFor } from '../routes.js';
 
@@ -47,6 +48,7 @@ export default function InviteLanding() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [locked, setLocked] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -81,6 +83,8 @@ export default function InviteLanding() {
       saveSession({ role, at: Date.now(), accessToken: res.accessToken, refreshToken: res.refreshToken, email: res.email, accountType: res.accountType });
       enter(role);
     } catch (e) {
+      // 5회 실패 잠금 - 이메일 인증으로 푸는 카드를 띄운다(2026-10-08).
+      if (e.status === 423) { setLocked(true); setLoginError(''); setBusy(false); return; }
       setLoginError(e.message || '로그인에 실패했습니다.');
       setBusy(false);
     }
@@ -160,6 +164,7 @@ export default function InviteLanding() {
                   style={{ height: 48, padding: '0 14px', border: '1px solid rgba(16,32,64,.16)', borderRadius: 12, fontSize: 14 }} />
               </label>
               {loginError ? <span style={{ fontSize: 12.5, color: '#C22B2B' }}>{loginError}</span> : null}
+              {locked ? (<AccountUnlockPanel email={preview.inviteeEmail} onUnlocked={() => { setLocked(false); setPassword(''); setLoginError('잠금을 해제했습니다. 다시 로그인해 주세요.'); }} onClose={() => setLocked(false)} />) : null}
               <button onClick={doLogin} disabled={busy} style={{ ...btn, marginTop: 4, opacity: busy ? 0.7 : 1 }}>{busy ? '로그인 중…' : '로그인하고 자료 제출하기'}</button>
             </div>
           )}

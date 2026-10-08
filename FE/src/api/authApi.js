@@ -166,3 +166,16 @@ export function consumeSnsCallback() {
 export function refreshSession(refreshToken) {
   return postJson('/auth/refresh', { refreshToken });
 }
+
+/**
+ * 로그인 5회 실패로 잠긴 계정 해제(2026-10-08). 1단계: 가입 이메일로 6자리 코드 발송.
+ * 메일 미설정 환경이면 응답에 devCode가 실려 온다(회원가입 인증과 같은 규약).
+ */
+export function requestUnlockCode(email) {
+  return postJson('/auth/unlock/code', { email });
+}
+
+/** 잠긴 계정 해제 2단계: 코드 확인 → 잠금 해제(204). */
+export function verifyUnlockCode(email, code) {
+  return postJson('/auth/unlock/verify', { email, code });
+}

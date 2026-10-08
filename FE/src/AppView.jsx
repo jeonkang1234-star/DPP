@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AppHeader from './components/AppHeader.jsx';
+import AccountUnlockPanel from './components/AccountUnlockPanel.jsx';
 import DropdownSelect from './components/DropdownSelect.jsx';
 import MyPage from './screens/MyPage.jsx';
 import PartnerAssignedDetail from './screens/PartnerAssignedDetail.jsx';
@@ -86,6 +87,9 @@ export default function AppView(v) {
     confirmTitle,
     disposalItems,
     doLogin,
+    loginLockedEmail,
+    closeLoginLocked,
+    onLoginUnlocked,
     fieldFormOpen,
     toggleFieldForm,
     trackLabel, trackStyle, trackNote, laterStageNote,
@@ -373,6 +377,8 @@ export default function AppView(v) {
     regDetailFields, regDetailRestrictedShown, regDetailTradeSecretNote, regDetailProduct, regDetailMaker,
     regDetailParticipants, regDetailParticipantsEmpty, regDetailDocs, regDetailDocsEmpty,
     regDetailProofs, regDetailProofsEmpty, regDetailAnchors, regDetailAnchorsEmpty,
+    regIntegrityLoading, regIntegrityError, regIntegrityDone, regIntegrityRun, regIntegrityIcon, regIntegrityLabel,
+    regIntegrityBoxStyle, regIntegrityIconStyle, regIntegrityLabelStyle, regIntegrityMeta, regIntegrityVersions, regIntegrityDrift,
     regDetailClearances, regDetailClearancesEmpty,
     repairBar,
     repairColorStyle,
@@ -621,6 +627,10 @@ export default function AppView(v) {
             </div>
             </>) : null}
 
+            {loginIsCompany && loginLockedEmail ? (
+            <AccountUnlockPanel email={loginLockedEmail} onUnlocked={onLoginUnlocked} onClose={closeLoginLocked} />
+            ) : null}
+
             {loginIsCompany ? (<>
             <button onClick={doLogin} style={{ height: '54px', border: '0', borderRadius: '14px', background: '#0045A9', color: '#fff', fontSize: '15.5px', fontWeight: '600', cursor: 'pointer', boxShadow: '0 8px 20px rgba(0,69,169,.28)' }} className="hv4">로그인</button>
             </>) : null}
@@ -729,7 +739,7 @@ export default function AppView(v) {
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>국가</span><input value={suCountry} onChange={onSuCountry} placeholder="대한민국" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
                 </>)}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호</span><input type="password" value={suPassword} onChange={onSuPassword} placeholder="8자 이상" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
+                  <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호</span><input type="password" value={suPassword} onChange={onSuPassword} placeholder="8자 이상 · 대·소문자, 숫자, 특수문자 포함" style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}><span style={{ fontSize: '12.5px', fontWeight: '600', color: '#44546F' }}>비밀번호 확인</span><input type="password" value={suPasswordConfirm} onChange={onSuPasswordConfirm} style={{ height: '50px', padding: '0 15px', border: '1px solid rgba(16,32,64,.14)', borderRadius: '12px', fontSize: '14.5px' }} /></label>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
@@ -2399,6 +2409,44 @@ export default function AppView(v) {
             </>) : null}
 
             {regTabTrace ? (<>
+              {/* 무결성 검증(2026-10-08) - 저장 해시·재계산 해시·원장 해시를 버전별로 대조 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '22px', padding: '16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '16px', background: '#fff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: '700' }}>무결성 검증</span>
+                    <span style={{ fontSize: '12px', color: '#6B7A93' }}>발급 기록본의 해시를 블록체인 원장과 대조해 위·변조 여부를 확인합니다.</span>
+                  </span>
+                  <button onClick={regIntegrityRun} disabled={regIntegrityLoading} style={{ height: '38px', padding: '0 16px', border: '0', borderRadius: '11px', background: '#0045A9', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: regIntegrityLoading ? 'wait' : 'pointer', whiteSpace: 'nowrap', flex: 'none' }}>{regIntegrityLoading ? '검증 중…' : (regIntegrityDone ? '다시 검증' : '무결성 검증')}</button>
+                </div>
+                {regIntegrityError ? (<span style={{ fontSize: '12.5px', color: '#C22B2B' }}>{regIntegrityError}</span>) : null}
+                {regIntegrityDone ? (<>
+                <div style={regIntegrityBoxStyle}>
+                  <span style={regIntegrityIconStyle}>{regIntegrityIcon}</span>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <span style={regIntegrityLabelStyle}>{regIntegrityLabel}</span>
+                    <span style={{ fontSize: '11.5px', color: '#6B7A93' }}>{regIntegrityMeta}</span>
+                  </span>
+                </div>
+                {regIntegrityDrift ? (<span style={{ fontSize: '12.5px', color: '#C22B2B', fontWeight: '600' }}>{regIntegrityDrift}</span>) : null}
+                {(regIntegrityVersions || []).map((v) => (
+                <div key={v.key} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px 14px', borderRadius: '12px', background: '#F7F9FD' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700' }}>{v.title}</span>
+                    <span style={{ fontSize: '11.5px', color: '#8494AC' }}>{v.at}</span>
+                    <span style={{ marginLeft: 'auto' }}><span style={v.verdictStyle}>{v.verdict}</span></span>
+                  </div>
+                  {v.rows.map((r) => (
+                  <div key={r.k} style={{ display: 'grid', gridTemplateColumns: '20px 1fr auto', gap: '8px', alignItems: 'center', fontSize: '12px' }}>
+                    <span style={{ color: r.markColor, fontWeight: '800' }}>{r.mark}</span>
+                    <span style={{ color: '#44546F' }}>{r.k}</span>
+                    <span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11.5px', color: '#0B1B33' }}>{r.v}</span>
+                  </div>
+                  ))}
+                  {v.tx ? (<span style={{ fontFamily: '\'JetBrains Mono\',monospace', fontSize: '11px', color: '#8494AC' }}>{v.tx}</span>) : null}
+                </div>
+                ))}
+                </>) : null}
+              </div>
               <span style={{ display: 'block', fontSize: '14px', fontWeight: '700', marginBottom: '10px' }}>블록체인 앵커</span>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.4fr .8fr 80px 1.1fr', gap: '12px', padding: '0 12px', height: '36px', alignItems: 'center', background: '#F7F9FD', borderRadius: '10px', fontSize: '12px', fontWeight: '600', color: '#6B7A93' }}><span>대상</span><span>트랜잭션</span><span>블록</span><span>상태</span><span>앵커 시각</span></div>
               {regDetailAnchorsEmpty ? (<div style={{ padding: '20px 0', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>앵커 기록이 없습니다.</div>) : null}

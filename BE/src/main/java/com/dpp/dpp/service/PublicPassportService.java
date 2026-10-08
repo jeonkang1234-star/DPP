@@ -25,6 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -162,6 +163,13 @@ public class PublicPassportService {
 
         boolean hasVerifiedProof = !zkpProofRepository.findByDppIdAndStatus(dpp.getDppId(), "VERIFIED").isEmpty();
 
+        // 일반 소비자에게는 Heat 번호·시설 식별자·제조자 정보를 앞 두 글자만 남기고 가린다
+        // (2026-10-08, 개발보고서 "역할군별 노출 제어" - field_visibility tier 1 = MASKED, V42).
+        // 세관·시장감시당국·운영자·발급 조직 본인(canSeeRestricted)은 원문을 그대로 본다.
+        Set<String> maskedCodes = canSeeRestricted
+                ? Set.of()
+                : new HashSet<>(dppRepository.findConsumerMaskedFieldCodes());
+
         List<PublicPassportFieldDto> visible = new ArrayList<>();
         int restricted = 0;
         int tradeSecret = 0;
@@ -178,6 +186,9 @@ public class PublicPassportService {
             value = displayValue(f, value, codeLabels);
 
             if (PUBLIC.equals(scope)) {
+                if (maskedCodes.contains(f.getFieldCode())) {
+                    value = mask(value);
+                }
                 visible.add(new PublicPassportFieldDto(f.getLabelKo(), f.getLabelEn(), f.getSection(),
                         f.getTier(), value, null));
             } else if (TRADE_SECRET.equals(scope)) {
@@ -211,8 +222,27 @@ public class PublicPassportService {
                 viewerLabel(viewerRole),
                 dpp.getPassportLevel(),
                 PassportLevel.label(dpp.getPassportLevel()),
-                PassportLevel.keyText(dpp.getPassportLevel(), dpp.getDomain(), values)
+                // 상단 "발급 단위 배치 · Heat No. SH60218" 줄도 같은 기준으로 가린다.
+                PassportLevel.keyText(dpp.getPassportLevel(), dpp.getDomain(), maskedView(values, maskedCodes))
         );
+    }
+
+    /** 앞 두 글자만 남기고 나머지를 '*'로 가린다. 두 글자 이하면 전부 가린다. */
+    static String mask(String value) {
+        String v = value == null ? "" : value.trim();
+        if (v.length() <= 2) {
+            return "*".repeat(Math.max(v.length(), 1));
+        }
+        return v.substring(0, 2) + "*".repeat(v.length() - 2);
+    }
+
+    private static Map<String, String> maskedView(Map<String, String> values, Set<String> maskedCodes) {
+        if (maskedCodes.isEmpty()) {
+            return values;
+        }
+        Map<String, String> out = new HashMap<>(values);
+        maskedCodes.forEach(code -> out.computeIfPresent(code, (k, v) -> mask(v)));
+        return out;
     }
 
     /** 이 필드 목록에 등장하는 code_group의 (그룹|코드) -> 한글 이름. */
