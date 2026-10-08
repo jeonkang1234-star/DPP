@@ -22,6 +22,7 @@ import com.dpp.document.zkp.RecyclingZkpMapper;
 import com.dpp.dpp.entity.DppFieldValue;
 import com.dpp.dpp.repository.DppFieldValueRepository;
 import com.dpp.dpp.repository.DppQueryRepository;
+import com.dpp.dpp.service.DppSnapshotAnchorService;
 import com.dpp.dpp.service.SpecFieldAutoFillService;
 import com.dpp.notify.entity.Notification;
 import com.dpp.notify.entity.NotificationCategory;
@@ -85,6 +86,7 @@ public class RecyclingIngestService {
     private final ObjectMapper objectMapper;
     private final NotificationRepository notificationRepository;
     private final AuditLogService auditLogService;
+    private final DppSnapshotAnchorService snapshotAnchorService;
 
     public RecyclingIngestService(UserAccountRepository userAccountRepository,
                                    DppRepository dppRepository,
@@ -101,7 +103,8 @@ public class RecyclingIngestService {
                                    DocumentIntegrationProperties properties,
                                    ObjectMapper objectMapper,
                                    NotificationRepository notificationRepository,
-                                   AuditLogService auditLogService) {
+                                   AuditLogService auditLogService,
+                                   DppSnapshotAnchorService snapshotAnchorService) {
         this.userAccountRepository = userAccountRepository;
         this.dppRepository = dppRepository;
         this.documentRepository = documentRepository;
@@ -118,6 +121,7 @@ public class RecyclingIngestService {
         this.objectMapper = objectMapper;
         this.notificationRepository = notificationRepository;
         this.auditLogService = auditLogService;
+        this.snapshotAnchorService = snapshotAnchorService;
     }
 
     @Transactional
@@ -318,6 +322,16 @@ public class RecyclingIngestService {
         // INSERT가 실패한다. 화면 문구는 AuditLogService.actionLabel이 "ZKP 검증"으로 바꿔 준다.
         auditLogService.record(userId, "CREATE", "ZKP_PROOF", zkpProof.getProofId(),
                 "RECYCLING_REPORT ZKP (DPP-" + dpp.getDppId() + ")", specPassed ? "충족" : "미충족", zkpAnchorTxId);
+
+        // 재활용 처리 결과는 발급 이후(12단계)에 들어오는 문서다. 이미 발급된 DPP라면 발급
+        // 스냅샷은 그대로 두고, 이 결과가 반영된 새 버전 스냅샷을 쌓아 다시 앵커링한다
+        // (2026-10-08, V41 - 철강·섬유 회수·재활용 실적과 같은 원칙).
+        boolean issued = dppQueryRepository.findById(dpp.getDppId())
+                .map(d -> d.getIssuedAt() != null).orElse(false);
+        if (issued && specPassed) {
+            snapshotAnchorService.snapshotAndAnchor(dpp.getDppId(), DppSnapshotAnchorService.REASON_LIFECYCLE,
+                    userId, orgId);
+        }
 
         return new RecyclingUploadResponse(
                 document.getDocumentId(),

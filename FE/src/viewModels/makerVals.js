@@ -425,6 +425,11 @@ export function makerVals(ctx) {
   const ffOptional = ff ? ff.fields.filter(f => !f.required && inIssueGate(f)) : [];
   // 발급 이후 단계 항목 - 화면에는 그대로 두되 "추후 제출"로 표시하고 발급 조건에서 뺀다.
   const ffLater = ff ? ff.fields.filter(f => !inIssueGate(f)) : [];
+  // 발급이 끝난 DPP(2026-10-08). 발급 전 단계 항목은 발급 스냅샷으로 원장에 고정돼 잠그고,
+  // 회수·재활용처럼 발급 이후 단계 항목만 추가로 받는다 - 서버도 같은 기준으로 막는다
+  // (FieldFormService.upsertValues). 저장하면 서버가 새 버전 스냅샷을 쌓아 다시 앵커링한다.
+  const ffIssued = !!(ff && ff.status && ff.status !== 'DRAFT' && ff.status !== 'PENDING');
+  const ISSUED_LOCK_LABEL = '발급 시 확정';
   // 문서 파싱값과 어긋난 입력값(dpp_field_cross_check). 남아 있으면 발급이 막힌다.
   const ffMismatches = ff && ff.crossChecks ? ff.crossChecks.filter(c => c.status === 'MISMATCH') : [];
   const ffRequiredFilled = ffRequired.filter(f => !!ffInputs[f.fieldCode]).length;
@@ -477,8 +482,8 @@ export function makerVals(ctx) {
     ? df.documents.filter(d => d.required && inDocIssueGate(d)).every(d => d.status === 'APPROVED')
     : true;
   const crossCheckOk = ffMismatches.length === 0;
-  const issueReady = ff ? (requiredFieldsOk && requiredDocsOk && crossCheckOk) : true;
-  const issueDisabledHint = issueReady ? '' : !crossCheckOk
+  const issueReady = ff ? (!ffIssued && requiredFieldsOk && requiredDocsOk && crossCheckOk) : true;
+  const issueDisabledHint = (issueReady || ffIssued) ? '' : !crossCheckOk
     // 교차검증 불일치가 먼저다 - 필수 칸이 다 차 있어도 그 값이 문서와 어긋나면
     // 발급된 여권이 검증을 통과할 수 없다.
     ? `문서에서 읽은 값과 다른 입력값이 ${ffMismatches.length}건 있습니다. 먼저 확인해 주세요.`
@@ -612,7 +617,9 @@ export function makerVals(ctx) {
         // 협력사가 이미 값을 넣었으면 "제출 대기"가 아니라 "제출 완료"다(2026-10-07 강 지적 -
         // 협력사가 데이터를 올려도 계속 "○○(역할) 제출 대기"로 떠 있었다).
         const partnerDone = !!partnerLockLabel && !!value;
-        const locked = (isParsed && !unlocked) || !!partnerLockLabel;
+        // 발급 후에는 발급 전 단계 항목을 잠근다(2026-10-08) - 협력사 잠금처럼 풀 수 없다.
+        const issuedLock = ffIssued && inIssueGate(f);
+        const locked = (isParsed && !unlocked) || !!partnerLockLabel || issuedLock;
         return {
           key: f.fieldCode, label: f.labelKo + (f.unit ? ' (' + f.unit + ')' : ''),
           labelEn: f.labelEn || '',
@@ -661,13 +668,14 @@ export function makerVals(ctx) {
           // 2026-08-18 강 요청: 미입력=빨간 테두리, 입력됨=초록 테두리.
           // 협력사가 채울 칸은 비어 있어도 제조사 잘못이 아니다 - 빨간 테두리로 재촉하지 않는다.
           inputBorderColor: value ? '#12A150'
-            : (partnerLockLabel || !inIssueGate(f)) ? 'rgba(16,32,64,.14)' : '#E03B3B',
+            : (partnerLockLabel || issuedLock || !inIssueGate(f)) ? 'rgba(16,32,64,.14)' : '#E03B3B',
           locked,
-          partnerLockLabel: partnerDone ? partnerLockLabel.replace(/제출 대기$/, '제출 완료') : partnerLockLabel,
-          partnerLockDone: partnerDone,
+          partnerLockLabel: issuedLock ? ISSUED_LOCK_LABEL
+            : partnerDone ? partnerLockLabel.replace(/제출 대기$/, '제출 완료') : partnerLockLabel,
+          partnerLockDone: issuedLock ? !!value : partnerDone,
           // 협력사 잠금은 못 푼다 - '수정' 버튼 자체를 주지 않는다(AppView는 unlock이
           // 없으면 버튼을 그리지 않는다).
-          unlock: partnerLockLabel ? null
+          unlock: (partnerLockLabel || issuedLock) ? null
             : () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [f.fieldCode]: true } })),
           onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [f.fieldCode]: e.target.value }))
         };
@@ -832,7 +840,10 @@ export function makerVals(ctx) {
       : levelKeyValue ? (levelKeyLabel + ' ' + levelKeyValue + ' 기준으로 발급')
       : (levelKeyLabel ? levelKeyLabel + ' 미입력' : ''),
     passportLevelHintWarn: passportLevel === 'BATCH' && !!levelKeyCode && !levelKeyValue,
-    issueLabel: 'DPP 발급',
+    issueLabel: ffIssued ? '발급 완료' : 'DPP 발급',
+    // 발급 후 임시저장 = 회수·재활용 등 발급 이후 단계 데이터 추가 제출.
+    saveLabel: ffIssued ? '추가 제출 저장' : '임시저장',
+    issuedNote: ffIssued ? '발급된 DPP입니다 · 회수·재활용 등 발급 이후 단계 항목만 추가로 입력할 수 있고, 저장하면 새 버전으로 블록체인에 다시 기록됩니다.' : '',
     issueReady,
     issueDisabledHint,
     // "기본 정보 입력" 카드를 토글로 열고 닫을 수 있게(2026-08-16 사용자 피드백: "소재 기본
@@ -938,7 +949,9 @@ export function makerVals(ctx) {
         // 새 DPP가 이번 임시저장으로 처음 생겼으면 dashboardData(제품 조회/최근 작업 DPP
         // 조회의 출처)도 같이 갱신한다 - issueDpp와 같은 이유(2026-08-18 강 리포트).
         if (isNewDpp) ctx.refreshDashboard();
-        ctx.say('임시저장했습니다 · 완성도 ' + Math.round(result.completeness) + '%');
+        ctx.say(ffIssued
+          ? '추가 제출을 저장했습니다 · 새 버전으로 블록체인에 기록했습니다.'
+          : '임시저장했습니다 · 완성도 ' + Math.round(result.completeness) + '%');
       } catch (e) {
         ctx.say(e.message || '임시저장에 실패했습니다.');
       }
@@ -1202,6 +1215,9 @@ export function makerVals(ctx) {
           const partnerLockLabel = d.partnerLockLabel || '';
           // 협력사가 문서를 올렸으면 "제출 완료"로 바꿔 보여준다(2026-10-07).
           const partnerDocDone = !!partnerLockLabel && !!d.status && d.status !== 'NOT_UPLOADED';
+          // 발급 후에는 발급 전 단계 문서를 다시 올릴 수 없다(2026-10-08, 서버도 409로 막는다).
+          const issuedDocLock = ffIssued && inDocIssueGate(d);
+          const docUploaded = !!d.status && d.status !== 'NOT_UPLOADED';
           return {
             key: d.fieldCode, label: d.labelKo, labelEn: d.labelEn || '', req: d.required ? '필수' : '선택',
             // 발급 이후 단계에 제출하는 문서 - 필수여도 지금 없다고 발급이 막히지 않는다.
@@ -1209,9 +1225,10 @@ export function makerVals(ctx) {
             laterLabel,
             laterStyle: laterStage ? ctx.chip('rgba(0,69,169,.08)', '#0045A9') : null,
             // 미제출 타일의 빨간 테두리도 빼준다 - 아직 낼 수 없는 문서를 재촉하면 안 된다.
-            partnerOwned: !!partnerLockLabel,
-            partnerOwnerLabel: partnerDocDone ? partnerLockLabel.replace(/제출 대기$/, '제출 완료') : partnerLockLabel,
-            partnerOwnerDone: partnerDocDone,
+            partnerOwned: !!partnerLockLabel || issuedDocLock,
+            partnerOwnerLabel: issuedDocLock ? ISSUED_LOCK_LABEL
+              : partnerDocDone ? partnerLockLabel.replace(/제출 대기$/, '제출 완료') : partnerLockLabel,
+            partnerOwnerDone: issuedDocLock ? docUploaded : partnerDocDone,
             fileName: d.fileName || '',
             // 검증 중이면 서버가 알려주는 진행률(GET /document/progress)을 % 로 함께 보여준다.
             statusLabel: uploading ? ('검증 중' + (docProgress ? ' ' + docProgress.percent + '%' : '')) : (DOC_STATUS_LABEL[d.status] || d.status),

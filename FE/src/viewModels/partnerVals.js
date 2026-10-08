@@ -157,6 +157,11 @@ export function partnerVals(ctx) {
     const uploading = state.partnerUploading || null;
     const unlocked = state.unlockedFields || {};
     const docByType = Object.fromEntries(docs.map(d => [d.docTypeCode, d]));
+    // 발급이 끝난 DPP(2026-10-08) - 발급 전 단계 항목·문서는 발급 스냅샷으로 원장에 고정돼
+    // 잠그고, 회수·재활용 같은 발급 이후 단계 항목만 받는다(서버도 409로 막는다).
+    const ffIssued = !!(ff && ff.status && ff.status !== 'DRAFT' && ff.status !== 'PENDING');
+    const laterChip = ctx.chip('rgba(0,69,169,.08)', '#0045A9');
+    const ISSUED_LOCK_LABEL = '발급 시 확정';
     const serverValue = Object.fromEntries(fields.map(f => [f.fieldCode, f.value || '']));
 
     const docTypeFor = code => {
@@ -180,8 +185,12 @@ export function partnerVals(ctx) {
       return {
         key: d.fieldCode, docTypeCode: d.docTypeCode, label: d.labelKo, labelEn: d.labelEn || '',
         req: d.required ? '필수' : '선택',
-        laterStage: false, laterLabel: '', laterStyle: null,
-        partnerOwned: false, partnerOwnerLabel: '',
+        laterStage: d.issueGate === false,
+        laterLabel: d.issueGate === false ? '발급 이후 단계 제출' : '',
+        laterStyle: d.issueGate === false ? laterChip : null,
+        partnerOwned: ffIssued && d.issueGate !== false,
+        partnerOwnerLabel: ffIssued && d.issueGate !== false ? ISSUED_LOCK_LABEL : '',
+        partnerOwnerDone: ffIssued && d.issueGate !== false && !!d.status && d.status !== 'NOT_UPLOADED',
         fileName: d.fileName || '',
         statusLabel: busy ? '문서 분석 중…' : (DOC_STATUS_LABEL[d.status] || d.status),
         progressVisible: false, progressPct: 0, progressStage: '',
@@ -291,13 +300,16 @@ export function partnerVals(ctx) {
         else if (canFillByDoc(f)) sourceLabel = '업로드한 문서에 없음 · 직접 입력';
         else sourceLabel = '직접 입력 항목';
         // 파싱된 값은 제조사 화면처럼 잠그고 '수정'을 눌러야 고칠 수 있다.
-        const locked = fromDoc && !unlocked[code];
+        const issuedLock = ffIssued && f.issueGate !== false;
+        const locked = (fromDoc && !unlocked[code]) || issuedLock;
         const unit = unitLabel(f.unit);
         return {
           key: code, label: f.labelKo + (unit ? ' (' + unit + ')' : ''),
           labelEn: f.labelEn || '',
           req: f.required ? '필수' : '선택',
-          laterStage: false, laterLabel: '', laterStyle: null,
+          laterStage: f.issueGate === false,
+          laterLabel: f.issueGate === false ? '발급 이후 단계 제출' : '',
+          laterStyle: f.issueGate === false ? laterChip : null,
           ph: (f.helpText && f.helpText.length <= 40) ? f.helpText : '',
           value,
           hint: (f.helpText && f.helpText.length > 40) ? f.helpText : '',
@@ -313,10 +325,11 @@ export function partnerVals(ctx) {
           disclosureLabel: DISCLOSURE_LABEL[f.disclosureScope] || '',
           ...zkpVerdictOf(f),
           // 미입력=빨간 테두리, 입력됨=초록 테두리(제조사 화면과 동일).
-          inputBorderColor: secret ? 'rgba(16,32,64,.14)' : value ? '#12A150' : '#E03B3B',
+          inputBorderColor: (secret || (issuedLock && !value)) ? 'rgba(16,32,64,.14)' : value ? '#12A150' : '#E03B3B',
           locked,
-          partnerLockLabel: '',
-          unlock: () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [code]: true } })),
+          partnerLockLabel: issuedLock ? ISSUED_LOCK_LABEL : '',
+          partnerLockDone: issuedLock && !!value,
+          unlock: issuedLock ? null : () => setState(s => ({ unlockedFields: { ...(s.unlockedFields || {}), [code]: true } })),
           onChange: e => ctx.setFieldFormInputs(prev => ({ ...prev, [code]: e.target.value }))
         };
       });

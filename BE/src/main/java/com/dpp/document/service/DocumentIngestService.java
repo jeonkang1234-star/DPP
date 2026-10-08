@@ -164,6 +164,12 @@ public class DocumentIngestService {
 
         // 1) 파서 호출 - 텍스트 추출 + 필드 파싱 + 해시
         // 올린 칸과 다른 문서면 여기서 반려한다(문서 분류 모델, 2026-10-07 - ParserClient 참고).
+        // 발급이 끝난 DPP의 발급 전 단계 문서는 발급 스냅샷으로 원장에 고정돼 있다 - 다시 올려
+        // 값을 바꾸면 QR로 보는 여권과 발급본이 갈라진다(2026-10-08, V41).
+        if (dppQueryRepository.findById(dpp.getDppId()).map(d -> d.getIssuedAt() != null).orElse(false)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "발급된 DPP에는 발급 전 단계 문서를 다시 올릴 수 없습니다.");
+        }
         parserClient.requireDocumentType(file, DOC_TYPE_CODE);
         IngestProgress.ramp(userId, dppId, DOC_TYPE_CODE, 10, 38, 6, "문서 파싱 중 (텍스트·표 추출)");
         Map<String, Object> parsed;
