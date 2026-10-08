@@ -118,6 +118,10 @@ services:
       - backend
     ports:
       - "80:80"
+    volumes:
+      # Let's Encrypt 인증서 발급·갱신용 토큰 폴더(docker/HTTPS.md). nginx 가
+      # /.well-known/acme-challenge/ 로 내준다. 로컬에서는 빈 폴더라 아무 영향 없다.
+      - ./certbot-www:/var/www/certbot:ro
 
 # ─────────────────────────────────────────────
 # 시크릿은 docker-compose.yml에 직접 넣지 않고 BE/src/main/resources/application-local.yml

@@ -41,6 +41,8 @@ parser/venv/
 docker/pgdata/
 docker/docker-compose.override.yml
 docker/document-uploads/
+# Let's Encrypt HTTP-01 토큰 폴더(docker/HTTPS.md) - 서버에서만 생긴다.
+docker/certbot-www/
 
 # --- Logs ---
 *.log

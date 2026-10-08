@@ -625,3 +625,11 @@ export async function fetchProductPhotoBlob(dppId) {
 export function fetchDppIntegrity(publicUuid) {
   return authedFetch(`/verify/dpp/${encodeURIComponent(publicUuid)}/integrity`);
 }
+
+/**
+ * EU DPP 레지스트리 등록 데이터(ESPR 제13조) - 발급 조직 본인과 세관·시장감시용(2026-10-08).
+ * 실제 전송은 레지스트리 계정 발급 후 - 응답의 submissionStatus 가 그 상태를 말한다.
+ */
+export function fetchRegistryExport(publicUuid) {
+  return authedFetch(`/verify/dpp/${encodeURIComponent(publicUuid)}/registry-export`);
+}

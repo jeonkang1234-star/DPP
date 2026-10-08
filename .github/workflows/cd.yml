@@ -77,6 +77,16 @@ jobs:
             else
               echo "WARNING: fabric-identity 없음 - blockchain 오버레이 생략"
             fi
+            # HTTPS(2026-10-08, docker/HTTPS.md): .env 에 DPP_DOMAIN 이 있고 그 도메인의
+            # Let's Encrypt 인증서가 발급돼 있을 때만 443 오버레이를 얹는다.
+            DPP_DOMAIN=$(grep -E '^DPP_DOMAIN=' .env | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
+            mkdir -p certbot-www
+            if [ -n "$DPP_DOMAIN" ] && sudo test -f "/etc/letsencrypt/live/$DPP_DOMAIN/fullchain.pem"; then
+              COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.https.yml"
+              echo "HTTPS 인증서 확인됨($DPP_DOMAIN) - https 오버레이 적용"
+            else
+              echo "HTTPS 미설정 - http 로만 서비스(DPP_DOMAIN='$DPP_DOMAIN')"
+            fi
 
             # 빌드를 먼저 하고, 성공했을 때만 내린다(2026-09-23). 예전엔 down → build 순서라
             # 컴파일 에러 한 번에 서버가 내려간 채로 남았다(set -e로 build에서 멈추므로).
@@ -102,6 +112,10 @@ jobs:
             COMPOSE_FILES="-f docker-compose.yml"
             if [ -f /opt/app/fabric-identity/admin-cert.pem ]; then
               COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.blockchain.yml"
+            fi
+            DPP_DOMAIN=$(grep -E '^DPP_DOMAIN=' .env | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
+            if [ -n "$DPP_DOMAIN" ] && sudo test -f "/etc/letsencrypt/live/$DPP_DOMAIN/fullchain.pem"; then
+              COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.https.yml"
             fi
             for i in $(seq 1 40); do
               if curl -sf http://localhost:8080/actuator/health > /dev/null; then

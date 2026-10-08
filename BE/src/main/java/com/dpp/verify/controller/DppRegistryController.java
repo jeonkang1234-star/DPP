@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 /** REQ-VERIFY: EU 시장감시/관세청 공용 DPP 검색. FE euVals.js(레지스트리)/customsVals.js(통관 조회)가 쓴다. */
 @RestController
@@ -59,6 +60,17 @@ public class DppRegistryController {
     public ResponseEntity<DppIntegrityDto> integrity(@PathVariable String publicUuid,
                                                      Authentication authentication) {
         return ResponseEntity.ok(dppRegistryService.integrity(parseUserId(authentication), publicUuid));
+    }
+
+    /**
+     * EU DPP 레지스트리 등록 데이터(ESPR 제13조 - 고유 제품·운영자·시설 식별자, 상품 코드)를
+     * 제출 형식 JSON 으로 돌려준다(2026-10-08). 실제 전송은 레지스트리 계정 발급 후.
+     * 발급 조직 본인과 세관·시장감시가 열람할 수 있다.
+     */
+    @GetMapping("/verify/dpp/{publicUuid}/registry-export")
+    public ResponseEntity<Map<String, Object>> registryExport(@PathVariable String publicUuid,
+                                                              Authentication authentication) {
+        return ResponseEntity.ok(dppRegistryService.registryExport(parseUserId(authentication), publicUuid));
     }
 
     private Long parseUserId(Authentication authentication) {
