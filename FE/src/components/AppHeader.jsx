@@ -1,6 +1,85 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearSession } from '../api/session.js';
+import { clearSession, loadSession, saveSession } from '../api/session.js';
+import { refreshSession } from '../api/authApi.js';
+
+/** JWT의 만료 시각(ms). 서명 검증은 서버 몫이고 여기선 표시용으로 payload만 읽는다. */
+function tokenExpiryMs(token) {
+  try {
+    const part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(part + '='.repeat((4 - (part.length % 4)) % 4)));
+    return typeof json.exp === 'number' ? json.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function fmtRemain(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return m + '분 ' + String(sec).padStart(2, '0') + '초';
+}
+
+/**
+ * 세션 남은 시간 + 연장 버튼(2026-10-08 강 요청 - 좌측 상단 로고·역할 옆).
+ *
+ * 남은 시간은 액세스 토큰의 exp 기준이다(서버 jwt.access-token-expiration-ms, 기본 1시간).
+ * '연장'은 refresh 토큰으로 새 토큰을 받아 세션에 덮어쓴다(POST /auth/refresh). 시간이
+ * 다 되면 어차피 다음 API 호출이 401로 튕기므로, 기다리지 않고 바로 로그인 화면으로 보낸다.
+ */
+function SessionTimer({ onExpired }) {
+  const [expiry, setExpiry] = useState(() => tokenExpiryMs(loadSession()?.accessToken || ''));
+  const [now, setNow] = useState(() => Date.now());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setNow(Date.now());
+      // 다른 곳(재로그인 등)에서 세션이 바뀌었을 수도 있으니 매 초 다시 읽는다.
+      const exp = tokenExpiryMs(loadSession()?.accessToken || '');
+      setExpiry((prev) => (exp !== prev ? exp : prev));
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const remain = expiry ? expiry - now : null;
+  useEffect(() => {
+    if (remain != null && remain <= 0) onExpired?.();
+  }, [remain != null && remain <= 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (remain == null) return null;
+  const canExtend = !!loadSession()?.refreshToken;
+  const warn = remain < 5 * 60 * 1000;
+
+  async function extend() {
+    const session = loadSession();
+    if (!session?.refreshToken || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const res = await refreshSession(session.refreshToken);
+      saveSession({ ...session, accessToken: res.accessToken, refreshToken: res.refreshToken });
+      setExpiry(tokenExpiryMs(res.accessToken));
+    } catch (e) {
+      setError(e.message || '연장하지 못했습니다.');
+      if (e.status === 401) onExpired?.();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span title={error || '세션 만료까지 남은 시간'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '30px', padding: '0 4px 0 11px', border: '1px solid ' + (warn ? 'rgba(224,59,59,.30)' : 'rgba(16,32,64,.10)'), borderRadius: '10px', background: warn ? 'rgba(224,59,59,.06)' : '#fff' }}>
+      <svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true"><path fill={warn ? '#C22B2B' : '#8494AC'} d="M10 2.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Zm0 1.7a5.8 5.8 0 1 1 0 11.6 5.8 5.8 0 0 1 0-11.6Zm-.85 1.9v4.25l3.4 2.05.85-1.4-2.55-1.55V6.1h-1.7Z" /></svg>
+      <span style={{ fontSize: '12px', fontWeight: '600', color: warn ? '#C22B2B' : '#44546F', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmtRemain(remain)}</span>
+      {canExtend ? (
+        <button onClick={extend} disabled={busy} style={{ height: '22px', padding: '0 9px', border: '0', borderRadius: '7px', background: '#0045A9', color: '#fff', fontSize: '11px', fontWeight: '700', cursor: busy ? 'wait' : 'pointer', whiteSpace: 'nowrap' }}>{busy ? '연장 중…' : '연장'}</button>
+      ) : <span style={{ width: '4px' }} />}
+    </span>
+  );
+}
 
 /**
  * 앱 공통 헤더 — 로고 · 워크스페이스 · 상단 탭 · 알림센터 · 사용자 · 로그아웃.
@@ -36,6 +115,7 @@ export default function AppHeader({
           <span style={{ width: '1px', height: '20px', background: 'rgba(16,32,64,.14)' }}></span>
           <span style={{ fontSize: '13px', fontWeight: '600', color: '#44546F' }}>{workspace}</span>
           <span style={domainChip}>{domainLabel}</span>
+          <SessionTimer onExpired={handleLogout} />
         </div>
         {showTabs ? (<>
         <div style={{ display: 'flex', gap: '4px', padding: '6px', background: '#fff', border: '1px solid rgba(16,32,64,.08)', borderRadius: '16px', boxShadow: '0 1px 2px rgba(16,32,64,.05)' }}>

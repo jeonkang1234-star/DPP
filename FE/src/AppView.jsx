@@ -233,6 +233,8 @@ export default function AppView(v) {
     myTierName,
     notifCats, notifCatsVisible,
     notifEmpty,
+    notifClearVisible,
+    clearNotifs,
     notifOpen,
     notifications,
     notifUnreadCount,
@@ -2028,7 +2030,10 @@ export default function AppView(v) {
           <div style={{ padding: '22px 24px 16px', display: 'flex', flexDirection: 'column', gap: '16px', borderBottom: '1px solid rgba(16,32,64,.08)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}><span style={{ fontSize: '17px', fontWeight: '700' }}>알림센터</span><span style={tier2Chip}>읽지 않음 {notifUnreadCount || 0}</span></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {notifClearVisible ? (<button onClick={clearNotifs} style={{ height: '34px', padding: '0 12px', border: '1px solid rgba(224,59,59,.22)', borderRadius: '11px', background: '#fff', fontSize: '12px', fontWeight: '600', color: '#C22B2B', cursor: 'pointer' }}>모두 지우기</button>) : null}
               <button onClick={closeNotif} style={{ width: '34px', height: '34px', border: '1px solid rgba(16,32,64,.10)', borderRadius: '11px', background: '#fff', fontSize: '13px', color: '#6B7A93', cursor: 'pointer' }}>✕</button>
+              </div>
             </div>
             {notifCatsVisible ? (
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -2041,10 +2046,11 @@ export default function AppView(v) {
             <div style={{ padding: '32px 12px', textAlign: 'center', fontSize: '13px', color: '#8494AC' }}>알림이 없습니다.</div>
             </>) : null}
             {(notifications || []).map((n, $index) => (<React.Fragment key={$index}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE' }}>
+            <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '12px', padding: '15px 16px', border: '1px solid rgba(16,32,64,.09)', borderRadius: '14px', background: '#FBFCFE' }}>
+              {n.canRemove ? (<button onClick={n.remove} title="알림 지우기" aria-label="알림 지우기" style={{ position: 'absolute', top: '8px', right: '8px', width: '22px', height: '22px', padding: '0', border: '0', borderRadius: '7px', background: 'transparent', color: '#9AA8BE', fontSize: '12px', lineHeight: '22px', cursor: 'pointer' }} className="hv7">✕</button>) : null}
               <span style={n.dot}></span>
               <span style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><span style={n.chip}>{n.cat}</span><span style={{ fontSize: '11px', color: '#8494AC', marginLeft: 'auto' }}>{n.at}</span></span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><span style={n.chip}>{n.cat}</span><span style={{ fontSize: '11px', color: '#8494AC', marginLeft: 'auto', marginRight: n.canRemove ? '22px' : '0' }}>{n.at}</span></span>
                 <span style={{ fontSize: '13.5px', fontWeight: '600', lineHeight: '1.45' }}>{n.title}</span>
                 <span style={{ fontSize: '12px', color: '#6B7A93', lineHeight: '1.55' }}>{n.body}</span>
                 {n.hasAction ? (<>

@@ -6,7 +6,9 @@ import com.dpp.notify.service.NotificationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -47,6 +49,21 @@ public class NotificationController {
     public ResponseEntity<Map<String, Integer>> readAll(Authentication authentication) {
         int marked = notificationService.markAllRead(parseUserId(authentication));
         return ResponseEntity.ok(Map.of("marked", marked, "unread", 0));
+    }
+
+    /** 알림 하나 지우기(알림센터 카드 우측 상단 X, 2026-10-08). */
+    @DeleteMapping("/{notificationId}")
+    public ResponseEntity<Void> delete(Authentication authentication, @PathVariable Long notificationId) {
+        notificationService.delete(parseUserId(authentication), notificationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /** 알림 모두 지우기 - category를 주면 그 탭만(알림센터 '모두 지우기', 2026-10-08). */
+    @DeleteMapping
+    public ResponseEntity<Map<String, Integer>> deleteAll(Authentication authentication,
+                                                           @RequestParam(required = false) String category) {
+        int deleted = notificationService.deleteAll(parseUserId(authentication), category);
+        return ResponseEntity.ok(Map.of("deleted", deleted));
     }
 
     private Long parseUserId(Authentication authentication) {

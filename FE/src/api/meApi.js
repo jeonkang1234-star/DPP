@@ -356,6 +356,17 @@ export function markNotificationsRead() {
   return authedFetch('/notifications/read-all', { method: 'POST' });
 }
 
+/** 알림 하나 지우기(알림센터 카드 우측 상단 X, 2026-10-08). */
+export function deleteNotification(id) {
+  return authedFetch(`/notifications/${id}`, { method: 'DELETE' });
+}
+
+/** 알림 모두 지우기. category를 주면 그 탭의 알림만 지운다('all'/없음 = 전부). */
+export function deleteAllNotifications(category) {
+  const q = category && category !== 'all' ? `?category=${encodeURIComponent(category)}` : '';
+  return authedFetch(`/notifications${q}`, { method: 'DELETE' });
+}
+
 /**
  * 관리자 가입승인 화면(com.dpp.mypage.controller.AdminOrganizationController) - ADMIN
  * 계정만 200을 받는다(그 외는 403). 목록은 필터 없이 전체를 내려주고 FE(approvalVals.js)가
