@@ -76,6 +76,24 @@ public class PublicPassportService {
     /** 제한 항목까지 볼 수 있는 자격. Annex XIII의 "정당한 이익 보유자·시장감시당국" 계층. */
     private static final Set<String> RESTRICTED_VIEWERS = Set.of("CUSTOMS", "EU_AUTHORITY", "ADMIN");
     /**
+     * 영업비밀(TRADE_SECRET) 항목 중 ZKP 회로가 실제로 판정하는 것(2026-10-10 강 지적).
+     * 영업비밀 21개 중 회로 입력값은 Mn 하나뿐이다 - SteelMillCheck는 C·Si·Mn·P·S·N·Cu·CEV와
+     * 기계적 성질을, CbamCheck는 수입량 de minimis만 본다. 그 전에는 DPP에 증명이 하나라도
+     * 있으면 21개 전부에 "한계값 충족(영지식증명으로 검증됨)"을 붙여서, 한계값 개념이 없는
+     * 전구체 명칭·전력 조달 방식까지 ZKP로 검증됐다고 표시했다. 여기 없는 영업비밀 항목은
+     * QR 화면에서 RESTRICTED처럼 감춘다(값은 원래 저장하지 않으므로 보여줄 것도 없다).
+     * 회로에 항목을 추가하면 이 목록에도 넣을 것.
+     */
+    private static final Set<String> ZKP_BACKED_TRADE_SECRET = Set.of("CHEM_MN_ACTUAL_PCT");
+    /**
+     * scope는 PUBLIC이지만 공개 QR 화면에서는 빼는 항목(2026-10-10 강 요청).
+     * 제강 성적서 원문에는 성분 실측값이, CBAM 검증보고서에는 내재배출량·전구체가 그대로
+     * 들어 있어 링크를 공개하면 영업비밀 처리가 무의미해진다. 세관·시장감시당국·발급 조직
+     * 본인에게는 RESTRICTED 항목처럼 그대로 보여준다.
+     */
+    private static final Set<String> HIDDEN_FROM_PUBLIC_VIEW =
+            Set.of("MILL_TEST_CERTIFICATE_DOCUMENT_URL", "CBAM_VERIFICATION_REPORT_URL");
+    /**
      * 이 DPP를 발급한 조직 본인. org_type이 아니라 owner_org_id 일치로만 정해진다
      * (2026-08-23 강 요청 - "개인/제조사/EU·세관이 보는 데이터가 다 다르게").
      * 제조사라는 사실만으로는 아무것도 더 못 본다 - 남의 DPP를 QR로 찍은 제조사는
@@ -182,6 +200,15 @@ public class PublicPassportService {
                 continue;
             }
             String scope = f.getDisclosureScope() == null ? PUBLIC : f.getDisclosureScope();
+            if (HIDDEN_FROM_PUBLIC_VIEW.contains(f.getFieldCode())) {
+                scope = "RESTRICTED";
+            } else if (TRADE_SECRET.equals(scope) && !ZKP_BACKED_TRADE_SECRET.contains(f.getFieldCode())) {
+                // 회로가 판정하지 않는 영업비밀 항목 - 누구에게도 "ZKP 충족"으로 보여주지 않는다.
+                if (!canSeeRestricted) {
+                    restricted++;
+                }
+                continue;
+            }
 
             value = displayValue(f, value, codeLabels);
 
