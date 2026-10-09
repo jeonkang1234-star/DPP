@@ -59,7 +59,7 @@ public class FieldFormController {
         return ResponseEntity.ok(fieldFormService.issue(parseUserId(authentication), dppId));
     }
 
-    /** 발급 전 DPP 초안 삭제(소프트). 발급 완료건은 409. */
+    /** DPP 삭제(소프트 - deleted_at만 찍고 DB 행·문서·증명·앵커는 그대로 둔다). 발급 완료건도 가능(2026-10-09). */
     @DeleteMapping("/me/field-form/{dppId}")
     public ResponseEntity<Void> deleteDraft(Authentication authentication, @PathVariable Long dppId) {
         fieldFormService.deleteDraft(parseUserId(authentication), dppId);
