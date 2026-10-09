@@ -1578,8 +1578,8 @@ export function makerVals(ctx) {
         pctStyle: ctx.pctStyle(done),
         statusDot: ctx.pillDot(issued ? '#12A150' : done === 0 ? '#E03B3B' : '#E3A008'),
         status,
-        // 발급된 DPP만 삭제를 막는다. 완성도 100%여도 아직 발급 전이면 지울 수 있어야 한다.
-        canDelete: !issued,
+        // 2026-10-09 강 요청: 발급된 DPP도 삭제 가능. 서버는 소프트 삭제라 DB에는 그대로 남는다.
+        canDelete: true,
         isIssued: issued,
         open: () => setState({ dppOpen: true, dppId: id }),
         // DPP 식별자를 누르면 "상세"(생애주기/미충족 필드 읽기전용 패널)가 아니라 작성하던
@@ -1596,11 +1596,12 @@ export function makerVals(ctx) {
         // 새로고침하면 되살아났다. 이제 DELETE /me/field-form/{id}(소프트 삭제)를 실제로
         // 부른다. 발급 완료건은 버튼 자체를 비활성화(AppView)하고, 서버도 409로 막는다.
         remove: () => {
-          if (issued) return;
           setState({
             confirm: {
-              title: 'DPP를 삭제할까요?',
-              body: name + ' (' + (d.internalSku || ('DPP-' + id)) + ') 의 작성 중 데이터와 업로드한 문서가 함께 삭제됩니다. 되돌릴 수 없습니다.',
+              title: issued ? '발급된 DPP를 삭제할까요?' : 'DPP를 삭제할까요?',
+              body: issued
+                ? name + ' (' + (d.internalSku || ('DPP-' + id)) + ') 는 이미 발급된 여권입니다. 삭제하면 목록과 QR 공개 페이지, 세관·규제기관 조회에서 사라집니다. 발급 기록(블록체인 앵커·감사 로그)과 데이터는 서버에 보관됩니다.'
+                : name + ' (' + (d.internalSku || ('DPP-' + id)) + ') 의 작성 중 데이터와 업로드한 문서가 함께 삭제됩니다. 되돌릴 수 없습니다.',
               label: '삭제',
               danger: true,
               run: () => {

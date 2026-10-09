@@ -439,10 +439,11 @@ public class FieldFormService {
      * 제품 조회 화면의 휴지통 버튼(2026-10-04 강 요청). 예전엔 FE가 화면 목록에서만 숨기고
      * 서버엔 아무 요청도 안 보내서, 새로고침하면 그대로 다시 나타났다.
      *
-     * 발급이 끝난 DPP(status ACTIVE 이상 또는 issued_at 있음)는 지울 수 없다 - 이미 블록체인
-     * 앵커링·세관 큐·공개 QR로 외부에 나간 여권이라, 지우면 그 이력이 끊긴다. 발급 전
-     * 초안(DRAFT/PENDING)만 소프트 삭제(deleted_at)한다. 대시보드/목록 조회는 전부
-     * deleted_at IS NULL 조건이라 바로 빠진다.
+     * 2026-10-09 강 요청: 발급이 끝난 DPP도 삭제할 수 있게 한다. 대신 DB 행은 그대로 두는
+     * 소프트 삭제(deleted_at)만 한다 - 필드값·문서·ZKP 증명·블록체인 앵커·감사 로그가 전부
+     * 서버에 남아서, 나중에 시장감시당국이 자료를 요구해도 원본을 그대로 꺼낼 수 있다.
+     * 대시보드/목록/공개 QR/세관·규제기관 조회는 전부 deleted_at IS NULL 조건이라 바로 빠진다.
+     * (예전엔 발급 완료건은 409로 막았다.)
      */
     @Transactional
     public void deleteDraft(Long userId, Long dppId) {
@@ -453,14 +454,14 @@ public class FieldFormService {
         if (!orgId.equals(dpp.getOwnerOrgId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "해당 DPP를 삭제할 권한이 없습니다.");
         }
-        String st = dpp.getStatus();
-        if (dpp.getIssuedAt() != null || !("DRAFT".equals(st) || "PENDING".equals(st))) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "발급 완료된 DPP는 삭제할 수 없습니다.");
-        }
+        boolean wasIssued = dpp.getIssuedAt() != null;
         dpp.setDeletedAt(OffsetDateTime.now());
         dppRepository.save(dpp);
+        // 발급건은 삭제 당시 상태(ACTIVE 등)를 감사 로그에 같이 남긴다 - status 자체는 바꾸지
+        // 않아서 "발급됐던 여권을 지웠다"는 사실이 DB에서도 그대로 보인다.
         auditLogService.record(userId, "DELETE", "DPP", dpp.getDppId(),
-                String.valueOf(dpp.getPublicUuid()), "성공", null);
+                String.valueOf(dpp.getPublicUuid()) + (wasIssued ? " (발급건, status=" + dpp.getStatus() + ")" : ""),
+                "성공", null);
     }
 
     /**
