@@ -152,7 +152,11 @@ export function partnerVals(ctx) {
 
   function partnerDetail() {
     const docs = df ? (df.documents || []) : [];
-    const fields = ff ? (ff.fields || []) : [];
+    // 영업비밀(ZKP 대체) 항목은 협력사 화면에서 아예 뺀다(2026-10-09 강 지적). 그 값은 제조사가
+    // 올린 검증 문서(제강성적서·CBAM 보고서)의 영지식증명 판정으로만 채워져서 협력사가 볼 일도,
+    // 입력할 일도 없다. 서버(FieldFormService.fieldsFor)도 협력사 응답에서 빼지만, 옛 서버
+    // 응답이 와도 화면에 섞이지 않게 여기서 한 번 더 거른다.
+    const fields = (ff ? (ff.fields || []) : []).filter(f => f.disclosureScope !== 'TRADE_SECRET');
     const codeOptions = ff && ff.codeOptions ? ff.codeOptions : [];
     const uploading = state.partnerUploading || null;
     const unlocked = state.unlockedFields || {};
@@ -256,8 +260,7 @@ export function partnerVals(ctx) {
     // 2026-10-07 강 지적: 제조사 화면 규칙(파서 대상이면 무조건 "문서 업로드 시 자동 인식")을 그대로
     // 가져오니, 협력사가 담당 문서를 다 올렸는데도 빈 칸이 "아직 파싱 안 된 것"처럼 보였다.
     // 협력사 기준으로 다시 가른다.
-    //   - 영업비밀(ZKP 대체) 항목: 협력사 문서로는 채워지지 않는다. 제조사가 올린 검증 문서의
-    //     영지식증명 판정으로 채워지므로 "입력 불필요"로 보여주고 빨간 테두리로 재촉하지 않는다.
+    //   - 영업비밀(ZKP 대체) 항목: 위 fields에서 이미 빠졌다(2026-10-09).
     //   - 문서 파싱 항목: 그 값을 담을 담당 문서가 아직 안 올라왔을 때만 "업로드 시 자동 인식".
     //     문서를 올렸는데도 비어 있으면 "업로드한 문서에 없음 · 직접 입력"으로 내려 보낸다.
     const isUploaded = d => !!(d && d.status && d.status !== 'NOT_UPLOADED');
@@ -266,8 +269,7 @@ export function partnerVals(ctx) {
       const t = docTypeFor(f.fieldCode);
       return t ? docByType[t] : null;
     };
-    const isSecret = f => f.disclosureScope === 'TRADE_SECRET';
-    const canFillByDoc = f => !isSecret(f) && docs.length > 0 && (!!docTypeFor(f.fieldCode) || isParserField(f));
+    const canFillByDoc = f => docs.length > 0 && (!!docTypeFor(f.fieldCode) || isParserField(f));
     const waitingForDoc = f => {
       if (!canFillByDoc(f)) return false;
       const d = fillDocOf(f);
@@ -275,8 +277,6 @@ export function partnerVals(ctx) {
     };
     const autoFillableOf = f => {
       const v = inputOf(f.fieldCode);
-      // 영업비밀 항목은 사람이 쓰는 칸이 아니라 자동 판정 칸이라 '자동 인식' 묶음에 둔다.
-      if (isSecret(f)) return true;
       return (!!f.fromDocument && !!v && v === (serverValue[f.fieldCode] || '')) || (!v && waitingForDoc(f));
     };
     const formFields = fields.slice()
@@ -290,10 +290,8 @@ export function partnerVals(ctx) {
         const docName = fillDoc ? fillDoc.labelKo : '담당 문서';
         // 서버가 "이 값은 문서에서 왔다"고 알려준 값(fromDocument)이고, 아직 손대지 않았을 때만 파싱값이다.
         const fromDoc = !!(f.fromDocument && value && value === saved);
-        const secret = isSecret(f);
         let sourceLabel;
-        if (secret) sourceLabel = value ? '제조사 검증 문서의 영지식증명으로 판정됨' : '제조사 검증 문서의 영지식증명으로 판정 · 입력 불필요';
-        else if (fromDoc) sourceLabel = '파싱(' + docName + ')';
+        if (fromDoc) sourceLabel = '파싱(' + docName + ')';
         else if (value && value !== saved) sourceLabel = '수정됨 · 제출 전';
         else if (value) sourceLabel = '직접 입력됨';
         else if (waitingForDoc(f)) sourceLabel = docName + ' 업로드 시 자동 인식';
@@ -325,7 +323,7 @@ export function partnerVals(ctx) {
           disclosureLabel: DISCLOSURE_LABEL[f.disclosureScope] || '',
           ...zkpVerdictOf(f),
           // 미입력=빨간 테두리, 입력됨=초록 테두리(제조사 화면과 동일).
-          inputBorderColor: (secret || (issuedLock && !value)) ? 'rgba(16,32,64,.14)' : value ? '#12A150' : '#E03B3B',
+          inputBorderColor: (issuedLock && !value) ? 'rgba(16,32,64,.14)' : value ? '#12A150' : '#E03B3B',
           locked,
           partnerLockLabel: issuedLock ? ISSUED_LOCK_LABEL : '',
           partnerLockDone: issuedLock && !!value,

@@ -181,7 +181,9 @@ public class ParticipationService {
         List<String> fieldDomains = fieldDomains(dpp.getDomain());
         List<RequirementField> myFields = requirementFieldRepository
                 .findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        fieldDomains, "DATA", "FIELD_VALUE", participant.getRoleCode());
+                        fieldDomains, "DATA", "FIELD_VALUE", participant.getRoleCode()).stream()
+                .filter(f -> !"TRADE_SECRET".equals(f.getDisclosureScope()))  // 영업비밀은 제조사 문서 ZKP로 채워짐(2026-10-09)
+                .toList();
         Map<String, String> existingValues = fieldValueRepository.findByDppId(dpp.getDppId()).stream()
                 .collect(Collectors.toMap(DppFieldValue::getFieldCode, DppFieldValue::getValueText, (a, b) -> b));
         long filled = myFields.stream()

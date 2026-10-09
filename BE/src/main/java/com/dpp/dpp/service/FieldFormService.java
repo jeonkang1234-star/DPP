@@ -588,11 +588,17 @@ public class FieldFormService {
     }
 
     private List<RequirementField> fieldsFor(List<String> domains, String participantRoleCode) {
-        return participantRoleCode == null
-                ? requirementFieldRepository.findByDomainInAndFieldKindAndStorageTargetAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        domains, "DATA", "FIELD_VALUE")
-                : requirementFieldRepository.findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
-                        domains, "DATA", "FIELD_VALUE", participantRoleCode);
+        if (participantRoleCode == null) {
+            return requirementFieldRepository.findByDomainInAndFieldKindAndStorageTargetAndAutoFalseAndActiveTrueOrderBySortOrder(
+                    domains, "DATA", "FIELD_VALUE");
+        }
+        // 영업비밀(TRADE_SECRET) 항목은 협력사 담당에서 뺀다(2026-10-09 강 지적). 그 칸의 값은
+        // 제조사가 올린 검증 문서(제강성적서·CBAM 보고서)의 영지식증명 판정으로만 채워지므로
+        // 협력사 화면에 보여줄 이유도, 협력사 제출 완료 판정에 넣을 이유도 없다.
+        return requirementFieldRepository.findByDomainInAndFieldKindAndStorageTargetAndResponsibleRoleAndAutoFalseAndActiveTrueOrderBySortOrder(
+                        domains, "DATA", "FIELD_VALUE", participantRoleCode).stream()
+                .filter(f -> !"TRADE_SECRET".equals(f.getDisclosureScope()))
+                .toList();
     }
 
     private Long resolveOrgId(Long userId) {
